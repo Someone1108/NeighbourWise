@@ -127,7 +127,7 @@ export default function MapPage() {
               <div>
                 <div style={{ fontWeight: 900, color: 'var(--text-h)' }}>Overall liveability</div>
                 <div className="nwOverallScore">
-                  {mapData ? mapData.overallScore : '—'} / 100
+                  {mapData ? mapData.overallScore : '-'} / 100
                 </div>
               </div>
 

@@ -1,0 +1,6 @@
+[
+  { "id": 1, "name": "Clayton", "postcode": "3168", "lat": -37.915, "lng": 145.13 },
+  { "id": 2, "name": "Clayton South", "postcode": "3169", "lat": -37.94, "lng": 145.12 },
+  { "id": 3, "name": "Carlton", "postcode": "3053", "lat": -37.8, "lng": 144.97 },
+  { "id": 4, "name": "Clarinda", "postcode": "3169", "lat": -37.94, "lng": 145.1 }
+]
