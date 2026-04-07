@@ -10,6 +10,8 @@ const DEFAULT_RANGE_RADIUS_METERS = {
   30: 3200,
 }
 
+const API_BASE_URL = 'http://localhost:5000'
+
 // A tiny deterministic hash so mock data is stable per input.
 function hashString(input) {
   const str = String(input)
@@ -34,12 +36,11 @@ function geocodeMock(locationName) {
     'caulfield north': { lat: -37.89, lng: 145.04 },
     'monash university': { lat: -37.911, lng: 145.135 },
     carnegie: { lat: -37.901, lng: 145.042 },
-    'footscray': { lat: -37.804, lng: 144.900 },
+    footscray: { lat: -37.804, lng: 144.9 },
     'melbourne cbd': { lat: -37.8136, lng: 144.9631 },
   }
 
   if (known[key]) return known[key]
-  // Fallback: Melbourne CBD
   return known['melbourne cbd']
 }
 
@@ -59,9 +60,53 @@ function profileSignature(profile) {
     p.elderly ? 'elderly' : '',
     p.petOwner ? 'pet' : '',
   ].filter(Boolean)
+
   return parts.length ? parts.sort().join('-') : 'general'
 }
 
+async function fetchJson(url) {
+  const response = await fetch(url)
+
+  if (!response.ok) {
+    throw new Error(`Request failed: ${response.status}`)
+  }
+
+  return response.json()
+}
+
+/**
+ * REAL BACKEND SEARCH
+ * Returns suburb/locality matches from your backend locality point dataset.
+ */
+export async function searchLocalities(query) {
+  const q = String(query || '').trim()
+
+  if (!q) return []
+
+  return fetchJson(`${API_BASE_URL}/api/search/localities?q=${encodeURIComponent(q)}`)
+}
+
+/**
+ * REAL BACKEND POLYGON
+ * Returns selected suburb polygon from your backend locality polygon dataset.
+ */
+export async function getLocalityPolygon(name) {
+  const suburbName = String(name || '').trim()
+
+  if (!suburbName) {
+    throw new Error('Suburb name is required')
+  }
+
+  return fetchJson(
+    `${API_BASE_URL}/api/locality/${encodeURIComponent(suburbName)}/polygon`
+  )
+}
+
+/**
+ * PROTOTYPE MAP CONTEXT
+ * Still mock for now.
+ * Later this should be replaced by a real backend endpoint.
+ */
 export async function getMapContext({ locationName, rangeMinutes, profile }) {
   const range = Number(rangeMinutes)
   const safeRange = [10, 20, 30].includes(range) ? range : 20
@@ -74,7 +119,6 @@ export async function getMapContext({ locationName, rangeMinutes, profile }) {
   const environment = stableScore(seed, 'e', 38, 94)
 
   const overallScore = Math.round((accessibility + safety + environment) / 3)
-
   const radiusMeters = DEFAULT_RANGE_RADIUS_METERS[safeRange] || 2200
 
   const h = hashString(seed)
@@ -124,6 +168,11 @@ export async function getMapContext({ locationName, rangeMinutes, profile }) {
   }
 }
 
+/**
+ * PROTOTYPE INSIGHTS
+ * Still mock for now.
+ * Later this should be backend-driven.
+ */
 export async function getInsights({ locationName, rangeMinutes, profile, category }) {
   const range = Number(rangeMinutes)
   const safeRange = [10, 20, 30].includes(range) ? range : 20
@@ -162,7 +211,9 @@ export async function getInsights({ locationName, rangeMinutes, profile, categor
   return {
     category: cat,
     factors,
-    scoreExplanation: `Mock breakdown for ${CATEGORY_LABELS[cat] || cat}. In the real project, the backend will provide which factors are met/not met based on open datasets.`,
+    scoreExplanation: `Mock breakdown for ${
+      CATEGORY_LABELS[cat] || cat
+    }. In the real project, the backend will provide which factors are met/not met based on open datasets.`,
   }
 }
 
@@ -173,13 +224,18 @@ function adjacentAreaName(locationName) {
     caulfield: 'Clayton',
     'caulfield north': 'Clayton',
     carnegie: 'Caulfield',
-    'footscray': 'Carnegie',
+    footscray: 'Carnegie',
   }
+
   if (map[key]) return map[key]
-  // Fallback: pick a generic label
   return 'Neighbouring Area'
 }
 
+/**
+ * PROTOTYPE COMPARE
+ * Still mock for now.
+ * Later this should be backend-driven.
+ */
 export async function getCompareData({ locationName, rangeMinutes, profile }) {
   const range = Number(rangeMinutes)
   const safeRange = [10, 20, 30].includes(range) ? range : 20
@@ -191,25 +247,38 @@ export async function getCompareData({ locationName, rangeMinutes, profile }) {
   const a1Seed = `${seed}:${area1}`
   const a2Seed = `${seed}:${area2}`
 
-  const accessibility = [stableScore(a1Seed, 'a', 35, 95), stableScore(a2Seed, 'a', 35, 95)]
-  const safety = [stableScore(a1Seed, 's', 35, 95), stableScore(a2Seed, 's', 35, 95)]
+  const accessibility = [
+    stableScore(a1Seed, 'a', 35, 95),
+    stableScore(a2Seed, 'a', 35, 95),
+  ]
+  const safety = [
+    stableScore(a1Seed, 's', 35, 95),
+    stableScore(a2Seed, 's', 35, 95),
+  ]
   const environment = [
     stableScore(a1Seed, 'e', 35, 95),
     stableScore(a2Seed, 'e', 35, 95),
   ]
 
-  // Pick a simple recommendation based on strongest category delta.
   const deltas = [
     { key: 'accessibility', delta: accessibility[0] - accessibility[1] },
     { key: 'safety', delta: safety[0] - safety[1] },
     { key: 'environment', delta: environment[0] - environment[1] },
   ]
+
   deltas.sort((x, y) => Math.abs(y.delta) - Math.abs(x.delta))
   const best = deltas[0]
 
   let recommendation = `Recommendation is based on ${CATEGORY_LABELS[best.key]}.`
-  if (best.delta > 0) recommendation = `${area1} is better for ${CATEGORY_LABELS[best.key].toLowerCase()}`
-  else if (best.delta < 0) recommendation = `${area2} is better for ${CATEGORY_LABELS[best.key].toLowerCase()}`
+  if (best.delta > 0) {
+    recommendation = `${area1} is better for ${CATEGORY_LABELS[
+      best.key
+    ].toLowerCase()}`
+  } else if (best.delta < 0) {
+    recommendation = `${area2} is better for ${CATEGORY_LABELS[
+      best.key
+    ].toLowerCase()}`
+  }
 
   return {
     area1,
@@ -225,8 +294,14 @@ export async function getCompareData({ locationName, rangeMinutes, profile }) {
 
 export function validateSearchInput(input) {
   const s = String(input || '').trim()
-  if (!s) return { ok: false, message: 'Please enter a suburb or address.' }
-  if (s.length < 3) return { ok: false, message: 'Input is too short. Please be more specific.' }
+
+  if (!s) {
+    return { ok: false, message: 'Please enter a suburb or address.' }
+  }
+
+  if (s.length < 3) {
+    return { ok: false, message: 'Input is too short. Please be more specific.' }
+  }
+
   return { ok: true, message: '' }
 }
-

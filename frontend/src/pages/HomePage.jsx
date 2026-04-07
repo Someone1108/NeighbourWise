@@ -1,13 +1,17 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Button from '../components/buttons/Button.jsx'
-import { validateSearchInput, } from '../services/api.js'
+import { searchLocalities, validateSearchInput } from '../services/api.js'
 import { saveContext } from '../utils/storage.js'
 
 export default function HomePage() {
   const navigate = useNavigate()
+
   const [address, setAddress] = useState('')
   const [error, setError] = useState('')
+  const [searchResults, setSearchResults] = useState([])
+  const [searching, setSearching] = useState(false)
+  const [selectedLocation, setSelectedLocation] = useState(null)
 
   const [profile, setProfile] = useState({
     familyWithChildren: false,
@@ -19,18 +23,71 @@ export default function HomePage() {
     return Object.values(profile).filter(Boolean).length
   }, [profile])
 
+  useEffect(() => {
+    const query = address.trim()
+
+    if (selectedLocation && query !== selectedLocation.name) {
+      setSelectedLocation(null)
+    }
+
+    if (query.length < 3) {
+      setSearchResults([])
+      setSearching(false)
+      return
+    }
+
+    let cancelled = false
+    setSearching(true)
+
+    const timer = setTimeout(() => {
+      searchLocalities(query)
+        .then((results) => {
+          if (cancelled) return
+          setSearchResults(Array.isArray(results) ? results : [])
+        })
+        .catch(() => {
+          if (cancelled) return
+          setSearchResults([])
+        })
+        .finally(() => {
+          if (cancelled) return
+          setSearching(false)
+        })
+    }, 250)
+
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [address, selectedLocation])
+
+  function onSelectLocation(location) {
+    setSelectedLocation(location)
+    setAddress(location.name)
+    setSearchResults([])
+    setError('')
+  }
+
   function onSubmit() {
     const v = validateSearchInput(address)
     if (!v.ok) {
       setError(v.message)
       return
     }
+
+    if (!selectedLocation) {
+      setError('Please select a suburb from the search results.')
+      return
+    }
+
     setError('')
 
     const ctx = {
-      locationName: String(address).trim(),
+      selectedLocation,
       profile,
+      rangeMinutes: 20,
     }
+
     saveContext(ctx)
     navigate('/map', { state: ctx })
   }
@@ -45,11 +102,66 @@ export default function HomePage() {
           <label style={{ fontWeight: 800 }}>Search</label>
           <input
             className="nwInput"
-            placeholder="Enter suburb or address"
+            placeholder="Enter suburb"
             value={address}
-            onChange={(e) => setAddress(e.target.value)}
-            aria-label="Search suburb or address"
+            onChange={(e) => {
+              setAddress(e.target.value)
+              setError('')
+            }}
+            aria-label="Search suburb"
           />
+
+          {searching ? (
+            <div style={{ marginTop: 8, color: 'var(--text)' }}>Searching...</div>
+          ) : null}
+
+          {!searching && searchResults.length > 0 ? (
+            <div
+              style={{
+                marginTop: 10,
+                border: '1px solid #ddd',
+                borderRadius: 10,
+                overflow: 'hidden',
+                background: '#fff',
+              }}
+            >
+              {searchResults.map((result) => (
+                <button
+                  key={result.id}
+                  type="button"
+                  onClick={() => onSelectLocation(result)}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    textAlign: 'left',
+                    padding: '12px 14px',
+                    border: 'none',
+                    borderBottom: '1px solid #eee',
+                    background: 'white',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <div style={{ fontWeight: 700 }}>{result.name}</div>
+                  <div style={{ fontSize: 13, color: '#666' }}>{result.state}</div>
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          {!searching &&
+          address.trim().length >= 3 &&
+          searchResults.length === 0 &&
+          !selectedLocation ? (
+            <div style={{ marginTop: 8, color: 'var(--text)' }}>
+              No matching suburb found.
+            </div>
+          ) : null}
+
+          {selectedLocation ? (
+            <div style={{ marginTop: 10, color: 'var(--text)' }}>
+              Selected suburb: <strong>{selectedLocation.name}</strong>
+            </div>
+          ) : null}
         </div>
 
         <div className="nwFormRow" style={{ marginTop: 6 }}>
@@ -65,6 +177,7 @@ export default function HomePage() {
               />
               Family with children
             </label>
+
             <label className="nwCheckbox">
               <input
                 type="checkbox"
@@ -73,6 +186,7 @@ export default function HomePage() {
               />
               Elderly
             </label>
+
             <label className="nwCheckbox">
               <input
                 type="checkbox"
@@ -104,4 +218,3 @@ export default function HomePage() {
     </div>
   )
 }
-
