@@ -24,8 +24,7 @@ export default function NavigationBar() {
     <header className="nwNavBar">
       <Link to="/" className="nwBrand" aria-label="NeighbourWise">
         <span className="nwBrandLogo" aria-hidden="true">
-          <img className="nwBrandLogoHouse" src="/logo-house.jpg" alt="" />
-          <img className="nwBrandLogoWordmark" src="/logo-wordmark.jpg" alt="" />
+          <img className="nwBrandLogoFull" src="/logo-neighbourwise.png" alt="" />
         </span>
       </Link>
 

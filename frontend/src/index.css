@@ -1,5 +1,5 @@
 :root {
-  --bg: #0b1020;
+  --bg: #10192b;
   --bg-soft: #12182a;
   --surface: #182235;
   --card: #f7f9fc;
@@ -7,8 +7,8 @@
 
   --text: #b7c2d4;
   --text-h: #f8fafc;
-  --text-dark: #162033;
-  --muted-dark: #5d6b82;
+  --text-dark: #1a2436;
+  --muted-dark: #58657d;
 
   --border: #26324a;
   --border-light: #d8e0ea;
@@ -48,9 +48,9 @@ html {
 body {
   margin: 0;
   background:
-    radial-gradient(circle at top left, rgba(54, 179, 168, 0.08), transparent 28%),
-    radial-gradient(circle at top right, rgba(244, 124, 32, 0.08), transparent 24%),
-    var(--bg);
+    radial-gradient(circle at top left, rgba(54, 179, 168, 0.12), transparent 30%),
+    radial-gradient(circle at top right, rgba(244, 124, 32, 0.10), transparent 26%),
+    linear-gradient(180deg, #10192b 0%, #0d1730 100%);
   color: var(--text);
   font-family: var(--sans);
 }

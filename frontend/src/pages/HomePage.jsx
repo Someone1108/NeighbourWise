@@ -26,6 +26,12 @@ export default function HomePage() {
   useEffect(() => {
     const query = address.trim()
 
+    if (selectedLocation && query === selectedLocation.name) {
+      setSearchResults([])
+      setSearching(false)
+      return
+    }
+
     if (selectedLocation && query !== selectedLocation.name) {
       setSelectedLocation(null)
     }
@@ -94,78 +100,63 @@ export default function HomePage() {
 
   return (
     <div className="nwPage">
-      <h1 className="nwPageTitle">Find the right place to live</h1>
+      <h1 className="nwPageTitle nwHomeTitle">Find the right place to live</h1>
       <p className="nwSubtitle">Based on real neighbourhood data</p>
 
-      <div className="nwCard" style={{ textAlign: 'left' }}>
-        <div className="nwFormRow">
-          <label style={{ fontWeight: 800 }}>Search</label>
-          <input
-            className="nwInput"
-            placeholder="Enter suburb"
-            value={address}
-            onChange={(e) => {
-              setAddress(e.target.value)
-              setError('')
-            }}
-            aria-label="Search suburb"
-          />
+      <div className="nwCard nwHomeCard">
+        <div className="nwHomeSection">
+          <label className="nwSectionLabel">Search</label>
 
-          {searching ? (
-            <div style={{ marginTop: 8, color: 'var(--text)' }}>Searching...</div>
-          ) : null}
-
-          {!searching && searchResults.length > 0 ? (
-            <div
-              style={{
-                marginTop: 10,
-                border: '1px solid #ddd',
-                borderRadius: 10,
-                overflow: 'hidden',
-                background: '#fff',
+          <div className="nwSearchBlock">
+            <input
+              className="nwInput nwSearchInput"
+              placeholder="Enter suburb"
+              value={address}
+              onChange={(e) => {
+                setAddress(e.target.value)
+                setError('')
               }}
-            >
-              {searchResults.map((result) => (
-                <button
-                  key={result.id}
-                  type="button"
-                  onClick={() => onSelectLocation(result)}
-                  style={{
-                    display: 'block',
-                    width: '100%',
-                    textAlign: 'left',
-                    padding: '12px 14px',
-                    border: 'none',
-                    borderBottom: '1px solid #eee',
-                    background: 'white',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <div style={{ fontWeight: 700 }}>{result.name}</div>
-                  <div style={{ fontSize: 13, color: '#666' }}>{result.state}</div>
-                </button>
-              ))}
-            </div>
-          ) : null}
+              aria-label="Search suburb"
+            />
 
-          {!searching &&
-          address.trim().length >= 3 &&
-          searchResults.length === 0 &&
-          !selectedLocation ? (
-            <div style={{ marginTop: 8, color: 'var(--text)' }}>
-              No matching suburb found.
-            </div>
-          ) : null}
+            {searching ? (
+              <div className="nwSearchStatus">Searching...</div>
+            ) : null}
 
-          {selectedLocation ? (
-            <div style={{ marginTop: 10, color: 'var(--text)' }}>
-              Selected suburb: <strong>{selectedLocation.name}</strong>
-            </div>
-          ) : null}
+            {!searching && searchResults.length > 0 ? (
+              <div className="nwSearchResults">
+                {searchResults.map((result) => (
+                  <button
+                    key={result.id}
+                    type="button"
+                    className="nwSearchResultItem"
+                    onClick={() => onSelectLocation(result)}
+                  >
+                    <div className="nwSearchResultName">{result.name}</div>
+                    <div className="nwSearchResultMeta">{result.state}</div>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+
+            {!searching &&
+            address.trim().length >= 3 &&
+            searchResults.length === 0 &&
+            !selectedLocation ? (
+              <div className="nwSearchStatus">No matching suburb found.</div>
+            ) : null}
+
+            {selectedLocation ? (
+              <div className="nwSelectedLocation">
+                Selected suburb: <strong>{selectedLocation.name}</strong>
+              </div>
+            ) : null}
+          </div>
         </div>
 
-        <div className="nwFormRow" style={{ marginTop: 6 }}>
-          <label style={{ fontWeight: 800 }}>Your situation</label>
+        <div className="nwHomeSection">
+          <label className="nwSectionLabel">Your situation</label>
+
           <div className="nwCheckGroup">
             <label className="nwCheckbox">
               <input
@@ -206,12 +197,10 @@ export default function HomePage() {
           </Button>
         </div>
 
-        <div style={{ marginTop: 14, color: 'var(--text)', textAlign: 'left' }}>
-          Your data is protected
+        <div className="nwHomeMeta">
+          <div>Your data is protected</div>
           {selectedProfileCount ? (
-            <span style={{ display: 'block', marginTop: 8 }}>
-              Selected options: {selectedProfileCount}
-            </span>
+            <div className="nwSelectedOptions">Selected options: {selectedProfileCount}</div>
           ) : null}
         </div>
       </div>
