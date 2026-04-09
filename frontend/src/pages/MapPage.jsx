@@ -12,6 +12,16 @@ function asSafeNumber(n, fallback) {
   return Number.isFinite(n) ? n : fallback
 }
 
+function getDisplayLocationName(selectedLocation) {
+  if (!selectedLocation) return ''
+  return (
+    selectedLocation.displayName ||
+    selectedLocation.fullAddress ||
+    selectedLocation.name ||
+    ''
+  )
+}
+
 export default function MapPage() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -32,8 +42,10 @@ export default function MapPage() {
   }, [location.state])
 
   const selectedLocation = context?.selectedLocation
-  const locationName = selectedLocation?.name
+  const locationName = getDisplayLocationName(selectedLocation)
   const profile = context?.profile
+  const isSuburb = selectedLocation?.type === 'suburb'
+  const isAddress = selectedLocation?.type === 'address'
 
   useEffect(() => {
     if (!context || !selectedLocation || !profile) {
@@ -55,22 +67,33 @@ export default function MapPage() {
 
     saveContext({ selectedLocation, profile, rangeMinutes })
 
-    Promise.all([
-      getMapContext({
-        locationName: selectedLocation.name,
-        rangeMinutes,
-        profile,
-      }),
-      getLocalityPolygon(selectedLocation.name),
-    ])
+    const mapContextPromise = getMapContext({
+      locationName:
+        selectedLocation.displayName ||
+        selectedLocation.fullAddress ||
+        selectedLocation.name,
+      rangeMinutes,
+      profile,
+    })
+
+    const polygonPromise = isSuburb
+      ? getLocalityPolygon(selectedLocation.name)
+      : Promise.resolve(null)
+
+    Promise.all([mapContextPromise, polygonPromise])
       .then(([data, polygon]) => {
         if (cancelled) return
+
         setMapData(data)
         setSuburbPolygon(polygon)
       })
       .catch(() => {
         if (cancelled) return
-        setError('Failed to load suburb map data.')
+        setError(
+          isAddress
+            ? 'Failed to load address map data.'
+            : 'Failed to load suburb map data.'
+        )
       })
       .finally(() => {
         if (cancelled) return
@@ -80,7 +103,7 @@ export default function MapPage() {
     return () => {
       cancelled = true
     }
-  }, [context, selectedLocation, profile, rangeMinutes])
+  }, [context, selectedLocation, profile, rangeMinutes, isSuburb, isAddress])
 
   if (error) {
     return (
@@ -118,13 +141,16 @@ export default function MapPage() {
             }
             radiusMeters={mapData?.radiusMeters}
             pointsOfInterest={mapData?.pointsOfInterest}
-            suburbPolygon={suburbPolygon}
+            suburbPolygon={isSuburb ? suburbPolygon : null}
+            selectedLabel={locationName}
           />
         </section>
 
         <aside className="nwMapRight">
           <div className="nwCard" style={{ textAlign: 'left' }}>
-            <div style={{ fontWeight: 900, color: 'var(--text-h)' }}>Range selection</div>
+            <div style={{ fontWeight: 900, color: 'var(--text-h)' }}>
+              Range selection
+            </div>
 
             <div className="nwRangeButtons" role="radiogroup" aria-label="Range minutes">
               {[10, 20, 30].map((m) => (
@@ -142,7 +168,9 @@ export default function MapPage() {
 
             <div className="nwScoreStack">
               <div>
-                <div style={{ fontWeight: 900, color: 'var(--text-h)' }}>Overall liveability</div>
+                <div style={{ fontWeight: 900, color: 'var(--text-h)' }}>
+                  Overall liveability
+                </div>
                 <div className="nwOverallScore">
                   {mapData ? mapData.overallScore : '-'} / 100
                 </div>

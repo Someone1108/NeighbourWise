@@ -49,6 +49,7 @@ export default function NeighbourMap({
   radiusMeters,
   pointsOfInterest,
   suburbPolygon,
+  selectedLabel,
 }) {
   const containerRef = useRef(null)
   const mapRef = useRef(null)
@@ -82,6 +83,10 @@ export default function NeighbourMap({
 
     selectedMarkerRef.current = L.marker(coords, { icon: selectedIcon }).addTo(map)
 
+    if (selectedLabel) {
+      selectedMarkerRef.current.bindPopup(String(selectedLabel))
+    }
+
     circleRef.current = L.circle(coords, {
       radius: radiusMeters || 2200,
       color: 'rgba(170, 59, 255, 0.9)',
@@ -91,7 +96,7 @@ export default function NeighbourMap({
     }).addTo(map)
 
     map.setView(coords, 13)
-  }, [coords, radiusMeters])
+  }, [coords, radiusMeters, selectedLabel])
 
   // 2) Update selected marker and circle center if coordinates change.
   useEffect(() => {
@@ -100,6 +105,10 @@ export default function NeighbourMap({
 
     if (selectedMarkerRef.current) {
       selectedMarkerRef.current.setLatLng(coords)
+
+      if (selectedLabel) {
+        selectedMarkerRef.current.bindPopup(String(selectedLabel))
+      }
     }
 
     if (circleRef.current) {
@@ -110,7 +119,7 @@ export default function NeighbourMap({
     if (!suburbPolygon || !Array.isArray(suburbPolygon.features) || suburbPolygon.features.length === 0) {
       map.setView(coords, 13)
     }
-  }, [coords, suburbPolygon])
+  }, [coords, suburbPolygon, selectedLabel])
 
   // 3) Update circle radius.
   useEffect(() => {
