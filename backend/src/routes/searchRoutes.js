@@ -6,6 +6,9 @@ const router = express.Router();
 
 const geojsonPath = path.join(__dirname, '../data/locality_point.geojson');
 const localityPoints = JSON.parse(fs.readFileSync(geojsonPath, 'utf8'));
+const { searchAddress } = require('../controllers/searchController');
+
+
 
 router.get('/localities', (req, res) => {
   const q = (req.query.q || '').trim().toLowerCase();
@@ -34,5 +37,7 @@ router.get('/localities', (req, res) => {
 
   res.json(results);
 });
+
+router.get('/address', searchAddress);
 
 module.exports = router;
