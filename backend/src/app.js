@@ -3,6 +3,7 @@ const cors = require('cors');
 
 const searchRoutes = require('./routes/searchRoutes');
 const localityRoutes = require('./routes/localityRoutes');
+const insightRoutes = require('./routes/insightRoutes');
 
 const app = express();
 
@@ -15,5 +16,6 @@ app.get('/', (req, res) => {
 
 app.use('/api/search', searchRoutes);
 app.use('/api/locality', localityRoutes);
+app.use('/api/insights', insightRoutes);
 
 module.exports = app;
