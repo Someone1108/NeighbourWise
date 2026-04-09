@@ -15,51 +15,36 @@ export default function NavigationBar() {
     return () => window.removeEventListener(eventName, onUpdated)
   }, [])
 
+  const activeStyle = {
+    borderColor: 'rgba(244, 124, 32, 0.42)',
+    background: 'rgba(244, 124, 32, 0.08)',
+  }
+
   return (
     <header className="nwNavBar">
       <Link to="/" className="nwBrand" aria-label="NeighbourWise">
         <span className="nwBrandLogo" aria-hidden="true">
-          <img className="nwBrandLogoHouse" src="/logo-house.jpg" alt="" />
-          <img className="nwBrandLogoWordmark" src="/logo-wordmark.jpg" alt="" />
+          <img className="nwBrandLogoFull" src="/logo-neighbourwise.png" alt="" />
         </span>
       </Link>
 
       <nav className="nwNavLinks" aria-label="Primary">
-        <Link
-          to="/"
-          className="nwLinkBtn"
-          style={
-            isActive('/')
-              ? { borderColor: 'rgba(170, 59, 255, 0.5)' }
-              : undefined
-          }
-        >
+        <Link to="/" className="nwLinkBtn" style={isActive('/') ? activeStyle : undefined}>
           Home
         </Link>
+
         <Link
           to="/compare"
           className="nwLinkBtn"
-          style={
-            isActive('/compare')
-              ? { borderColor: 'rgba(170, 59, 255, 0.5)' }
-              : undefined
-          }
+          style={isActive('/compare') ? activeStyle : undefined}
         >
           Compare ({compareCount})
         </Link>
-        <Link
-          to="/about"
-          className="nwLinkBtn"
-          style={
-            isActive('/about')
-              ? { borderColor: 'rgba(170, 59, 255, 0.5)' }
-              : undefined
-          }
-        >
+
+        <Link to="/about" className="nwLinkBtn" style={isActive('/about') ? activeStyle : undefined}>
           About
         </Link>
       </nav>
     </header>
   )
 }
-
