@@ -4,6 +4,21 @@ import Button from '../components/buttons/Button.jsx'
 import { searchLocalities, validateSearchInput } from '../services/api.js'
 import { saveContext } from '../utils/storage.js'
 
+const PROFILE_INFO = {
+  familyWithChildren: {
+    title: 'Family with children',
+    description: 'Focus on a suburb that feels practical for family living and daily convenience.',
+  },
+  elderly: {
+    title: 'Elderly',
+    description: 'Explore areas with a clearer sense of comfort, access, and local suitability.',
+  },
+  petOwner: {
+    title: 'Pet owner',
+    description: 'Consider neighbourhoods that may better support pet-friendly daily living.',
+  },
+}
+
 export default function HomePage() {
   const navigate = useNavigate()
 
@@ -74,6 +89,10 @@ export default function HomePage() {
     setError('')
   }
 
+  function toggleProfile(key, checked) {
+    setProfile((prev) => ({ ...prev, [key]: checked }))
+  }
+
   function onSubmit() {
     const v = validateSearchInput(address)
     if (!v.ok) {
@@ -100,110 +119,192 @@ export default function HomePage() {
 
   return (
     <div className="nwPage">
-      <h1 className="nwPageTitle nwHomeTitle">Find the right place to live</h1>
-      <p className="nwSubtitle">Based on real neighbourhood data</p>
-
-      <div className="nwCard nwHomeCard">
-        <div className="nwHomeSection">
-          <label className="nwSectionLabel">Search</label>
-
-          <div className="nwSearchBlock">
-            <input
-              className="nwInput nwSearchInput"
-              placeholder="Enter suburb"
-              value={address}
-              onChange={(e) => {
-                setAddress(e.target.value)
-                setError('')
-              }}
-              aria-label="Search suburb"
-            />
-
-            {searching ? (
-              <div className="nwSearchStatus">Searching...</div>
-            ) : null}
-
-            {!searching && searchResults.length > 0 ? (
-              <div className="nwSearchResults">
-                {searchResults.map((result) => (
-                  <button
-                    key={result.id}
-                    type="button"
-                    className="nwSearchResultItem"
-                    onClick={() => onSelectLocation(result)}
-                  >
-                    <div className="nwSearchResultName">{result.name}</div>
-                    <div className="nwSearchResultMeta">{result.state}</div>
-                  </button>
-                ))}
-              </div>
-            ) : null}
-
-            {!searching &&
-            address.trim().length >= 3 &&
-            searchResults.length === 0 &&
-            !selectedLocation ? (
-              <div className="nwSearchStatus">No matching suburb found.</div>
-            ) : null}
-
-            {selectedLocation ? (
-              <div className="nwSelectedLocation">
-                Selected suburb: <strong>{selectedLocation.name}</strong>
-              </div>
-            ) : null}
+      <section className="nwHero">
+        <div className="nwHeroTop">
+          <div className="nwHeroIntro">
+            <h1 className="nwPageTitle nwHomeTitle">Find the right place to live</h1>
+            <p className="nwSubtitle nwHomeSubtitle">
+              Explore unfamiliar Melbourne suburbs through neighbourhood context,
+              map-based insights, and a clearer starting point before you move.
+            </p>
           </div>
         </div>
 
-        <div className="nwHomeSection">
-          <label className="nwSectionLabel">Your situation</label>
+        <div className="nwHeroGrid">
+          <div className="nwCard nwHomeCard">
+            <div className="nwHomeSection">
+              <label className="nwSectionLabel" htmlFor="nw-suburb-search">
+                Search
+              </label>
 
-          <div className="nwCheckGroup">
-            <label className="nwCheckbox">
-              <input
-                type="checkbox"
-                checked={profile.familyWithChildren}
-                onChange={(e) =>
-                  setProfile((p) => ({ ...p, familyWithChildren: e.target.checked }))
-                }
-              />
-              Family with children
-            </label>
+              <div className="nwSearchBlock">
+                <input
+                  id="nw-suburb-search"
+                  className="nwInput nwSearchInput"
+                  placeholder="Enter suburb or address"
+                  value={address}
+                  onChange={(e) => {
+                    setAddress(e.target.value)
+                    setError('')
+                  }}
+                  aria-label="Search suburb or address"
+                  autoComplete="off"
+                />
 
-            <label className="nwCheckbox">
-              <input
-                type="checkbox"
-                checked={profile.elderly}
-                onChange={(e) => setProfile((p) => ({ ...p, elderly: e.target.checked }))}
-              />
-              Elderly
-            </label>
+                {searching ? <div className="nwSearchStatus">Searching...</div> : null}
 
-            <label className="nwCheckbox">
-              <input
-                type="checkbox"
-                checked={profile.petOwner}
-                onChange={(e) => setProfile((p) => ({ ...p, petOwner: e.target.checked }))}
-              />
-              Pet owner
-            </label>
+                {!searching && searchResults.length > 0 ? (
+                  <div className="nwSearchResults">
+                    {searchResults.map((result) => (
+                      <button
+                        key={result.id}
+                        type="button"
+                        className="nwSearchResultItem"
+                        onClick={() => onSelectLocation(result)}
+                      >
+                        <div className="nwSearchResultName">{result.name}</div>
+                        <div className="nwSearchResultMeta">{result.state}</div>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+
+                {!searching &&
+                address.trim().length >= 3 &&
+                searchResults.length === 0 &&
+                !selectedLocation ? (
+                  <div className="nwSearchStatus">No matching suburb found.</div>
+                ) : null}
+
+                {selectedLocation ? (
+                  <div className="nwSelectedLocation">
+                    Selected suburb: <strong>{selectedLocation.name}</strong>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="nwHomeSection">
+              <div className="nwSectionLabel">Your situation</div>
+
+              <div className="nwPersonaGrid">
+                {Object.entries(PROFILE_INFO).map(([key, item]) => {
+                  const checked = profile[key]
+                  return (
+                    <label
+                      key={key}
+                      className={`nwPersonaCard ${checked ? 'nwPersonaCardActive' : ''}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => toggleProfile(key, e.target.checked)}
+                      />
+                      <span className="nwPersonaCardTitle">{item.title}</span>
+                      <span className="nwPersonaCardText">{item.description}</span>
+                    </label>
+                  )
+                })}
+              </div>
+            </div>
+
+            {error ? <div className="nwError">{error}</div> : null}
+
+            <div className="nwBtnRow">
+              <Button variant="primary" onClick={onSubmit}>
+                Check Liveability
+              </Button>
+            </div>
+
+            <div className="nwHomeMeta">
+              <div>Your data is protected</div>
+              {selectedProfileCount ? (
+                <div className="nwSelectedOptions">Selected options: {selectedProfileCount}</div>
+              ) : null}
+            </div>
           </div>
+
+          <aside className="nwHeroAside">
+            <div className="nwCard nwInsightPanel">
+              <div className="nwInsightEyebrow">Why NeighbourWise</div>
+              <h2 className="nwInsightTitle">A clearer starting point before you choose where to live</h2>
+
+              <div className="nwInsightList">
+                <div className="nwInsightItem">
+                  <div className="nwInsightDot" aria-hidden="true" />
+                  <div>
+                    <div className="nwInsightItemTitle">Start with an unfamiliar suburb</div>
+                    <p className="nwInsightItemText">
+                      Search a Melbourne suburb or address and begin with a clear place to explore.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="nwInsightItem">
+                  <div className="nwInsightDot" aria-hidden="true" />
+                  <div>
+                    <div className="nwInsightItemTitle">See the broader neighbourhood</div>
+                    <p className="nwInsightItemText">
+                      Move beyond a single map pin and understand the surrounding local area.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="nwInsightItem">
+                  <div className="nwInsightDot" aria-hidden="true" />
+                  <div>
+                    <div className="nwInsightItemTitle">Judge local suitability earlier</div>
+                    <p className="nwInsightItemText">
+                      Use neighbourhood context before relying only on listings, prices, or directions.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="nwChipRow" aria-label="Platform highlights">
+                <span className="nwChip">Map-based view</span>
+                <span className="nwChip">Neighbourhood context</span>
+                <span className="nwChip">Better decision support</span>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section className="nwFeatureSection" aria-labelledby="nw-feature-heading">
+        <div className="nwFeatureIntro">
+          <div className="nwFeatureEyebrow">How it helps</div>
+          <h2 id="nw-feature-heading" className="nwFeatureHeading">
+            Built for renters and first-time movers exploring unfamiliar suburbs
+          </h2>
         </div>
 
-        {error ? <div className="nwError">{error}</div> : null}
+        <div className="nwFeatureGrid">
+          <article className="nwFeatureCard">
+            <div className="nwFeatureIcon" aria-hidden="true">01</div>
+            <h3 className="nwFeatureTitle">Explore a location</h3>
+            <p className="nwFeatureText">
+              Search a Melbourne suburb or address and begin with a clear starting point.
+            </p>
+          </article>
 
-        <div className="nwBtnRow">
-          <Button variant="primary" onClick={onSubmit}>
-            Check Liveability
-          </Button>
-        </div>
+          <article className="nwFeatureCard">
+            <div className="nwFeatureIcon" aria-hidden="true">02</div>
+            <h3 className="nwFeatureTitle">Understand the neighbourhood</h3>
+            <p className="nwFeatureText">
+              View the surrounding area and local context on a map, not just one point.
+            </p>
+          </article>
 
-        <div className="nwHomeMeta">
-          <div>Your data is protected</div>
-          {selectedProfileCount ? (
-            <div className="nwSelectedOptions">Selected options: {selectedProfileCount}</div>
-          ) : null}
+          <article className="nwFeatureCard">
+            <div className="nwFeatureIcon" aria-hidden="true">03</div>
+            <h3 className="nwFeatureTitle">Compare before you decide</h3>
+            <p className="nwFeatureText">
+              Build a more informed housing decision by understanding which area may suit you better.
+            </p>
+          </article>
         </div>
-      </div>
+      </section>
     </div>
   )
 }
