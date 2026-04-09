@@ -49,6 +49,8 @@ export default function NeighbourMap({
   radiusMeters,
   pointsOfInterest,
   suburbPolygon,
+  heatLayer,
+  vegetationLayer,
 }) {
   const containerRef = useRef(null)
   const mapRef = useRef(null)
@@ -56,6 +58,8 @@ export default function NeighbourMap({
   const poiMarkersRef = useRef([])
   const selectedMarkerRef = useRef(null)
   const polygonLayerRef = useRef(null)
+  const heatLayerRef = useRef(null)
+  const vegetationLayerRef = useRef(null)
 
   const coords = useMemo(() => {
     if (!coordinates) return null
@@ -106,7 +110,6 @@ export default function NeighbourMap({
       circleRef.current.setLatLng(coords)
     }
 
-    // Only center to point if polygon is not available.
     if (!suburbPolygon || !Array.isArray(suburbPolygon.features) || suburbPolygon.features.length === 0) {
       map.setView(coords, 13)
     }
@@ -149,7 +152,55 @@ export default function NeighbourMap({
     }
   }, [suburbPolygon])
 
-  // 5) Update POI markers when POI list changes.
+  // 5) Draw / update heat layer.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+
+    if (heatLayerRef.current) {
+      heatLayerRef.current.remove()
+      heatLayerRef.current = null
+    }
+
+    if (heatLayer && Array.isArray(heatLayer.features) && heatLayer.features.length > 0) {
+      heatLayerRef.current = L.geoJSON(heatLayer, {
+        style: {
+          color: '#d73027',
+          weight: 1,
+          fillColor: '#fc8d59',
+          fillOpacity: 0.45,
+        },
+      }).addTo(map)
+    }
+  }, [heatLayer])
+
+  // 6) Draw / update vegetation layer.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+
+    if (vegetationLayerRef.current) {
+      vegetationLayerRef.current.remove()
+      vegetationLayerRef.current = null
+    }
+
+    if (
+      vegetationLayer &&
+      Array.isArray(vegetationLayer.features) &&
+      vegetationLayer.features.length > 0
+    ) {
+      vegetationLayerRef.current = L.geoJSON(vegetationLayer, {
+        style: {
+          color: '#1b7837',
+          weight: 1,
+          fillColor: '#5aae61',
+          fillOpacity: 0.4,
+        },
+      }).addTo(map)
+    }
+  }, [vegetationLayer])
+
+  // 7) Update POI markers when POI list changes.
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
@@ -174,7 +225,7 @@ export default function NeighbourMap({
     })
   }, [pointsOfInterest])
 
-  // 6) Cleanup on unmount.
+  // 8) Cleanup on unmount.
   useEffect(() => {
     return () => {
       if (mapRef.current) {
@@ -185,6 +236,8 @@ export default function NeighbourMap({
       circleRef.current = null
       selectedMarkerRef.current = null
       polygonLayerRef.current = null
+      heatLayerRef.current = null
+      vegetationLayerRef.current = null
       poiMarkersRef.current = []
     }
   }, [])

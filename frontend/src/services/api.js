@@ -305,3 +305,7 @@ export function validateSearchInput(input) {
 
   return { ok: true, message: '' }
 }
+
+export async function getTestLayerData() {
+  return fetchJson(`${API_BASE_URL}/api/layers/test/epping`)
+}

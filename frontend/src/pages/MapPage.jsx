@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import ScoreBar from '../components/ScoreBar.jsx'
 import NeighbourMap from '../components/NeighbourMap.jsx'
 import Button from '../components/buttons/Button.jsx'
-import { getMapContext, getLocalityPolygon } from '../services/api.js'
+import { getMapContext, getLocalityPolygon, getTestLayerData } from '../services/api.js'
 import { addToCompareList, loadCompareList, loadContext, saveContext } from '../utils/storage.js'
 
 const CATEGORY_KEYS = ['accessibility', 'safety', 'environment']
@@ -22,9 +22,10 @@ export default function MapPage() {
   const [suburbPolygon, setSuburbPolygon] = useState(null)
   const [rangeMinutes, setRangeMinutes] = useState(20)
   const [compareHint, setCompareHint] = useState('')
+  const [activeLayer, setActiveLayer] = useState('none')
+  const [layerData, setLayerData] = useState(null)
 
   const context = useMemo(() => {
-    // Prefer route state for immediate transitions; fall back to saved localStorage.
     const stateCtx = location.state
     const stored = loadContext()
     const merged = stateCtx || stored
@@ -62,11 +63,13 @@ export default function MapPage() {
         profile,
       }),
       getLocalityPolygon(selectedLocation.name),
+      getTestLayerData(),
     ])
-      .then(([data, polygon]) => {
+      .then(([data, polygon, layers]) => {
         if (cancelled) return
         setMapData(data)
         setSuburbPolygon(polygon)
+        setLayerData(layers)
       })
       .catch(() => {
         if (cancelled) return
@@ -119,12 +122,16 @@ export default function MapPage() {
             radiusMeters={mapData?.radiusMeters}
             pointsOfInterest={mapData?.pointsOfInterest}
             suburbPolygon={suburbPolygon}
+            heatLayer={activeLayer === 'heat' ? layerData?.heat : null}
+            vegetationLayer={activeLayer === 'vegetation' ? layerData?.vegetation : null}
           />
         </section>
 
         <aside className="nwMapRight">
           <div className="nwCard" style={{ textAlign: 'left' }}>
-            <div style={{ fontWeight: 900, color: 'var(--text-h)' }}>Range selection</div>
+            <div style={{ fontWeight: 900, color: 'var(--text-h)' }}>
+              Range selection
+            </div>
 
             <div className="nwRangeButtons" role="radiogroup" aria-label="Range minutes">
               {[10, 20, 30].map((m) => (
@@ -140,9 +147,43 @@ export default function MapPage() {
               ))}
             </div>
 
+            <div style={{ marginTop: 16 }}>
+              <div style={{ fontWeight: 900, color: 'var(--text-h)', marginBottom: 8 }}>
+                Map insight layers
+              </div>
+
+              <div className="nwRangeButtons">
+                <button
+                  type="button"
+                  className={`nwRangeBtn ${activeLayer === 'none' ? 'nwRangeBtnActive' : ''}`}
+                  onClick={() => setActiveLayer('none')}
+                >
+                  None
+                </button>
+
+                <button
+                  type="button"
+                  className={`nwRangeBtn ${activeLayer === 'heat' ? 'nwRangeBtnActive' : ''}`}
+                  onClick={() => setActiveLayer('heat')}
+                >
+                  Heat
+                </button>
+
+                <button
+                  type="button"
+                  className={`nwRangeBtn ${activeLayer === 'vegetation' ? 'nwRangeBtnActive' : ''}`}
+                  onClick={() => setActiveLayer('vegetation')}
+                >
+                  Vegetation
+                </button>
+              </div>
+            </div>
+
             <div className="nwScoreStack">
               <div>
-                <div style={{ fontWeight: 900, color: 'var(--text-h)' }}>Overall liveability</div>
+                <div style={{ fontWeight: 900, color: 'var(--text-h)' }}>
+                  Overall liveability
+                </div>
                 <div className="nwOverallScore">
                   {mapData ? mapData.overallScore : '-'} / 100
                 </div>
@@ -196,7 +237,9 @@ export default function MapPage() {
             </div>
 
             {compareHint ? (
-              <div style={{ marginTop: 10, color: 'var(--text)' }}>{compareHint}</div>
+              <div style={{ marginTop: 10, color: 'var(--text)' }}>
+                {compareHint}
+              </div>
             ) : null}
           </div>
         </aside>
