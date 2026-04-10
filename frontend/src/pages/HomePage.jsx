@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Button from '../components/buttons/Button.jsx'
-import { searchLocalities, validateSearchInput } from '../services/api.js'
+import {
+  searchAddresses,
+  searchLocalities,
+  validateSearchInput,
+} from '../services/api.js'
 import { saveContext } from '../utils/storage.js'
 
 const PROFILE_INFO = {
@@ -24,7 +28,8 @@ export default function HomePage() {
 
   const [address, setAddress] = useState('')
   const [error, setError] = useState('')
-  const [searchResults, setSearchResults] = useState([])
+  const [suburbResults, setSuburbResults] = useState([])
+  const [addressResults, setAddressResults] = useState([])
   const [searching, setSearching] = useState(false)
   const [selectedLocation, setSelectedLocation] = useState(null)
 
@@ -41,18 +46,16 @@ export default function HomePage() {
   useEffect(() => {
     const query = address.trim()
 
-    if (selectedLocation && query === selectedLocation.name) {
-      setSearchResults([])
-      setSearching(false)
-      return
-    }
+    const selectedText =
+      selectedLocation?.displayName || selectedLocation?.name || ''
 
-    if (selectedLocation && query !== selectedLocation.name) {
+    if (selectedLocation && query !== selectedText) {
       setSelectedLocation(null)
     }
 
     if (query.length < 3) {
-      setSearchResults([])
+      setSuburbResults([])
+      setAddressResults([])
       setSearching(false)
       return
     }
@@ -61,14 +64,22 @@ export default function HomePage() {
     setSearching(true)
 
     const timer = setTimeout(() => {
-      searchLocalities(query)
+      Promise.allSettled([searchLocalities(query), searchAddresses(query)])
         .then((results) => {
           if (cancelled) return
-          setSearchResults(Array.isArray(results) ? results : [])
-        })
-        .catch(() => {
-          if (cancelled) return
-          setSearchResults([])
+
+          const localities =
+            results[0].status === 'fulfilled' && Array.isArray(results[0].value)
+              ? results[0].value
+              : []
+
+          const addresses =
+            results[1].status === 'fulfilled' && Array.isArray(results[1].value)
+              ? results[1].value
+              : []
+
+          setSuburbResults(localities)
+          setAddressResults(addresses)
         })
         .finally(() => {
           if (cancelled) return
@@ -83,9 +94,11 @@ export default function HomePage() {
   }, [address, selectedLocation])
 
   function onSelectLocation(location) {
+    const label = location.displayName || location.name || ''
     setSelectedLocation(location)
-    setAddress(location.name)
-    setSearchResults([])
+    setAddress(label)
+    setSuburbResults([])
+    setAddressResults([])
     setError('')
   }
 
@@ -101,7 +114,7 @@ export default function HomePage() {
     }
 
     if (!selectedLocation) {
-      setError('Please select a suburb from the search results.')
+      setError('Please select a suburb or address from the search results.')
       return
     }
 
@@ -116,6 +129,8 @@ export default function HomePage() {
     saveContext(ctx)
     navigate('/map', { state: ctx })
   }
+
+  const hasResults = suburbResults.length > 0 || addressResults.length > 0
 
   return (
     <div className="nwPage">
@@ -153,17 +168,102 @@ export default function HomePage() {
 
                 {searching ? <div className="nwSearchStatus">Searching...</div> : null}
 
-                {!searching && searchResults.length > 0 ? (
-                  <div className="nwSearchResults">
-                    {searchResults.map((result) => (
-                      <button
-                        key={result.id}
-                        type="button"
-                        className="nwSearchResultItem"
-                        onClick={() => onSelectLocation(result)}
+                {!searching && hasResults ? (
+                  <div
+                    style={{
+                      marginTop: 10,
+                      border: '1px solid #ddd',
+                      borderRadius: 10,
+                      overflow: 'hidden',
+                      background: '#fff',
+                    }}
+                  >
+                    {suburbResults.length > 0 ? (
+                      <div
+                        style={{
+                          padding: '10px 14px',
+                          fontSize: 12,
+                          fontWeight: 800,
+                          letterSpacing: 0.3,
+                          color: '#555',
+                          background: '#f7f7f7',
+                          borderBottom: '1px solid #eee',
+                        }}
                       >
-                        <div className="nwSearchResultName">{result.name}</div>
-                        <div className="nwSearchResultMeta">{result.state}</div>
+                        SUBURBS
+                      </div>
+                    ) : null}
+
+                    {suburbResults.map((result, index) => (
+                      <button
+                        key={`suburb-${result.id}-${index}`}
+                        type="button"
+                        onClick={() => onSelectLocation(result)}
+                        style={{
+                          display: 'block',
+                          width: '100%',
+                          textAlign: 'left',
+                          padding: '12px 14px',
+                          border: 'none',
+                          borderBottom:
+                            index === suburbResults.length - 1 && addressResults.length === 0
+                              ? 'none'
+                              : '1px solid #eee',
+                          background: 'white',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <div style={{ fontWeight: 700 }}>
+                          {result.displayName || result.name}
+                        </div>
+                        <div style={{ fontSize: 13, color: '#666' }}>
+                          {result.state || 'Suburb'}
+                        </div>
+                      </button>
+                    ))}
+
+                    {addressResults.length > 0 ? (
+                      <div
+                        style={{
+                          padding: '10px 14px',
+                          fontSize: 12,
+                          fontWeight: 800,
+                          letterSpacing: 0.3,
+                          color: '#555',
+                          background: '#f7f7f7',
+                          borderTop: suburbResults.length > 0 ? '1px solid #eee' : 'none',
+                          borderBottom: '1px solid #eee',
+                        }}
+                      >
+                        ADDRESSES
+                      </div>
+                    ) : null}
+
+                    {addressResults.map((result, index) => (
+                      <button
+                        key={`address-${result.id || result.displayName}-${index}`}
+                        type="button"
+                        onClick={() => onSelectLocation(result)}
+                        style={{
+                          display: 'block',
+                          width: '100%',
+                          textAlign: 'left',
+                          padding: '12px 14px',
+                          border: 'none',
+                          borderBottom:
+                            index === addressResults.length - 1 ? 'none' : '1px solid #eee',
+                          background: 'white',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <div style={{ fontWeight: 700 }}>
+                          {result.displayName || result.fullAddress || result.name}
+                        </div>
+                        <div style={{ fontSize: 13, color: '#666' }}>
+                          {result.suburb
+                            ? `${result.suburb}${result.postcode ? `, ${result.postcode}` : ''}`
+                            : result.placeType || 'Address'}
+                        </div>
                       </button>
                     ))}
                   </div>
@@ -171,14 +271,21 @@ export default function HomePage() {
 
                 {!searching &&
                 address.trim().length >= 3 &&
-                searchResults.length === 0 &&
+                !hasResults &&
                 !selectedLocation ? (
-                  <div className="nwSearchStatus">No matching suburb found.</div>
+                  <div style={{ marginTop: 8, color: 'var(--text)' }}>
+                    No matching suburb or address found.
+                  </div>
                 ) : null}
 
                 {selectedLocation ? (
-                  <div className="nwSelectedLocation">
-                    Selected suburb: <strong>{selectedLocation.name}</strong>
+                  <div style={{ marginTop: 10, color: 'var(--text)' }}>
+                    Selected {selectedLocation.type === 'address' ? 'address' : 'suburb'}:{' '}
+                    <strong>
+                      {selectedLocation.displayName ||
+                        selectedLocation.fullAddress ||
+                        selectedLocation.name}
+                    </strong>
                   </div>
                 ) : null}
               </div>
@@ -227,7 +334,9 @@ export default function HomePage() {
           <aside className="nwHeroAside">
             <div className="nwCard nwInsightPanel">
               <div className="nwInsightEyebrow">Why NeighbourWise</div>
-              <h2 className="nwInsightTitle">A clearer starting point before you choose where to live</h2>
+              <h2 className="nwInsightTitle">
+                A clearer starting point before you choose where to live
+              </h2>
 
               <div className="nwInsightList">
                 <div className="nwInsightItem">
@@ -255,7 +364,8 @@ export default function HomePage() {
                   <div>
                     <div className="nwInsightItemTitle">Judge local suitability earlier</div>
                     <p className="nwInsightItemText">
-                      Use neighbourhood context before relying only on listings, prices, or directions.
+                      Use neighbourhood context before relying only on listings, prices, or
+                      directions.
                     </p>
                   </div>
                 </div>
@@ -281,7 +391,9 @@ export default function HomePage() {
 
         <div className="nwFeatureGrid">
           <article className="nwFeatureCard">
-            <div className="nwFeatureIcon" aria-hidden="true">01</div>
+            <div className="nwFeatureIcon" aria-hidden="true">
+              01
+            </div>
             <h3 className="nwFeatureTitle">Explore a location</h3>
             <p className="nwFeatureText">
               Search a Melbourne suburb or address and begin with a clear starting point.
@@ -289,7 +401,9 @@ export default function HomePage() {
           </article>
 
           <article className="nwFeatureCard">
-            <div className="nwFeatureIcon" aria-hidden="true">02</div>
+            <div className="nwFeatureIcon" aria-hidden="true">
+              02
+            </div>
             <h3 className="nwFeatureTitle">Understand the neighbourhood</h3>
             <p className="nwFeatureText">
               View the surrounding area and local context on a map, not just one point.
@@ -297,10 +411,13 @@ export default function HomePage() {
           </article>
 
           <article className="nwFeatureCard">
-            <div className="nwFeatureIcon" aria-hidden="true">03</div>
+            <div className="nwFeatureIcon" aria-hidden="true">
+              03
+            </div>
             <h3 className="nwFeatureTitle">Compare before you decide</h3>
             <p className="nwFeatureText">
-              Build a more informed housing decision by understanding which area may suit you better.
+              Build a more informed housing decision by understanding which area may suit you
+              better.
             </p>
           </article>
         </div>

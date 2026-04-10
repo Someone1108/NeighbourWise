@@ -12,6 +12,16 @@ function asSafeNumber(n, fallback) {
   return Number.isFinite(n) ? n : fallback
 }
 
+function getDisplayLocationName(selectedLocation) {
+  if (!selectedLocation) return ''
+  return (
+    selectedLocation.displayName ||
+    selectedLocation.fullAddress ||
+    selectedLocation.name ||
+    ''
+  )
+}
+
 export default function MapPage() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -33,8 +43,10 @@ export default function MapPage() {
   }, [location.state])
 
   const selectedLocation = context?.selectedLocation
-  const locationName = selectedLocation?.name
+  const locationName = getDisplayLocationName(selectedLocation)
   const profile = context?.profile
+  const isSuburb = selectedLocation?.type === 'suburb'
+  const isAddress = selectedLocation?.type === 'address'
 
   useEffect(() => {
     if (!context || !selectedLocation || !profile) {
@@ -56,24 +68,35 @@ export default function MapPage() {
 
     saveContext({ selectedLocation, profile, rangeMinutes })
 
-    Promise.all([
-      getMapContext({
-        locationName: selectedLocation.name,
-        rangeMinutes,
-        profile,
-      }),
-      getLocalityPolygon(selectedLocation.name),
-      getTestLayerData(),
-    ])
+    const mapContextPromise = getMapContext({
+      locationName:
+        selectedLocation.displayName ||
+        selectedLocation.fullAddress ||
+        selectedLocation.name,
+      rangeMinutes,
+      profile,
+    })
+
+    const polygonPromise = isSuburb
+      ? getLocalityPolygon(selectedLocation.name)
+      : Promise.resolve(null)
+
+      
+    Promise.all([mapContextPromise, polygonPromise, getTestLayerData()])
       .then(([data, polygon, layers]) => {
         if (cancelled) return
+
         setMapData(data)
         setSuburbPolygon(polygon)
         setLayerData(layers)
       })
       .catch(() => {
         if (cancelled) return
-        setError('Failed to load suburb map data.')
+        setError(
+          isAddress
+            ? 'Failed to load address map data.'
+            : 'Failed to load suburb map data.'
+        )
       })
       .finally(() => {
         if (cancelled) return
@@ -83,7 +106,7 @@ export default function MapPage() {
     return () => {
       cancelled = true
     }
-  }, [context, selectedLocation, profile, rangeMinutes])
+  }, [context, selectedLocation, profile, rangeMinutes, isSuburb, isAddress])
 
   if (error) {
     return (
@@ -121,7 +144,8 @@ export default function MapPage() {
             }
             radiusMeters={mapData?.radiusMeters}
             pointsOfInterest={mapData?.pointsOfInterest}
-            suburbPolygon={suburbPolygon}
+            suburbPolygon={isSuburb ? suburbPolygon : null}
+            selectedLabel={locationName}
             heatLayer={activeLayer === 'heat' ? layerData?.heat : null}
             vegetationLayer={activeLayer === 'vegetation' ? layerData?.vegetation : null}
           />

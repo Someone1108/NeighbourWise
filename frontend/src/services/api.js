@@ -83,7 +83,35 @@ export async function searchLocalities(query) {
 
   if (!q) return []
 
-  return fetchJson(`${API_BASE_URL}/api/search/localities?q=${encodeURIComponent(q)}`)
+  const results = await fetchJson(
+    `${API_BASE_URL}/api/search/localities?q=${encodeURIComponent(q)}`
+  )
+
+  return results.map((item) => ({
+    ...item,
+    type: 'suburb',
+    displayName: item.name,
+  }))
+}
+
+/**
+ * REAL BACKEND ADDRESS SEARCH
+ * Returns address matches from backend Mapbox endpoint.
+ */
+export async function searchAddresses(query) {
+  const q = String(query || '').trim()
+
+  if (!q) return []
+
+  const results = await fetchJson(
+    `${API_BASE_URL}/api/search/address?q=${encodeURIComponent(q)}`
+  )
+
+  return results.map((item) => ({
+    ...item,
+    type: 'address',
+    displayName: item.fullAddress || item.name,
+  }))
 }
 
 /**
