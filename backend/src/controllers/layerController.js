@@ -1,17 +1,18 @@
-const layerService = require('../services/layerService');
+const layerService = require('../services/layerService')
 
-function getTestEppingLayers(req, res) {
+function getLayersForSuburb(req, res) {
   try {
-    const data = layerService.getTestEppingLayers();
-    res.json(data);
+    const suburbName = req.params.name
+    const data = layerService.getLayersForSuburb(suburbName)
+    res.json(data)
   } catch (error) {
-    console.error('Error loading Epping layer data:', error);
-    res.status(500).json({
-      error: 'Failed to load Epping layer data',
-    });
+    console.error('Error loading suburb layer data:', error)
+    res.status(404).json({
+      error: error.message || 'Failed to load suburb layer data',
+    })
   }
 }
 
 module.exports = {
-  getTestEppingLayers,
-};
+  getLayersForSuburb,
+}

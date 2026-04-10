@@ -1,8 +1,8 @@
-const express = require('express');
-const router = express.Router();
+const express = require('express')
+const router = express.Router()
 
-const layerController = require('../controllers/layerController');
+const layerController = require('../controllers/layerController')
 
-router.get('/test/epping', layerController.getTestEppingLayers);
+router.get('/suburb/:name', layerController.getLayersForSuburb)
 
-module.exports = router;
+module.exports = router

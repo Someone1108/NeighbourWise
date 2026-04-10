@@ -55,6 +55,7 @@ export default function NeighbourMap({
 }) {
   const containerRef = useRef(null)
   const mapRef = useRef(null)
+  const rendererRef = useRef(null)
   const circleRef = useRef(null)
   const poiMarkersRef = useRef([])
   const selectedMarkerRef = useRef(null)
@@ -68,12 +69,15 @@ export default function NeighbourMap({
     return [coordinates.lat, coordinates.lng]
   }, [coordinates])
 
-  // 1) Create map once.
   useEffect(() => {
     if (!coords || mapRef.current) return
 
-    const map = L.map(containerRef.current, { zoomControl: true })
+    const map = L.map(containerRef.current, {
+      zoomControl: true,
+      preferCanvas: true,
+    })
     mapRef.current = map
+    rendererRef.current = L.canvas({ padding: 0.5 })
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors',
@@ -88,6 +92,7 @@ export default function NeighbourMap({
     selectedMarkerRef.current = L.marker(coords, { icon: selectedIcon }).addTo(map)
 
     if (selectedLabel) {
+      selectedMarkerRef.current.unbindPopup()
       selectedMarkerRef.current.bindPopup(String(selectedLabel))
     }
 
@@ -97,12 +102,12 @@ export default function NeighbourMap({
       weight: 2,
       fillColor: 'rgba(170, 59, 255, 0.18)',
       fillOpacity: 1,
+      renderer: rendererRef.current,
     }).addTo(map)
 
     map.setView(coords, 13)
   }, [coords, radiusMeters, selectedLabel])
 
-  // 2) Update selected marker and circle center if coordinates change.
   useEffect(() => {
     const map = mapRef.current
     if (!map || !coords) return
@@ -111,6 +116,7 @@ export default function NeighbourMap({
       selectedMarkerRef.current.setLatLng(coords)
 
       if (selectedLabel) {
+        selectedMarkerRef.current.unbindPopup()
         selectedMarkerRef.current.bindPopup(String(selectedLabel))
       }
     }
@@ -124,13 +130,11 @@ export default function NeighbourMap({
     }
   }, [coords, suburbPolygon, selectedLabel])
 
-  // 3) Update circle radius.
   useEffect(() => {
     if (!circleRef.current || !coords) return
     circleRef.current.setRadius(radiusMeters || 2200)
   }, [radiusMeters, coords])
 
-  // 4) Draw / update suburb polygon.
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
@@ -146,6 +150,8 @@ export default function NeighbourMap({
       suburbPolygon.features.length > 0
     ) {
       polygonLayerRef.current = L.geoJSON(suburbPolygon, {
+        renderer: rendererRef.current,
+        interactive: false,
         style: {
           color: 'rgba(106, 61, 232, 0.95)',
           weight: 3,
@@ -161,7 +167,6 @@ export default function NeighbourMap({
     }
   }, [suburbPolygon])
 
-  // 5) Draw / update heat layer.
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
@@ -171,8 +176,12 @@ export default function NeighbourMap({
       heatLayerRef.current = null
     }
 
+    console.log('Heat layer received:', heatLayer?.features?.length)
+
     if (heatLayer && Array.isArray(heatLayer.features) && heatLayer.features.length > 0) {
       heatLayerRef.current = L.geoJSON(heatLayer, {
+        renderer: rendererRef.current,
+        interactive: false,
         style: {
           color: '#d73027',
           weight: 1,
@@ -180,10 +189,11 @@ export default function NeighbourMap({
           fillOpacity: 0.45,
         },
       }).addTo(map)
+
+      heatLayerRef.current.bringToFront()
     }
   }, [heatLayer])
 
-  // 6) Draw / update vegetation layer.
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
@@ -193,12 +203,16 @@ export default function NeighbourMap({
       vegetationLayerRef.current = null
     }
 
+    console.log('Vegetation layer received:', vegetationLayer?.features?.length)
+
     if (
       vegetationLayer &&
       Array.isArray(vegetationLayer.features) &&
       vegetationLayer.features.length > 0
     ) {
       vegetationLayerRef.current = L.geoJSON(vegetationLayer, {
+        renderer: rendererRef.current,
+        interactive: false,
         style: {
           color: '#1b7837',
           weight: 1,
@@ -206,10 +220,11 @@ export default function NeighbourMap({
           fillOpacity: 0.4,
         },
       }).addTo(map)
+
+      vegetationLayerRef.current.bringToFront()
     }
   }, [vegetationLayer])
 
-  // 7) Update POI markers when POI list changes.
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
@@ -234,7 +249,6 @@ export default function NeighbourMap({
     })
   }, [pointsOfInterest])
 
-  // 8) Cleanup on unmount.
   useEffect(() => {
     return () => {
       if (mapRef.current) {
@@ -242,6 +256,7 @@ export default function NeighbourMap({
       }
 
       mapRef.current = null
+      rendererRef.current = null
       circleRef.current = null
       selectedMarkerRef.current = null
       polygonLayerRef.current = null

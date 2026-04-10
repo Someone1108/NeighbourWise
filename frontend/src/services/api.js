@@ -334,6 +334,14 @@ export function validateSearchInput(input) {
   return { ok: true, message: '' }
 }
 
-export async function getTestLayerData() {
-  return fetchJson(`${API_BASE_URL}/api/layers/test/epping`)
+export async function getLayerDataForSuburb(name) {
+  const suburbName = String(name || '').trim()
+
+  if (!suburbName) {
+    throw new Error('Suburb name is required')
+  }
+
+  return fetchJson(
+    `${API_BASE_URL}/api/layers/suburb/${encodeURIComponent(suburbName)}`
+  )
 }

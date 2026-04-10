@@ -134,3 +134,7 @@ dist
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+
+backend/src/data/heat_urban_2018.geojson
+backend/src/data/vegetation_2018.geojson
+backend/src/data/*.qmd

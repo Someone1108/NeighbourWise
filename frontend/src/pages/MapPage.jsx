@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import ScoreBar from '../components/ScoreBar.jsx'
 import NeighbourMap from '../components/NeighbourMap.jsx'
 import Button from '../components/buttons/Button.jsx'
-import { getMapContext, getLocalityPolygon, getTestLayerData } from '../services/api.js'
+import { getMapContext, getLocalityPolygon, getLayerDataForSuburb } from '../services/api.js'
 import { addToCompareList, loadCompareList, loadContext, saveContext } from '../utils/storage.js'
 
 const CATEGORY_KEYS = ['accessibility', 'safety', 'environment']
@@ -82,7 +82,11 @@ export default function MapPage() {
       : Promise.resolve(null)
 
       
-    Promise.all([mapContextPromise, polygonPromise, getTestLayerData()])
+    Promise.all([
+      mapContextPromise, 
+      polygonPromise, 
+      isSuburb ? getLayerDataForSuburb(selectedLocation.name) : Promise.resolve(null),
+    ])
       .then(([data, polygon, layers]) => {
         if (cancelled) return
 
