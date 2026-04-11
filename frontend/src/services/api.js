@@ -346,3 +346,17 @@ export async function getLayerDataForSuburb(name) {
     `${API_BASE_URL}/api/layers/suburb/${encodeURIComponent(suburbName)}`
   )
 }
+
+export async function getLayerDataForAddress(lat, lng, rangeMinutes) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    throw new Error('Valid address coordinates are required')
+  }
+
+  const range = Number(rangeMinutes)
+  const safeRange = [10, 20, 30].includes(range) ? range : 20
+  const radiusMeters = DEFAULT_RANGE_RADIUS_METERS[safeRange] || 2200
+
+  return fetchJson(
+    `${API_BASE_URL}/api/layers/address?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}&minutes=${encodeURIComponent(safeRange)}&radiusMeters=${encodeURIComponent(radiusMeters)}`
+  )
+}

@@ -19,6 +19,30 @@ async function getLayersForSuburb(req, res) {
   }
 }
 
+async function getLayersForAddress(req, res) {
+  try {
+    const { lat, lng, minutes, radiusMeters } = req.query;
+
+    const data = await layerService.getLayersForAddress(
+      lat,
+      lng,
+      radiusMeters
+    );
+
+    res.json({
+      ...data,
+      minutes: Number(minutes) || 20,
+    });
+  } catch (error) {
+    console.error('Error loading address layer data:', error);
+
+    res.status(500).json({
+      error: error.message || 'Failed to load address layer data',
+    });
+  }
+}
+
 module.exports = {
   getLayersForSuburb,
+  getLayersForAddress,
 };
