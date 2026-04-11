@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import ScoreBar from '../components/ScoreBar.jsx'
 import NeighbourMap from '../components/NeighbourMap.jsx'
 import Button from '../components/buttons/Button.jsx'
-import { getMapContext, getLocalityPolygon } from '../services/api.js'
+import { getMapContext, getLocalityPolygon, getPoiInsights } from '../services/api.js'
 import { addToCompareList, loadCompareList, loadContext, saveContext } from '../utils/storage.js'
 
 const CATEGORY_KEYS = ['accessibility', 'safety', 'environment']
@@ -32,9 +32,9 @@ export default function MapPage() {
   const [suburbPolygon, setSuburbPolygon] = useState(null)
   const [rangeMinutes, setRangeMinutes] = useState(20)
   const [compareHint, setCompareHint] = useState('')
+  const [poiData, setPoiData] = useState([])
 
   const context = useMemo(() => {
-    // Prefer route state for immediate transitions; fall back to saved localStorage.
     const stateCtx = location.state
     const stored = loadContext()
     const merged = stateCtx || stored
@@ -80,15 +80,25 @@ export default function MapPage() {
       ? getLocalityPolygon(selectedLocation.name)
       : Promise.resolve(null)
 
-    Promise.all([mapContextPromise, polygonPromise])
-      .then(([data, polygon]) => {
+    const poiPromise = getPoiInsights({
+      lat: Number(selectedLocation.lat),
+      lng: Number(selectedLocation.lng),
+      time: Number(rangeMinutes),
+    })
+
+    Promise.all([mapContextPromise, polygonPromise, poiPromise])
+      .then(([data, polygon, poiResponse]) => {
         if (cancelled) return
 
         setMapData(data)
         setSuburbPolygon(polygon)
+        setPoiData(poiResponse?.results || [])
+
+        console.log('poiResponse:', poiResponse)
       })
-      .catch(() => {
+      .catch((err) => {
         if (cancelled) return
+        console.error('MapPage load error:', err)
         setError(
           isAddress
             ? 'Failed to load address map data.'
@@ -119,6 +129,10 @@ export default function MapPage() {
     )
   }
 
+  console.log('selectedLocation:', selectedLocation)
+  console.log('rangeMinutes:', rangeMinutes)
+  console.log('poiData:', poiData)
+
   return (
     <div className="nwPage">
       <h1 className="nwPageTitle" style={{ marginBottom: 6 }}>
@@ -140,7 +154,7 @@ export default function MapPage() {
                 : mapData?.coordinates
             }
             radiusMeters={mapData?.radiusMeters}
-            pointsOfInterest={mapData?.pointsOfInterest}
+            pointsOfInterest={poiData}
             suburbPolygon={isSuburb ? suburbPolygon : null}
             selectedLabel={locationName}
           />

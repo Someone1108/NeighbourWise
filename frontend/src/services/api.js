@@ -75,6 +75,24 @@ async function fetchJson(url) {
 }
 
 /**
+ * REAL BACKEND POI INSIGHTS
+ * Returns nearby points of interest (POIs) based on user location,
+ * filtered by selected time (10 / 20 / 30 minutes).
+ */
+export async function getPoiInsights({ lat, lng, time }) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    throw new Error('Valid lat/lng are required')
+  }
+
+  const safeTime = [10, 20, 30].includes(Number(time)) ? Number(time) : 20
+
+  return fetchJson(
+    `${API_BASE_URL}/api/insights/poi?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}&time=${encodeURIComponent(safeTime)}`
+  )
+}
+
+
+/**
  * REAL BACKEND SEARCH
  * Returns suburb/locality matches from your backend locality point dataset.
  */

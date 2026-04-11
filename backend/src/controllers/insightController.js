@@ -2,18 +2,17 @@ const { fetchPoiInsights } = require('../services/insightService');
 
 const getPoiInsights = async (req, res) => {
   try {
-    const { lat, lng, type, time } = req.query;
+    const { lat, lng, time } = req.query;
 
-    if (!lat || !lng || !type) {
+    if (!lat || !lng) {
       return res.status(400).json({
-        error: 'lat, lng, and type are required'
+        error: 'lat and lng are required'
       });
     }
 
     const data = await fetchPoiInsights({
       lat: Number(lat),
       lng: Number(lng),
-      type,
       time: Number(time)
     });
 
