@@ -1,28 +1,38 @@
 const express = require('express');
-const fs = require('fs');
-const path = require('path');
+const { getLocality } = require('../controllers/localityController');
+const { getLocalityByName } = require('../services/localityService');
 
 const router = express.Router();
 
-const geojsonPath = path.join(__dirname, '../data/locality_polygon.geojson');
-const localityPolygons = JSON.parse(fs.readFileSync(geojsonPath, 'utf8'));
+router.get('/', getLocality);
 
-router.get('/:name/polygon', (req, res) => {
-  const suburbName = req.params.name.trim().toLowerCase();
+router.get('/:name/polygon', async (req, res) => {
+  try {
+    const result = await getLocalityByName(req.params.name);
 
-  const matchedFeature = localityPolygons.features.find((feature) => {
-    const locality = feature.properties.LOCALITY || '';
-    return locality.toLowerCase() === suburbName;
-  });
+    if (!result) {
+      return res.status(404).json({ message: 'Locality not found' });
+    }
 
-  if (!matchedFeature) {
-    return res.status(404).json({ message: 'Suburb polygon not found' });
+    return res.json({
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          properties: {
+            id: result.id,
+            locality: result.name,
+            gazloc: result.displayName,
+            vicnamesid: result.vicnamesid,
+          },
+          geometry: result.geometry,
+        },
+      ],
+    });
+  } catch (error) {
+    console.error('Locality polygon fetch error:', error.message);
+    return res.status(500).json({ message: 'Failed to fetch locality polygon' });
   }
-
-  res.json({
-    type: 'FeatureCollection',
-    features: [matchedFeature],
-  });
 });
 
 module.exports = router;

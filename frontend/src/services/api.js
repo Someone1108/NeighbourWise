@@ -10,7 +10,8 @@ const DEFAULT_RANGE_RADIUS_METERS = {
   30: 3200,
 }
 
-const API_BASE_URL = 'http://localhost:5050'
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || 'http://localhost:5050'
 
 // A tiny deterministic hash so mock data is stable per input.
 function hashString(input) {

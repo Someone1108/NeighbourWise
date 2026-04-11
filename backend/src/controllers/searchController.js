@@ -1,4 +1,4 @@
-const { searchAddresses } = require('../services/searchService');
+const { searchLocations } = require('../services/searchService');
 
 const searchAddress = async (req, res) => {
   try {
@@ -8,14 +8,14 @@ const searchAddress = async (req, res) => {
       return res.status(400).json({ message: 'Query is required' });
     }
 
-    const results = await searchAddresses(q);
+    const results = await searchLocations(q);
     return res.json(results);
   } catch (error) {
-    console.error('Address search error:', error.message);
-    return res.status(500).json({ message: 'Failed to search addresses' });
+    console.error('Location search error:', error.message);
+    return res.status(500).json({ message: 'Failed to search locations' });
   }
 };
 
 module.exports = {
-  searchAddress
+  searchAddress,
 };
