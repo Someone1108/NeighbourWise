@@ -1,46 +1,55 @@
 import { useEffect, useMemo, useRef } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import { renderToStaticMarkup } from 'react-dom/server'
 
+// MUI Icons
+import LocalFloristIcon from '@mui/icons-material/LocalFlorist'
+import LocalHospitalIcon from '@mui/icons-material/LocalHospital'
+import TrainIcon from '@mui/icons-material/Train'
+import SchoolIcon from '@mui/icons-material/School'
+import LocalGroceryStoreIcon from '@mui/icons-material/LocalGroceryStore'
+import DirectionsBusIcon from '@mui/icons-material/DirectionsBus'
+import LocationOnIcon from '@mui/icons-material/LocationOn'
+
+// icon mapping
+const iconMap = {
+  park: LocalFloristIcon,
+  hospital: LocalHospitalIcon,
+  train_station: TrainIcon,
+  school: SchoolIcon,
+  supermarket: LocalGroceryStoreIcon,
+  bus_stop: DirectionsBusIcon,
+}
+
+// 🔥 改好的 icon function（重點）
 function poiIconFor(type) {
-  const key = String(type || '').toLowerCase()
+  const key = String(type || '').toLowerCase().trim()
+  const IconComponent = iconMap[key] || LocationOnIcon
 
-  if (key === 'school') {
-    return L.divIcon({
-      className: '',
-      html: '<div class="nwPoiIcon nwPoiSchool">Sc</div>',
-      iconSize: [28, 28],
-    })
-  }
-
-  if (key === 'hospital') {
-    return L.divIcon({
-      className: '',
-      html: '<div class="nwPoiIcon nwPoiHospital">Ho</div>',
-      iconSize: [28, 28],
-    })
-  }
-
-  if (key === 'bus stop') {
-    return L.divIcon({
-      className: '',
-      html: '<div class="nwPoiIcon nwPoiBus">Bu</div>',
-      iconSize: [28, 28],
-    })
-  }
-
-  if (key === 'pet-friendly park') {
-    return L.divIcon({
-      className: '',
-      html: '<div class="nwPoiIcon nwPoiPet">Pe</div>',
-      iconSize: [28, 28],
-    })
-  }
+  const iconHtml = renderToStaticMarkup(
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '28px',
+        height: '28px',
+        borderRadius: '50%',
+        background: '#ffffff',
+        boxShadow: '0 2px 6px rgba(0,0,0,0.25)',
+      }}
+    >
+      <IconComponent style={{ fontSize: 18 }} />
+    </div>
+  )
 
   return L.divIcon({
     className: '',
-    html: '<div class="nwPoiIcon">POI</div>',
+    html: iconHtml,
     iconSize: [28, 28],
+    iconAnchor: [14, 14],
+    popupAnchor: [0, -14],
   })
 }
 
@@ -114,7 +123,6 @@ export default function NeighbourMap({
 
     if (selectedMarkerRef.current) {
       selectedMarkerRef.current.setLatLng(coords)
-
       if (selectedLabel) {
         selectedMarkerRef.current.unbindPopup()
         selectedMarkerRef.current.bindPopup(String(selectedLabel))
@@ -144,11 +152,7 @@ export default function NeighbourMap({
       polygonLayerRef.current = null
     }
 
-    if (
-      suburbPolygon &&
-      Array.isArray(suburbPolygon.features) &&
-      suburbPolygon.features.length > 0
-    ) {
+    if (suburbPolygon && Array.isArray(suburbPolygon.features) && suburbPolygon.features.length > 0) {
       polygonLayerRef.current = L.geoJSON(suburbPolygon, {
         renderer: rendererRef.current,
         interactive: false,
@@ -238,7 +242,7 @@ export default function NeighbourMap({
       if (!poi || !Number.isFinite(poi.lat) || !Number.isFinite(poi.lng)) return
 
       const marker = L.marker([poi.lat, poi.lng], {
-        icon: poiIconFor(poi.type),
+        icon: poiIconFor(poi.type), // ✅ 用新 icon
       }).addTo(map)
 
       if (poi.name) {

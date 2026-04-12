@@ -3,7 +3,13 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import ScoreBar from '../components/ScoreBar.jsx'
 import NeighbourMap from '../components/NeighbourMap.jsx'
 import Button from '../components/buttons/Button.jsx'
-import { getMapContext, getLocalityPolygon, getLayerDataForSuburb, getLayerDataForAddress } from '../services/api.js'
+import {
+  getMapContext,
+  getLocalityPolygon,
+  getPoiInsights,
+  getLayerDataForSuburb,
+  getLayerDataForAddress,
+} from '../services/api.js'
 import { addToCompareList, loadCompareList, loadContext, saveContext } from '../utils/storage.js'
 
 const CATEGORY_KEYS = ['accessibility', 'safety', 'environment']
@@ -32,6 +38,8 @@ export default function MapPage() {
   const [suburbPolygon, setSuburbPolygon] = useState(null)
   const [rangeMinutes, setRangeMinutes] = useState(20)
   const [compareHint, setCompareHint] = useState('')
+  const [poiData, setPoiData] = useState([])
+  const [showInsights, setShowInsights] = useState(true)
   const [activeLayer, setActiveLayer] = useState('none')
   const [layerData, setLayerData] = useState(null)
 
@@ -81,24 +89,38 @@ export default function MapPage() {
       ? getLocalityPolygon(selectedLocation.name)
       : Promise.resolve(null)
 
-      
+    const poiPromise = getPoiInsights({
+      lat: Number(selectedLocation.lat),
+      lng: Number(selectedLocation.lng),
+      time: Number(rangeMinutes),
+    })
+
     Promise.all([
-      mapContextPromise, 
-      polygonPromise, 
-      isSuburb ? getLayerDataForSuburb(selectedLocation.name) 
-      : isAddress
-        ? getLayerDataForAddress(selectedLocation.lat, selectedLocation.lng, rangeMinutes)
-        : Promise.resolve(null),
+      mapContextPromise,
+      polygonPromise,
+      poiPromise,
+      isSuburb
+        ? getLayerDataForSuburb(selectedLocation.name)
+        : isAddress
+          ? getLayerDataForAddress(
+              selectedLocation.lat,
+              selectedLocation.lng,
+              rangeMinutes
+            )
+          : Promise.resolve(null),
     ])
-      .then(([data, polygon, layers]) => {
+      .then(([data, polygon, poiResponse, layers]) => {
         if (cancelled) return
 
         setMapData(data)
         setSuburbPolygon(polygon)
+        setPoiData(poiResponse?.results || [])
+        console.log('poiResponse:', poiResponse)
         setLayerData(layers)
       })
-      .catch(() => {
+      .catch((err) => {
         if (cancelled) return
+        console.error('MapPage load error:', err)
         setError(
           isAddress
             ? 'Failed to load address map data.'
@@ -129,6 +151,10 @@ export default function MapPage() {
     )
   }
 
+  console.log('selectedLocation:', selectedLocation)
+  console.log('rangeMinutes:', rangeMinutes)
+  console.log('poiData:', poiData)
+
   return (
     <div className="nwPage">
       <h1 className="nwPageTitle" style={{ marginBottom: 6 }}>
@@ -150,7 +176,7 @@ export default function MapPage() {
                 : mapData?.coordinates
             }
             radiusMeters={mapData?.radiusMeters}
-            pointsOfInterest={mapData?.pointsOfInterest}
+            pointsOfInterest={showInsights ? poiData : []}
             suburbPolygon={isSuburb ? suburbPolygon : null}
             selectedLabel={locationName}
             heatLayer={activeLayer === 'heat' ? layerData?.heat : null}
@@ -176,6 +202,32 @@ export default function MapPage() {
                   {m} minutes
                 </button>
               ))}
+            </div>
+
+            <div style={{ marginTop: 14 }}>
+              <div style={{ fontWeight: 900, color: 'var(--text-h)', marginBottom: 8 }}>
+                Insights display
+              </div>
+
+              <div className="nwRangeButtons" role="radiogroup" aria-label="Insights display">
+                <button
+                  type="button"
+                  className={`nwRangeBtn ${showInsights ? 'nwRangeBtnActive' : ''}`}
+                  onClick={() => setShowInsights(true)}
+                  aria-checked={showInsights}
+                >
+                  Show insights
+                </button>
+
+                <button
+                  type="button"
+                  className={`nwRangeBtn ${!showInsights ? 'nwRangeBtnActive' : ''}`}
+                  onClick={() => setShowInsights(false)}
+                  aria-checked={!showInsights}
+                >
+                  Hide insights
+                </button>
+              </div>
             </div>
 
             <div style={{ marginTop: 16 }}>
