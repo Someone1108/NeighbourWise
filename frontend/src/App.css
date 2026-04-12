@@ -862,3 +862,130 @@
     margin-top: 10px;
   }
 }
+
+.nwMiniProgressOuter {
+  height: 8px;
+  margin-top: 6px;
+}
+
+.nwCompareTopGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  margin-top: 18px;
+}
+
+.nwComparePanel {
+  min-height: 240px;
+  text-align: left;
+}
+
+.nwCompareLabel {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 10px;
+}
+
+.nwCompareAreaTitle {
+  margin: 0;
+  font-size: 28px;
+  line-height: 1.15;
+  color: var(--text-dark);
+}
+
+.nwCompareAreaMeta {
+  margin-top: 8px;
+  color: var(--muted-dark);
+  line-height: 1.6;
+}
+
+.nwCompareEmptyText {
+  color: var(--muted-dark);
+  line-height: 1.6;
+}
+
+.nwCompareResultsCard {
+  margin-top: 22px;
+  text-align: left;
+}
+
+.nwCompareScoreSummary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 18px;
+}
+
+.nwCompareScoreBox {
+  border: 1px solid var(--border-light);
+  border-radius: 18px;
+  padding: 16px;
+  background: white;
+}
+
+.nwCompareScoreLabel {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--muted-dark);
+}
+
+.nwCompareScoreValue {
+  margin-top: 6px;
+  font-size: 34px;
+  font-weight: 900;
+  color: #10213d;
+  line-height: 1;
+}
+
+.nwCompareScoreDivider {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--muted-dark);
+}
+
+.nwCompareCellScore {
+  font-weight: 900;
+  color: #10213d;
+}
+
+.nwCompareRecommendation {
+  margin-top: 18px;
+  padding: 18px;
+  border: 1px solid var(--border-light);
+  border-radius: 18px;
+  background: white;
+}
+
+.nwCompareRecommendationTitle {
+  font-size: 14px;
+  font-weight: 900;
+  color: var(--text-dark);
+  margin-bottom: 8px;
+}
+
+.nwCompareRecommendationText {
+  color: var(--muted-dark);
+  line-height: 1.6;
+}
+
+.nwCompareFooterActions {
+  margin-top: 18px;
+}
+
+@media (max-width: 1100px) {
+  .nwCompareTopGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .nwCompareScoreSummary {
+    grid-template-columns: 1fr;
+  }
+
+  .nwCompareScoreDivider {
+    display: none;
+  }
+}

@@ -281,12 +281,26 @@ export default function MapPage() {
               <Button
                 variant="secondary"
                 onClick={() => {
-                  const list = addToCompareList({
-                    selectedLocation,
+                  const compareItem = {
+                    locationName: locationName,
+                    displayName:
+                      selectedLocation?.displayName ||
+                      selectedLocation?.fullAddress ||
+                      selectedLocation?.name ||
+                      '',
+                    fullAddress: selectedLocation?.fullAddress || '',
+                    name: selectedLocation?.name || '',
+                    type: selectedLocation?.type || 'suburb',
+                    lat: selectedLocation?.lat,
+                    lng: selectedLocation?.lng,
                     profile,
                     rangeMinutes,
-                  })
+                    selectedLocation,
+                  }
+
+                  const list = addToCompareList(compareItem)
                   setCompareHint(`Added to compare (${list.length}/2).`)
+                  navigate('/compare')
                 }}
               >
                 Add to Compare
