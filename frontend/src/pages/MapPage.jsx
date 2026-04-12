@@ -3,7 +3,13 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import ScoreBar from '../components/ScoreBar.jsx'
 import NeighbourMap from '../components/NeighbourMap.jsx'
 import Button from '../components/buttons/Button.jsx'
-import { getMapContext, getLocalityPolygon, getPoiInsights } from '../services/api.js'
+import {
+  getMapContext,
+  getLocalityPolygon,
+  getPoiInsights,
+  getLayerDataForSuburb,
+  getLayerDataForAddress,
+} from '../services/api.js'
 import { addToCompareList, loadCompareList, loadContext, saveContext } from '../utils/storage.js'
 
 const CATEGORY_KEYS = ['accessibility', 'safety', 'environment']
@@ -34,6 +40,8 @@ export default function MapPage() {
   const [compareHint, setCompareHint] = useState('')
   const [poiData, setPoiData] = useState([])
   const [showInsights, setShowInsights] = useState(true)
+  const [activeLayer, setActiveLayer] = useState('none')
+  const [layerData, setLayerData] = useState(null)
 
   const context = useMemo(() => {
     const stateCtx = location.state
@@ -87,15 +95,28 @@ export default function MapPage() {
       time: Number(rangeMinutes),
     })
 
-    Promise.all([mapContextPromise, polygonPromise, poiPromise])
-      .then(([data, polygon, poiResponse]) => {
+    Promise.all([
+      mapContextPromise,
+      polygonPromise,
+      poiPromise,
+      isSuburb
+        ? getLayerDataForSuburb(selectedLocation.name)
+        : isAddress
+          ? getLayerDataForAddress(
+              selectedLocation.lat,
+              selectedLocation.lng,
+              rangeMinutes
+            )
+          : Promise.resolve(null),
+    ])
+      .then(([data, polygon, poiResponse, layers]) => {
         if (cancelled) return
 
         setMapData(data)
         setSuburbPolygon(polygon)
         setPoiData(poiResponse?.results || [])
-
         console.log('poiResponse:', poiResponse)
+        setLayerData(layers)
       })
       .catch((err) => {
         if (cancelled) return
@@ -158,6 +179,8 @@ export default function MapPage() {
             pointsOfInterest={showInsights ? poiData : []}
             suburbPolygon={isSuburb ? suburbPolygon : null}
             selectedLabel={locationName}
+            heatLayer={activeLayer === 'heat' ? layerData?.heat : null}
+            vegetationLayer={activeLayer === 'vegetation' ? layerData?.vegetation : null}
           />
         </section>
 
@@ -203,6 +226,38 @@ export default function MapPage() {
                   aria-checked={!showInsights}
                 >
                   Hide insights
+                </button>
+              </div>
+            </div>
+
+            <div style={{ marginTop: 16 }}>
+              <div style={{ fontWeight: 900, color: 'var(--text-h)', marginBottom: 8 }}>
+                Map insight layers
+              </div>
+
+              <div className="nwRangeButtons">
+                <button
+                  type="button"
+                  className={`nwRangeBtn ${activeLayer === 'none' ? 'nwRangeBtnActive' : ''}`}
+                  onClick={() => setActiveLayer('none')}
+                >
+                  None
+                </button>
+
+                <button
+                  type="button"
+                  className={`nwRangeBtn ${activeLayer === 'heat' ? 'nwRangeBtnActive' : ''}`}
+                  onClick={() => setActiveLayer('heat')}
+                >
+                  Heat
+                </button>
+
+                <button
+                  type="button"
+                  className={`nwRangeBtn ${activeLayer === 'vegetation' ? 'nwRangeBtnActive' : ''}`}
+                  onClick={() => setActiveLayer('vegetation')}
+                >
+                  Vegetation
                 </button>
               </div>
             </div>
@@ -265,7 +320,9 @@ export default function MapPage() {
             </div>
 
             {compareHint ? (
-              <div style={{ marginTop: 10, color: 'var(--text)' }}>{compareHint}</div>
+              <div style={{ marginTop: 10, color: 'var(--text)' }}>
+                {compareHint}
+              </div>
             ) : null}
           </div>
         </aside>
