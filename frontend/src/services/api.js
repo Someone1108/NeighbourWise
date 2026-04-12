@@ -10,7 +10,8 @@ const DEFAULT_RANGE_RADIUS_METERS = {
   30: 3200,
 }
 
-const API_BASE_URL = 'http://localhost:5050'
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || 'http://localhost:5050'
 
 // A tiny deterministic hash so mock data is stable per input.
 function hashString(input) {
@@ -350,4 +351,30 @@ export function validateSearchInput(input) {
   }
 
   return { ok: true, message: '' }
+}
+
+export async function getLayerDataForSuburb(name) {
+  const suburbName = String(name || '').trim()
+
+  if (!suburbName) {
+    throw new Error('Suburb name is required')
+  }
+
+  return fetchJson(
+    `${API_BASE_URL}/api/layers/suburb/${encodeURIComponent(suburbName)}`
+  )
+}
+
+export async function getLayerDataForAddress(lat, lng, rangeMinutes) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    throw new Error('Valid address coordinates are required')
+  }
+
+  const range = Number(rangeMinutes)
+  const safeRange = [10, 20, 30].includes(range) ? range : 20
+  const radiusMeters = DEFAULT_RANGE_RADIUS_METERS[safeRange] || 2200
+
+  return fetchJson(
+    `${API_BASE_URL}/api/layers/address?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}&minutes=${encodeURIComponent(safeRange)}&radiusMeters=${encodeURIComponent(radiusMeters)}`
+  )
 }

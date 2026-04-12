@@ -3,3 +3,10 @@ Data/raw/geospatial/melbourne_vegetation_cover_2018/*.shp
 Data/raw/geospatial/melbourne_vegetation_cover_2018/*.shx
 Data/raw/geospatial/melbourne_vegetation_cover_2018/*.prj
 Data/raw/geospatial/melbourne_vegetation_cover_2018/*.cpg
+backend/src/data/vegetation_2018.geojson
+backend/src/data/heat_urban_2018.geojson
+
+
+backend/src/data/heat_urban_2018.geojson
+backend/src/data/vegetation_2018.geojson
+backend/src/data/*.qmd
