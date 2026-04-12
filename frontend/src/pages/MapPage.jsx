@@ -33,6 +33,7 @@ export default function MapPage() {
   const [rangeMinutes, setRangeMinutes] = useState(20)
   const [compareHint, setCompareHint] = useState('')
   const [poiData, setPoiData] = useState([])
+  const [showInsights, setShowInsights] = useState(true)
 
   const context = useMemo(() => {
     const stateCtx = location.state
@@ -154,7 +155,7 @@ export default function MapPage() {
                 : mapData?.coordinates
             }
             radiusMeters={mapData?.radiusMeters}
-            pointsOfInterest={poiData}
+            pointsOfInterest={showInsights ? poiData : []}
             suburbPolygon={isSuburb ? suburbPolygon : null}
             selectedLabel={locationName}
           />
@@ -178,6 +179,32 @@ export default function MapPage() {
                   {m} minutes
                 </button>
               ))}
+            </div>
+
+            <div style={{ marginTop: 14 }}>
+              <div style={{ fontWeight: 900, color: 'var(--text-h)', marginBottom: 8 }}>
+                Insights display
+              </div>
+
+              <div className="nwRangeButtons" role="radiogroup" aria-label="Insights display">
+                <button
+                  type="button"
+                  className={`nwRangeBtn ${showInsights ? 'nwRangeBtnActive' : ''}`}
+                  onClick={() => setShowInsights(true)}
+                  aria-checked={showInsights}
+                >
+                  Show insights
+                </button>
+
+                <button
+                  type="button"
+                  className={`nwRangeBtn ${!showInsights ? 'nwRangeBtnActive' : ''}`}
+                  onClick={() => setShowInsights(false)}
+                  aria-checked={!showInsights}
+                >
+                  Hide insights
+                </button>
+              </div>
             </div>
 
             <div className="nwScoreStack">
