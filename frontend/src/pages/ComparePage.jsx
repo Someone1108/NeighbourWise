@@ -1,7 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Button from '../components/buttons/Button.jsx'
-import { getMapContext } from '../services/api.js'
+import {
+  getMapContext,
+  searchAddresses,
+  searchLocalities,
+} from '../services/api.js'
 import {
   clearCompareList,
   loadCompareList,
@@ -17,17 +21,35 @@ function safeRangeMinutes(value) {
 }
 
 function labelForCategory(key) {
-  const map = { accessibility: 'Accessibility', safety: 'Safety', environment: 'Environment' }
+  const map = {
+    accessibility: 'Accessibility',
+    safety: 'Safety',
+    environment: 'Environment',
+  }
   return map[key] || key
+}
+
+function getLocationLabel(item) {
+  return (
+    item?.displayName ||
+    item?.fullAddress ||
+    item?.locationName ||
+    item?.name ||
+    ''
+  )
 }
 
 function miniProgress(score, outOf = 100) {
   const s = Number.isFinite(score) ? score : 0
   const o = Number.isFinite(outOf) && outOf > 0 ? outOf : 100
   const percent = Math.max(0, Math.min(100, (s / o) * 100))
+
   return (
-    <div className="nwProgressOuter" style={{ height: 8, marginTop: 6 }}>
-      <div className="nwProgressInner" style={{ width: `${percent}%`, height: '100%' }} />
+    <div className="nwProgressOuter nwMiniProgressOuter">
+      <div
+        className="nwProgressInner"
+        style={{ width: `${percent}%`, height: '100%' }}
+      />
     </div>
   )
 }
@@ -36,77 +58,176 @@ export default function ComparePage() {
   const navigate = useNavigate()
 
   const [compareList, setCompareList] = useState(() => loadCompareList())
+  const [searchTerm, setSearchTerm] = useState('')
+  const [searching, setSearching] = useState(false)
+  const [suburbResults, setSuburbResults] = useState([])
+  const [addressResults, setAddressResults] = useState([])
+  const [selectedSecondArea, setSelectedSecondArea] = useState(null)
 
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [hint, setHint] = useState('')
   const [data, setData] = useState(null)
 
+  const firstArea = compareList[0] || null
+  const savedSecondArea = compareList[1] || null
+  const activeSecondArea = savedSecondArea || selectedSecondArea
+
+  const hasResults = suburbResults.length > 0 || addressResults.length > 0
+
   useEffect(() => {
-    if (compareList.length === 0) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setHint('No area is selected yet. Please add two areas to compare.')
+    if (savedSecondArea) {
+      setSelectedSecondArea(null)
+      setSearchTerm(getLocationLabel(savedSecondArea))
+    }
+  }, [savedSecondArea])
+
+  useEffect(() => {
+    const query = searchTerm.trim()
+    const selectedText = getLocationLabel(selectedSecondArea)
+
+    if (selectedSecondArea && query === selectedText) {
+      setSuburbResults([])
+      setAddressResults([])
+      setSearching(false)
+      return
+    }
+
+    if (selectedSecondArea && query !== selectedText) {
+      setSelectedSecondArea(null)
+    }
+
+    if (savedSecondArea) {
+      setSuburbResults([])
+      setAddressResults([])
+      setSearching(false)
+      return
+    }
+
+    if (query.length < 3) {
+      setSuburbResults([])
+      setAddressResults([])
+      setSearching(false)
+      return
+    }
+
+    let cancelled = false
+    setSearching(true)
+
+    const timer = setTimeout(() => {
+      Promise.allSettled([searchLocalities(query), searchAddresses(query)])
+        .then((results) => {
+          if (cancelled) return
+
+          const localities =
+            results[0].status === 'fulfilled' && Array.isArray(results[0].value)
+              ? results[0].value
+              : []
+
+          const addresses =
+            results[1].status === 'fulfilled' && Array.isArray(results[1].value)
+              ? results[1].value
+              : []
+
+          setSuburbResults(localities)
+          setAddressResults(addresses)
+        })
+        .finally(() => {
+          if (cancelled) return
+          setSearching(false)
+        })
+    }, 250)
+
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [searchTerm, selectedSecondArea, savedSecondArea])
+
+  useEffect(() => {
+    if (!firstArea) {
+      setHint('No area has been saved yet. Add one area from the map page first.')
       setError('')
       setData(null)
       setLoading(false)
       return
     }
 
-    if (compareList.length === 1) {
-      setHint(`"${compareList[0].locationName}" is kept. Please add one more area.`)
+    if (!activeSecondArea) {
+      setHint('Search and select a second suburb or address to compare.')
       setError('')
       setData(null)
       setLoading(false)
       return
     }
 
-    const [a1, a2] = compareList
-    const range1 = safeRangeMinutes(a1.rangeMinutes)
-    const range2 = safeRangeMinutes(a2.rangeMinutes)
     let cancelled = false
     setLoading(true)
     setError('')
     setHint('')
 
-    Promise.all([
-      getMapContext({
-        locationName: a1.locationName,
-        rangeMinutes: range1,
-        profile: a1.profile || {},
-      }),
-      getMapContext({
-        locationName: a2.locationName,
-        rangeMinutes: range2,
-        profile: a2.profile || {},
-      }),
-    ])
+    const firstPayload = {
+      locationName: firstArea.locationName,
+      rangeMinutes: safeRangeMinutes(firstArea.rangeMinutes),
+      profile: firstArea.profile || {},
+    }
+
+    const secondPayload = {
+      locationName: getLocationLabel(activeSecondArea),
+      rangeMinutes: safeRangeMinutes(activeSecondArea.rangeMinutes),
+      profile: activeSecondArea.profile || {},
+    }
+
+    Promise.all([getMapContext(firstPayload), getMapContext(secondPayload)])
       .then(([r1, r2]) => {
         if (cancelled) return
+
         const scores = {
           accessibility: [r1.scores.accessibility, r2.scores.accessibility],
           safety: [r1.scores.safety, r2.scores.safety],
           environment: [r1.scores.environment, r2.scores.environment],
         }
 
+        const overall1 = Math.round(
+          (scores.accessibility[0] + scores.safety[0] + scores.environment[0]) / 3
+        )
+        const overall2 = Math.round(
+          (scores.accessibility[1] + scores.safety[1] + scores.environment[1]) / 3
+        )
+
         const deltas = [
-          { key: 'accessibility', delta: scores.accessibility[0] - scores.accessibility[1] },
-          { key: 'safety', delta: scores.safety[0] - scores.safety[1] },
-          { key: 'environment', delta: scores.environment[0] - scores.environment[1] },
+          {
+            key: 'accessibility',
+            delta: scores.accessibility[0] - scores.accessibility[1],
+          },
+          {
+            key: 'safety',
+            delta: scores.safety[0] - scores.safety[1],
+          },
+          {
+            key: 'environment',
+            delta: scores.environment[0] - scores.environment[1],
+          },
         ]
-        deltas.sort((x, y) => Math.abs(y.delta) - Math.abs(x.delta))
-        const top = deltas[0]
-        let recommendation = 'Both areas are closely matched.'
-        if (top.delta > 0) {
-          recommendation = `${a1.locationName} is better for ${labelForCategory(top.key).toLowerCase()}.`
-        } else if (top.delta < 0) {
-          recommendation = `${a2.locationName} is better for ${labelForCategory(top.key).toLowerCase()}.`
+
+        deltas.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+        const topDelta = deltas[0]
+
+        let recommendation = 'Both areas are closely matched overall.'
+
+        if (overall1 > overall2) {
+          recommendation = `${firstArea.locationName} currently looks stronger overall, especially in ${labelForCategory(topDelta.key).toLowerCase()}.`
+        } else if (overall2 > overall1) {
+          recommendation = `${getLocationLabel(activeSecondArea)} currently looks stronger overall, especially in ${labelForCategory(topDelta.key).toLowerCase()}.`
         }
 
         setData({
-          area1: a1.locationName,
-          area2: a2.locationName,
-          range1,
-          range2,
+          area1: firstArea.locationName,
+          area2: getLocationLabel(activeSecondArea),
+          range1: safeRangeMinutes(firstArea.rangeMinutes),
+          range2: safeRangeMinutes(activeSecondArea.rangeMinutes),
+          overall1,
+          overall2,
           scores,
           recommendation,
         })
@@ -123,121 +244,259 @@ export default function ComparePage() {
     return () => {
       cancelled = true
     }
-  }, [compareList])
+  }, [firstArea, activeSecondArea])
 
-  function removeArea(locationName) {
+  function onSelectSecondArea(location) {
+    setSelectedSecondArea(location)
+    setSearchTerm(getLocationLabel(location))
+    setSuburbResults([])
+    setAddressResults([])
+    setError('')
+  }
+
+  function removeSavedArea(locationName) {
     const next = removeFromCompareList(locationName)
     setCompareList(next)
   }
 
+  function clearSecondSelection() {
+    if (savedSecondArea) {
+      const next = removeFromCompareList(savedSecondArea.locationName)
+      setCompareList(next)
+    }
+    setSelectedSecondArea(null)
+    setSearchTerm('')
+    setSuburbResults([])
+    setAddressResults([])
+    setData(null)
+    setHint('Search and select a second suburb or address to compare.')
+  }
+
+  const compareSubtitle = useMemo(() => {
+    if (loading) return 'Loading comparison...'
+    if (data) {
+      return `${data.area1} (${data.range1} min) vs ${data.area2} (${data.range2} min)`
+    }
+    return 'Compare two shortlisted areas side by side'
+  }, [loading, data])
+
   return (
     <div className="nwPage">
       <h1 className="nwPageTitle">Compare Areas</h1>
-      <p className="nwSubtitle" style={{ marginBottom: 16 }}>
-        {loading
-          ? 'Loading...'
-          : data
-            ? `${data.area1} (${data.range1} min) vs ${data.area2} (${data.range2} min)`
-            : 'Awaiting two selected areas'}
-      </p>
+      <p className="nwSubtitle">{compareSubtitle}</p>
 
-      <div className="nwCard" style={{ textAlign: 'left' }}>
+      <div className="nwCompareTopGrid">
+        <div className="nwCard nwComparePanel">
+          <div className="nwCompareLabel">Area 1</div>
+          {firstArea ? (
+            <>
+              <h2 className="nwCompareAreaTitle">{firstArea.locationName}</h2>
+              <p className="nwCompareAreaMeta">
+                Saved from map results · {safeRangeMinutes(firstArea.rangeMinutes)} minute range
+              </p>
+
+              <div className="nwChipRow">
+                <span className="nwChip">Saved area</span>
+                <span className="nwChip">Ready to compare</span>
+              </div>
+
+              <div className="nwBtnRow">
+                <Button
+                  variant="secondary"
+                  onClick={() => removeSavedArea(firstArea.locationName)}
+                >
+                  Remove
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="nwCompareEmptyText">
+                No first area has been saved yet.
+              </p>
+              <div className="nwBtnRow">
+                <Button variant="primary" onClick={() => navigate('/map')}>
+                  Go to Map
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="nwCard nwComparePanel">
+          <div className="nwCompareLabel">Area 2</div>
+
+          {!activeSecondArea ? (
+            <>
+              <h2 className="nwCompareAreaTitle">Search a second suburb or address</h2>
+              <p className="nwCompareAreaMeta">
+                Select another area here instead of going back to the home page.
+              </p>
+
+              <div className="nwSearchBlock">
+                <input
+                  className="nwInput nwSearchInput"
+                  placeholder="Search second suburb or address"
+                  value={searchTerm}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value)
+                    setError('')
+                  }}
+                  aria-label="Search second suburb or address"
+                  autoComplete="off"
+                />
+
+                {searching ? <div className="nwSearchStatus">Searching...</div> : null}
+
+                {!searching && hasResults && !selectedSecondArea ? (
+                  <div className="nwSearchResults">
+                    {suburbResults.length > 0 ? (
+                      <div className="nwSearchGroupLabel">Suburbs</div>
+                    ) : null}
+
+                    {suburbResults.map((result, index) => (
+                      <button
+                        key={`compare-suburb-${result.id}-${index}`}
+                        type="button"
+                        className="nwSearchResultItem"
+                        onClick={() => onSelectSecondArea(result)}
+                      >
+                        <div className="nwSearchResultName">
+                          {result.displayName || result.name}
+                        </div>
+                        <div className="nwSearchResultMeta">
+                          {result.state || 'Suburb'}
+                        </div>
+                      </button>
+                    ))}
+
+                    {addressResults.length > 0 ? (
+                      <div className="nwSearchGroupLabel nwSearchGroupDivider">
+                        Addresses
+                      </div>
+                    ) : null}
+
+                    {addressResults.map((result, index) => (
+                      <button
+                        key={`compare-address-${result.id || result.displayName}-${index}`}
+                        type="button"
+                        className="nwSearchResultItem"
+                        onClick={() => onSelectSecondArea(result)}
+                      >
+                        <div className="nwSearchResultName">
+                          {result.displayName || result.fullAddress || result.name}
+                        </div>
+                        <div className="nwSearchResultMeta">
+                          {result.suburb
+                            ? `${result.suburb}${result.postcode ? `, ${result.postcode}` : ''}`
+                            : result.placeType || 'Address'}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+
+                {!searching &&
+                searchTerm.trim().length >= 3 &&
+                !hasResults &&
+                !selectedSecondArea ? (
+                  <div className="nwSearchStatus">No matching suburb or address found.</div>
+                ) : null}
+              </div>
+            </>
+          ) : (
+            <>
+              <h2 className="nwCompareAreaTitle">{getLocationLabel(activeSecondArea)}</h2>
+              <p className="nwCompareAreaMeta">
+                {savedSecondArea
+                  ? `Saved from map results · ${safeRangeMinutes(savedSecondArea.rangeMinutes)} minute range`
+                  : 'Selected directly on this compare page'}
+              </p>
+
+              <div className="nwChipRow">
+                <span className="nwChip">Second area selected</span>
+                <span className="nwChip">Ready to compare</span>
+              </div>
+
+              <div className="nwBtnRow">
+                <Button variant="secondary" onClick={clearSecondSelection}>
+                  Choose another area
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="nwCard nwCompareResultsCard">
         {loading ? <div className="nwLoading">Loading comparison...</div> : null}
         {!loading && hint ? <div className="nwSubtitle">{hint}</div> : null}
         {!loading && error ? <div className="nwError">{error}</div> : null}
 
         {!loading && data ? (
           <>
+            <div className="nwCompareScoreSummary">
+              <div className="nwCompareScoreBox">
+                <div className="nwCompareScoreLabel">{data.area1}</div>
+                <div className="nwCompareScoreValue">{data.overall1} / 100</div>
+              </div>
+              <div className="nwCompareScoreDivider">vs</div>
+              <div className="nwCompareScoreBox">
+                <div className="nwCompareScoreLabel">{data.area2}</div>
+                <div className="nwCompareScoreValue">{data.overall2} / 100</div>
+              </div>
+            </div>
+
             <table className="nwCompareTable" aria-label="Comparison table">
               <thead>
                 <tr>
                   <th style={{ width: 180 }}>Category</th>
-                  <th>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span>{data.area1}</span>
-                      <span style={{ color: 'var(--text)', fontSize: 12 }}>
-                        ({data.range1} min)
-                      </span>
-                      <Button
-                        variant="secondary"
-                        onClick={() => removeArea(data.area1)}
-                        style={{ padding: '4px 8px', fontSize: 12 }}
-                      >
-                        Remove
-                      </Button>
-                    </div>
-                  </th>
-                  <th>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span>{data.area2}</span>
-                      <span style={{ color: 'var(--text)', fontSize: 12 }}>
-                        ({data.range2} min)
-                      </span>
-                      <Button
-                        variant="secondary"
-                        onClick={() => removeArea(data.area2)}
-                        style={{ padding: '4px 8px', fontSize: 12 }}
-                      >
-                        Remove
-                      </Button>
-                    </div>
-                  </th>
+                  <th>{data.area1}</th>
+                  <th>{data.area2}</th>
                 </tr>
               </thead>
               <tbody>
-                {CATEGORY_KEYS.map((k) => (
-                  <tr key={k}>
-                    <td className="nwCompareRowTitle">{labelForCategory(k)}</td>
+                {CATEGORY_KEYS.map((key) => (
+                  <tr key={key}>
+                    <td className="nwCompareRowTitle">{labelForCategory(key)}</td>
                     <td>
-                      <div style={{ fontWeight: 900, color: 'var(--text-h)' }}>
-                        {data.scores?.[k]?.[0] ?? '—'} / 100
-                      </div>
-                      {miniProgress(data.scores?.[k]?.[0])}
+                      <div className="nwCompareCellScore">{data.scores[key][0]} / 100</div>
+                      {miniProgress(data.scores[key][0])}
                     </td>
                     <td>
-                      <div style={{ fontWeight: 900, color: 'var(--text-h)' }}>
-                        {data.scores?.[k]?.[1] ?? '—'} / 100
-                      </div>
-                      {miniProgress(data.scores?.[k]?.[1])}
+                      <div className="nwCompareCellScore">{data.scores[key][1]} / 100</div>
+                      {miniProgress(data.scores[key][1])}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
 
-            <div style={{ marginTop: 16, lineHeight: 1.6 }}>
-              <div style={{ fontWeight: 900, color: 'var(--text-h)' }}>Recommendation</div>
-              <div>{data.recommendation}</div>
-            </div>
-
-            <div className="nwBackRow">
-              <Button variant="secondary" onClick={() => navigate('/map')}>
-                Back to Results
-              </Button>
-              <Button
-                variant="secondary"
-                style={{ marginLeft: 10 }}
-                onClick={() => {
-                  clearCompareList()
-                  navigate('/map')
-                }}
-              >
-                Clear Compare List
-              </Button>
+            <div className="nwCompareRecommendation">
+              <div className="nwCompareRecommendationTitle">Recommendation</div>
+              <p className="nwCompareRecommendationText">{data.recommendation}</p>
             </div>
           </>
         ) : null}
 
-        <div className="nwBtnRow" style={{ marginTop: 14 }}>
-          <Button variant="primary" onClick={() => navigate('/')}>
-            Back to Home
+        <div className="nwBtnRow nwCompareFooterActions">
+          <Button variant="primary" onClick={() => navigate('/map')}>
+            Back to Map
           </Button>
-          <Button variant="secondary" onClick={() => navigate('/map')}>
-            Go to Map
+          <Button
+            variant="secondary"
+            onClick={() => {
+              clearCompareList()
+              setCompareList([])
+              setSelectedSecondArea(null)
+              setSearchTerm('')
+              setData(null)
+            }}
+          >
+            Clear Compare List
           </Button>
         </div>
       </div>
     </div>
   )
 }
-

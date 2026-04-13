@@ -1,11 +1,11 @@
 :root {
-  --bg: #10192b;
-  --bg-soft: #12182a;
-  --surface: #182235;
+  --bg: #162845;
+  --bg-soft: #15243d;
+  --surface: #1a2840;
   --card: #f7f9fc;
   --card-soft: #eef3f8;
 
-  --text: #b7c2d4;
+  --text: #c1cad9;
   --text-h: #f8fafc;
   --text-dark: #1a2436;
   --muted-dark: #58657d;
@@ -48,9 +48,9 @@ html {
 body {
   margin: 0;
   background:
-    radial-gradient(circle at top left, rgba(54, 179, 168, 0.12), transparent 30%),
-    radial-gradient(circle at top right, rgba(244, 124, 32, 0.10), transparent 26%),
-    linear-gradient(180deg, #10192b 0%, #0d1730 100%);
+    radial-gradient(circle at top left, rgba(54, 179, 168, 0.16), transparent 28%),
+    radial-gradient(circle at top right, rgba(244, 124, 32, 0.14), transparent 24%),
+    linear-gradient(180deg, #162845 0%, #102038 52%, #0c1730 100%);
   color: var(--text);
   font-family: var(--sans);
 }
@@ -78,9 +78,9 @@ h2 {
 }
 
 h1 {
-  font-size: 56px;
-  letter-spacing: -1.8px;
-  margin: 32px 0;
+  font-size: 52px;
+  letter-spacing: -1.6px;
+  margin: 28px 0;
 }
 
 h2 {
