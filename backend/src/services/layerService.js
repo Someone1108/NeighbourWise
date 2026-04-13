@@ -57,33 +57,33 @@ async function getLayersForSuburb(suburbName) {
   };
 
   const heatSql = `
-  select
-    h.ogc_fid,
-    h.mb_code16,
-    h.sa1_main16,
-    h.sa2_name16,
-    h.sa3_code16,
-    h.sa3_name16,
-    h.sa4_code16,
-    h.sa4_name16,
-    h.gcc_code16,
-    h.sa2_main16,
-    h.pershrbtre,
-    h.peranyveg,
-    h.pershrub,
-    h.pertr03_10,
-    h.pertr10_15,
-    h.pertr15pl,
-    h."uhi18_m",
-    h.pergrass,
-    h.lga,
-    st_asgeojson(st_intersection(h.geom, p.geom))::json as geometry
-  from public.heat_features h
-  join public.locality_polygon p
-    on st_intersects(h.geom, p.geom)
-  where upper(p."LOCALITY") = upper($1)
-    and not st_isempty(st_intersection(h.geom, p.geom));
-`;
+    select
+      h.ogc_fid,
+      h.mb_code16,
+      h.sa1_main16,
+      h.sa2_name16,
+      h.sa3_code16,
+      h.sa3_name16,
+      h.sa4_code16,
+      h.sa4_name16,
+      h.gcc_code16,
+      h.sa2_main16,
+      h.pershrbtre,
+      h.peranyveg,
+      h.pershrub,
+      h.pertr03_10,
+      h.pertr10_15,
+      h.pertr15pl,
+      h."uhi18_m",
+      h.pergrass,
+      h.lga,
+      st_asgeojson(st_intersection(h.geom, p.geom))::json as geometry
+    from public.heat_features h
+    join public.locality_polygon p
+      on st_intersects(h.geom, p.geom)
+    where upper(p."LOCALITY") = upper($1)
+      and not st_isempty(st_intersection(h.geom, p.geom));
+  `;
 
   const heatResult = await pool.query(heatSql, [target]);
 
@@ -117,22 +117,22 @@ async function getLayersForSuburb(suburbName) {
   };
 
   const vegetationSql = `
-  select
-    v.fid,
-    v.uniqueid,
-    v.mb_reclass,
-    v.type,
-    v.landtype,
-    v.areasqm,
-    v.areaanyveg,
-    v.peranyveg,
-    st_asgeojson(st_intersection(v.geom, p.geom))::json as geometry
-  from public.vegetation_features v
-  join public.locality_polygon p
-    on st_intersects(v.geom, p.geom)
-  where upper(p."LOCALITY") = upper($1)
-    and not st_isempty(st_intersection(v.geom, p.geom));
-`;
+    select
+      v.fid,
+      v.uniqueid,
+      v.mb_reclass,
+      v.type,
+      v.landtype,
+      v.areasqm,
+      v.areaanyveg,
+      v.peranyveg,
+      st_asgeojson(st_intersection(v.geom, p.geom))::json as geometry
+    from public.vegetation_features v
+    join public.locality_polygon p
+      on st_intersects(v.geom, p.geom)
+    where upper(p."LOCALITY") = upper($1)
+      and not st_isempty(st_intersection(v.geom, p.geom));
+  `;
 
   const vegetationResult = await pool.query(vegetationSql, [target]);
 
@@ -154,11 +154,48 @@ async function getLayersForSuburb(suburbName) {
     })),
   };
 
+  const zoningSql = `
+    select
+      z.id,
+      z.fid,
+      z.schemecode,
+      z.lga_code,
+      z.lga,
+      z.zone_code,
+      z.zone_desc,
+      st_asgeojson(st_intersection(z.geom, p.geom))::json as geometry
+    from public.zoning_features z
+    join public.locality_polygon p
+      on st_intersects(z.geom, p.geom)
+    where upper(p."LOCALITY") = upper($1)
+      and not st_isempty(st_intersection(z.geom, p.geom));
+  `;
+
+  const zoningResult = await pool.query(zoningSql, [target]);
+
+  const zoning = {
+    type: 'FeatureCollection',
+    features: zoningResult.rows.map((row) => ({
+      type: 'Feature',
+      properties: {
+        id: row.id,
+        fid: row.fid,
+        schemecode: row.schemecode,
+        lga_code: row.lga_code,
+        lga: row.lga,
+        zone_code: row.zone_code,
+        zone_desc: row.zone_desc,
+      },
+      geometry: row.geometry,
+    })),
+  };
+
   return {
     suburb: target,
     boundary,
     heat,
     vegetation,
+    zoning,
   };
 }
 
@@ -335,6 +372,57 @@ async function getLayersForAddress(lat, lng, radiusMeters) {
     })),
   };
 
+  const zoningSql = `
+    with buffer_area as (
+      select st_transform(
+        st_buffer(
+          st_transform(
+            st_setsrid(st_makepoint($1, $2), 4326),
+            3857
+          ),
+          $3
+        ),
+        4326
+      ) as geom
+    )
+    select
+      z.id,
+      z.fid,
+      z.schemecode,
+      z.lga_code,
+      z.lga,
+      z.zone_code,
+      z.zone_desc,
+      st_asgeojson(st_intersection(z.geom, b.geom))::json as geometry
+    from public.zoning_features z
+    join buffer_area b
+      on st_intersects(z.geom, b.geom)
+    where not st_isempty(st_intersection(z.geom, b.geom));
+  `;
+
+  const zoningResult = await pool.query(zoningSql, [
+    safeLng,
+    safeLat,
+    safeRadius,
+  ]);
+
+  const zoning = {
+    type: 'FeatureCollection',
+    features: zoningResult.rows.map((row) => ({
+      type: 'Feature',
+      properties: {
+        id: row.id,
+        fid: row.fid,
+        schemecode: row.schemecode,
+        lga_code: row.lga_code,
+        lga: row.lga,
+        zone_code: row.zone_code,
+        zone_desc: row.zone_desc,
+      },
+      geometry: row.geometry,
+    })),
+  };
+
   return {
     address: {
       lat: safeLat,
@@ -344,6 +432,7 @@ async function getLayersForAddress(lat, lng, radiusMeters) {
     analysisArea,
     heat,
     vegetation,
+    zoning,
   };
 }
 
@@ -376,15 +465,31 @@ async function getSuburbLayerSummary(suburbName) {
     where upper(p."LOCALITY") = upper($1);
   `;
 
-  const [heatSummaryResult, vegetationSummaryResult] = await Promise.all([
-    pool.query(heatSummarySql, [target]),
-    pool.query(vegetationSummarySql, [target]),
-  ]);
+  const zoningSummarySql = `
+    select
+      zone_code,
+      zone_desc,
+      count(*) as feature_count
+    from public.zoning_features z
+    join public.locality_polygon p
+      on st_intersects(z.geom, p.geom)
+    where upper(p."LOCALITY") = upper($1)
+    group by zone_code, zone_desc
+    order by feature_count desc, zone_code asc;
+  `;
+
+  const [heatSummaryResult, vegetationSummaryResult, zoningSummaryResult] =
+    await Promise.all([
+      pool.query(heatSummarySql, [target]),
+      pool.query(vegetationSummarySql, [target]),
+      pool.query(zoningSummarySql, [target]),
+    ]);
 
   return {
     suburb: target,
     heat: heatSummaryResult.rows[0] || null,
     vegetation: vegetationSummaryResult.rows[0] || null,
+    zoning: zoningSummaryResult.rows || [],
   };
 }
 

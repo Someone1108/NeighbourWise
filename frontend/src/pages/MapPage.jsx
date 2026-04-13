@@ -181,6 +181,7 @@ export default function MapPage() {
             selectedLabel={locationName}
             heatLayer={activeLayer === 'heat' ? layerData?.heat : null}
             vegetationLayer={activeLayer === 'vegetation' ? layerData?.vegetation : null}
+            zoningLayer={activeLayer === 'zoning' ? layerData?.zoning : null}
           />
         </section>
 
@@ -258,6 +259,14 @@ export default function MapPage() {
                   onClick={() => setActiveLayer('vegetation')}
                 >
                   Vegetation
+                </button>
+
+                <button
+                  type="button"
+                  className={`nwRangeBtn ${activeLayer === 'zoning' ? 'nwRangeBtnActive' : ''}`}
+                  onClick={() => setActiveLayer('zoning')}
+                >
+                  Zoning
                 </button>
               </div>
             </div>
