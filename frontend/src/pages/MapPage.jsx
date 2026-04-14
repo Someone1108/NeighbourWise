@@ -187,7 +187,7 @@ export default function MapPage() {
 
         <aside className="nwMapRight">
           <div className="nwCard" style={{ textAlign: 'left' }}>
-            <div style={{ fontWeight: 900, color: 'var(--text-h)' }}>
+            <div style={{ fontWeight: 900, color: 'var(--text-dark)' }}>
               Range selection
             </div>
 
@@ -206,7 +206,7 @@ export default function MapPage() {
             </div>
 
             <div style={{ marginTop: 14 }}>
-              <div style={{ fontWeight: 900, color: 'var(--text-h)', marginBottom: 8 }}>
+              <div style={{ fontWeight: 900, color: 'var(--text-dark)', marginBottom: 8 }}>
                 Insights display
               </div>
 
@@ -232,7 +232,7 @@ export default function MapPage() {
             </div>
 
             <div style={{ marginTop: 16 }}>
-              <div style={{ fontWeight: 900, color: 'var(--text-h)', marginBottom: 8 }}>
+              <div style={{ fontWeight: 900, color: 'var(--text-dark)', marginBottom: 8 }}>
                 Map insight layers
               </div>
 
@@ -273,7 +273,7 @@ export default function MapPage() {
 
             <div className="nwScoreStack">
               <div>
-                <div style={{ fontWeight: 900, color: 'var(--text-h)' }}>
+                <div style={{ fontWeight: 900, color: 'var(--text-dark)' }}>
                   Overall liveability
                 </div>
                 <div className="nwOverallScore">
