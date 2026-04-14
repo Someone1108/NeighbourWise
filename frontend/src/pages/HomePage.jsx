@@ -151,8 +151,7 @@ export default function HomePage() {
   const hasResults = suburbResults.length > 0 || addressResults.length > 0
 
   return (
-    <>
-
+    <div className="nwHome">
       {/* HERO SECTION */}
       <section
         className="hero"
@@ -239,7 +238,6 @@ export default function HomePage() {
           <p>Make better decisions faster</p>
         </div>
       </section>
-
-    </>
+    </div>
   )
 }
