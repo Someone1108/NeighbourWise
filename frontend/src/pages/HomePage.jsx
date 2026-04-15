@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import Button from '../components/buttons/Button.jsx'
+import { useEffect, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   searchAddresses,
   searchLocalities,
@@ -12,23 +11,29 @@ import familyIcon from '../assets/family.png'
 import elderlyIcon from '../assets/elderly.png'
 import petIcon from '../assets/pet.png'
 
-const PROFILE_INFO = {
-  familyWithChildren: {
-    title: 'Family with children',
-    description: 'Focus on a suburb that feels practical for family living and daily convenience.',
-    icon: familyIcon,
+const PROFILES = [
+  { key: 'familyWithChildren', title: 'Family', icon: familyIcon },
+  { key: 'elderly', title: 'Elderly', icon: elderlyIcon },
+  { key: 'petOwner', title: 'Pet owner', icon: petIcon },
+]
+
+const VALUE_PROPS = [
+  {
+    icon: '🏆',
+    title: 'Liveability Score',
+    desc: 'Instant suburb ratings across accessibility, safety and environment',
   },
-  elderly: {
-    title: 'Elderly',
-    description: 'Explore areas with a clearer sense of comfort, access, and local suitability.',
-    icon: elderlyIcon,
+  {
+    icon: '🗺️',
+    title: 'Map Insights',
+    desc: 'POIs, heatmaps and green space in one interactive view',
   },
-  petOwner: {
-    title: 'Pet owner',
-    description: 'Consider neighbourhoods that may better support pet-friendly daily living.',
-    icon: petIcon,
+  {
+    icon: '⚖️',
+    title: 'Compare Areas',
+    desc: 'Side-by-side suburb data to help you decide with confidence',
   },
-}
+]
 
 export default function HomePage() {
   const navigate = useNavigate()
@@ -37,7 +42,6 @@ export default function HomePage() {
   const [error, setError] = useState('')
   const [suburbResults, setSuburbResults] = useState([])
   const [addressResults, setAddressResults] = useState([])
-  const [searching, setSearching] = useState(false)
   const [selectedLocation, setSelectedLocation] = useState(null)
 
   const [profile, setProfile] = useState({
@@ -45,10 +49,6 @@ export default function HomePage() {
     elderly: false,
     petOwner: false,
   })
-
-  const selectedProfileCount = useMemo(() => {
-    return Object.values(profile).filter(Boolean).length
-  }, [profile])
 
   useEffect(() => {
     const query = address.trim()
@@ -61,7 +61,6 @@ export default function HomePage() {
     if (selectedLocation && query === selectedText) {
       setSuburbResults([])
       setAddressResults([])
-      setSearching(false)
       return
     }
 
@@ -72,34 +71,25 @@ export default function HomePage() {
     if (query.length < 3) {
       setSuburbResults([])
       setAddressResults([])
-      setSearching(false)
       return
     }
 
     let cancelled = false
-    setSearching(true)
 
     const timer = setTimeout(() => {
       Promise.allSettled([searchLocalities(query), searchAddresses(query)])
         .then((results) => {
           if (cancelled) return
-
           const localities =
             results[0].status === 'fulfilled' && Array.isArray(results[0].value)
               ? results[0].value
               : []
-
           const addresses =
             results[1].status === 'fulfilled' && Array.isArray(results[1].value)
               ? results[1].value
               : []
-
           setSuburbResults(localities)
           setAddressResults(addresses)
-        })
-        .finally(() => {
-          if (cancelled) return
-          setSearching(false)
         })
     }, 250)
 
@@ -110,9 +100,7 @@ export default function HomePage() {
   }, [address, selectedLocation])
 
   function onSelectLocation(location) {
-    const label =
-      location.displayName || location.fullAddress || location.name || ''
-
+    const label = location.displayName || location.fullAddress || location.name || ''
     setSelectedLocation(location)
     setAddress(label)
     setSuburbResults([])
@@ -120,8 +108,8 @@ export default function HomePage() {
     setError('')
   }
 
-  function toggleProfile(key, checked) {
-    setProfile((prev) => ({ ...prev, [key]: checked }))
+  function toggleProfile(key) {
+    setProfile((prev) => ({ ...prev, [key]: !prev[key] }))
   }
 
   function onSubmit() {
@@ -130,112 +118,149 @@ export default function HomePage() {
       setError(v.message)
       return
     }
-
     if (!selectedLocation) {
-      setError('Please select a suburb or address from the search results.')
+      setError('Please select a suburb or address from the results.')
       return
     }
-
     setError('')
-
-    const ctx = {
-      selectedLocation,
-      profile,
-      rangeMinutes: 20,
-    }
-
+    const ctx = { selectedLocation, profile, rangeMinutes: 20 }
     saveContext(ctx)
     navigate('/map', { state: ctx })
   }
 
-  const hasResults = suburbResults.length > 0 || addressResults.length > 0
+  const allResults = [...suburbResults, ...addressResults]
 
   return (
     <div className="nwHome">
-      {/* HERO SECTION */}
+      {/* HERO */}
       <section
         className="hero"
         style={{ backgroundImage: `url(${heroImage})` }}
+        aria-label="Hero"
       >
-        <div className="overlay"></div>
+        <div className="hero-overlay" aria-hidden="true" />
 
         <div className="hero-content">
-          <h1>Find the right place to live</h1>
-          <p>Explore Melbourne neighbourhoods with data-backed insights</p>
+          <span className="hero-eyebrow">Melbourne · Liveability Explorer</span>
 
-          {/* SEARCH CARD */}
-          <div className="search-card">
-            <h4 className="section-title">Search</h4>
+          <h1 className="hero-headline">
+            Melbourne neighbourhoods,<br />
+            scored for <em>the way you live.</em>
+          </h1>
 
-            <input
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              placeholder="Enter suburb or address"
-            />
+          <p className="hero-subtitle">
+            Data-backed insights across accessibility, safety and environment —
+            personalised to your situation.
+          </p>
+        </div>
 
-            {error && <div className="error">{error}</div>}
+        <button
+          className="hero-scroll"
+          aria-label="Scroll to content"
+          onClick={() => document.getElementById('value-prop')?.scrollIntoView({ behavior: 'smooth' })}
+        >
+          <span>Explore</span>
+          <div className="hero-scroll-chevron" aria-hidden="true" />
+        </button>
+      </section>
 
-            {hasResults && (
-              <div className="dropdown">
-                {[...suburbResults, ...addressResults].map((item, i) => (
-                  <div
-                    key={i}
-                    onClick={() => onSelectLocation(item)}
-                    className="dropdown-item"
-                  >
-                    {item.displayName || item.fullAddress || item.name}
-                  </div>
-                ))}
-              </div>
-            )}
+      {/* VALUE PROP */}
+      <section id="value-prop" className="vp-section" aria-labelledby="vp-heading">
+        <div className="vp-header">
+          <p className="vp-header-label">What you get</p>
+          <h2 id="vp-heading">Everything you need to choose your suburb</h2>
+        </div>
 
-            <h4 className="section-title">Your situation</h4>
-
-            <div className="situation-row">
-              {Object.entries(PROFILE_INFO).map(([key, info]) => (
-                <div
-                  key={key}
-                  className={`situation-card ${profile[key] ? 'active' : ''}`}
-                  onClick={() => toggleProfile(key, !profile[key])}
-                >
-                  <div className="icon">
-                    <img src={info.icon} alt="" />
-                  </div>
-
-                  <h5>{info.title}</h5>
-                  <p className="situation-desc">{info.description}</p>
-                  <div className="checkbox">
-                    {profile[key] && "✔"}
-                  </div>
-                </div>
-              ))}
+        <div className="vp-inner">
+          {VALUE_PROPS.map((vp) => (
+            <div key={vp.title} className="vp-card">
+              <div className="vp-card-icon" aria-hidden="true">{vp.icon}</div>
+              <h3>{vp.title}</h3>
+              <p>{vp.desc}</p>
             </div>
-
-            <Button onClick={onSubmit} className="cta">
-              Check Liveability
-            </Button>
-          </div>
+          ))}
         </div>
       </section>
 
-      {/* WHY SECTION*/}
-      <section className="why">
-        <div className="why-item">
-          <div className="why-icon">🗺️</div>
-          <h4>Map-based insights</h4>
-          <p>View neighbourhood data clearly</p>
-        </div>
+      {/* SEARCH */}
+      <section className="search-section" aria-labelledby="search-heading">
+        <div className="search-inner">
+          <p className="search-section-label">Get started</p>
+          <h2 id="search-heading" className="search-section-title">
+            Check a suburb or address
+          </h2>
 
-        <div className="why-item">
-          <div className="why-icon">📊</div>
-          <h4>Data-driven scores</h4>
-          <p>Understand liveability instantly</p>
-        </div>
+          <div className="search-input-wrap">
+            <input
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              placeholder="e.g. Fitzroy or 123 Swanston St"
+              aria-label="Search suburb or address"
+              aria-autocomplete="list"
+              aria-expanded={allResults.length > 0}
+              autoComplete="off"
+            />
+            <span className="search-icon" aria-hidden="true">⌕</span>
+          </div>
 
-        <div className="why-item">
-          <div className="why-icon">⚖️</div>
-          <h4>Compare areas</h4>
-          <p>Make better decisions faster</p>
+          {error && (
+            <p className="search-error" role="alert">{error}</p>
+          )}
+
+          {allResults.length > 0 && (
+            <div className="search-dropdown" role="listbox" aria-label="Search results">
+              {allResults.map((item, i) => (
+                <div
+                  key={i}
+                  className="search-dropdown-item"
+                  role="option"
+                  aria-selected="false"
+                  tabIndex={0}
+                  onClick={() => onSelectLocation(item)}
+                  onKeyDown={(e) => e.key === 'Enter' && onSelectLocation(item)}
+                >
+                  {item.displayName || item.fullAddress || item.name}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <p className="profile-label" id="profile-label">Your situation</p>
+
+          <div className="profile-row" role="group" aria-labelledby="profile-label">
+            {PROFILES.map(({ key, title, icon }) => (
+              <div
+                key={key}
+                className={`profile-card${profile[key] ? ' active' : ''}`}
+                role="button"
+                aria-pressed={profile[key]}
+                tabIndex={0}
+                onClick={() => toggleProfile(key)}
+                onKeyDown={(e) => e.key === 'Enter' && toggleProfile(key)}
+              >
+                <img className="profile-card-img" src={icon} alt="" />
+                <span className="profile-card-title">{title}</span>
+                <div className="profile-check" aria-hidden="true">
+                  {profile[key] && '✓'}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <button
+            className="home-cta"
+            onClick={onSubmit}
+            aria-label="Explore liveability for selected location"
+          >
+            Explore Liveability →
+          </button>
+
+          <div className="coverage-notice">
+            <span className="coverage-dot" aria-hidden="true" />
+            <span>Currently covering select Melbourne suburbs</span>
+            <span aria-hidden="true">·</span>
+            <Link to="/coverage" className="coverage-link">View Coverage Map</Link>
+          </div>
         </div>
       </section>
     </div>
