@@ -12,12 +12,12 @@
 
   --border-light: #d0dae6;
 
-  --accent: #f97316;
-  --accent-dark: #ea6c00;
-  --accent-2: #0891b2;
-  --accent-2-dark: #0e7490;
-  --accent-bg: rgba(249, 115, 22, 0.12);
-  --teal-bg: rgba(8, 145, 178, 0.10);
+  --accent: #f47c20;
+  --accent-dark: #e06818;
+  --accent-2: #2a9d8f;
+  --accent-2-dark: #1e8577;
+  --accent-bg: rgba(244, 124, 32, 0.14);
+  --teal-bg: rgba(42, 157, 143, 0.10);
 
   --success: #1f9d68;
   --danger: #c53b3b;
@@ -60,9 +60,7 @@ input {
 }
 
 #root {
-  width: 1200px;
-  max-width: 100%;
-  margin: 0 auto;
+  width: 100%;
   min-height: 100svh;
   display: flex;
   flex-direction: column;

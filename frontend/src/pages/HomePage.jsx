@@ -7,14 +7,11 @@ import {
 } from '../services/api.js'
 import { saveContext } from '../utils/storage.js'
 import heroImage from '../assets/bg.png'
-import familyIcon from '../assets/family.png'
-import elderlyIcon from '../assets/elderly.png'
-import petIcon from '../assets/pet.png'
 
 const PROFILES = [
-  { key: 'familyWithChildren', title: 'Family', icon: familyIcon },
-  { key: 'elderly', title: 'Elderly', icon: elderlyIcon },
-  { key: 'petOwner', title: 'Pet owner', icon: petIcon },
+  { key: 'familyWithChildren', title: 'Family', emoji: '👨‍👩‍👧', desc: 'Schools, parks & safe streets' },
+  { key: 'elderly', title: 'Elderly', emoji: '🧓', desc: 'Healthcare, quiet & accessible' },
+  { key: 'petOwner', title: 'Pet Owner', emoji: '🐾', desc: 'Dog parks & off-leash areas' },
 ]
 
 const VALUE_PROPS = [
@@ -26,7 +23,7 @@ const VALUE_PROPS = [
   {
     icon: '🗺️',
     title: 'Map Insights',
-    desc: 'POIs, heatmaps and green space in one interactive view',
+    desc: 'Insights, heatmaps and green space in one interactive view',
   },
   {
     icon: '⚖️',
@@ -74,6 +71,19 @@ export default function HomePage() {
       return
     }
 
+    const words = query.toLowerCase().split(/\s+/).filter(Boolean)
+
+    function dedupeAndFilter(arr) {
+      const seen = new Set()
+      return arr.filter((item) => {
+        const label = (item.displayName || item.fullAddress || item.name || '').toLowerCase()
+        const key = label
+        if (seen.has(key)) return false
+        seen.add(key)
+        return words.every((w) => label.includes(w))
+      })
+    }
+
     let cancelled = false
 
     const timer = setTimeout(() => {
@@ -88,8 +98,8 @@ export default function HomePage() {
             results[1].status === 'fulfilled' && Array.isArray(results[1].value)
               ? results[1].value
               : []
-          setSuburbResults(localities)
-          setAddressResults(addresses)
+          setSuburbResults(dedupeAndFilter(localities))
+          setAddressResults(dedupeAndFilter(addresses))
         })
     }, 250)
 
@@ -128,7 +138,7 @@ export default function HomePage() {
     navigate('/map', { state: ctx })
   }
 
-  const allResults = [...suburbResults, ...addressResults]
+  const hasResults = suburbResults.length > 0 || addressResults.length > 0
 
   return (
     <div className="nwHome">
@@ -149,7 +159,7 @@ export default function HomePage() {
           </h1>
 
           <p className="hero-subtitle">
-            Data-backed insights across accessibility, safety and environment —
+            Data-backed insights across accessibility, safety and environment -
             personalised to your situation.
           </p>
         </div>
@@ -197,7 +207,7 @@ export default function HomePage() {
               placeholder="e.g. Fitzroy or 123 Swanston St"
               aria-label="Search suburb or address"
               aria-autocomplete="list"
-              aria-expanded={allResults.length > 0}
+              aria-expanded={hasResults}
               autoComplete="off"
             />
             <span className="search-icon" aria-hidden="true">⌕</span>
@@ -207,28 +217,52 @@ export default function HomePage() {
             <p className="search-error" role="alert">{error}</p>
           )}
 
-          {allResults.length > 0 && (
+          {hasResults && (
             <div className="search-dropdown" role="listbox" aria-label="Search results">
-              {allResults.map((item, i) => (
-                <div
-                  key={i}
-                  className="search-dropdown-item"
-                  role="option"
-                  aria-selected="false"
-                  tabIndex={0}
-                  onClick={() => onSelectLocation(item)}
-                  onKeyDown={(e) => e.key === 'Enter' && onSelectLocation(item)}
-                >
-                  {item.displayName || item.fullAddress || item.name}
-                </div>
-              ))}
+              {suburbResults.length > 0 && (
+                <>
+                  <div className="search-dropdown-group-label" aria-hidden="true">Suburbs</div>
+                  {suburbResults.map((item, i) => (
+                    <div
+                      key={`suburb-${i}`}
+                      className="search-dropdown-item"
+                      role="option"
+                      aria-selected="false"
+                      tabIndex={0}
+                      onClick={() => onSelectLocation(item)}
+                      onKeyDown={(e) => e.key === 'Enter' && onSelectLocation(item)}
+                    >
+                      {item.displayName || item.name}
+                    </div>
+                  ))}
+                </>
+              )}
+              {addressResults.length > 0 && (
+                <>
+                  {suburbResults.length > 0 && <div className="search-dropdown-group-divider" aria-hidden="true" />}
+                  <div className="search-dropdown-group-label" aria-hidden="true">Addresses</div>
+                  {addressResults.map((item, i) => (
+                    <div
+                      key={`address-${i}`}
+                      className="search-dropdown-item"
+                      role="option"
+                      aria-selected="false"
+                      tabIndex={0}
+                      onClick={() => onSelectLocation(item)}
+                      onKeyDown={(e) => e.key === 'Enter' && onSelectLocation(item)}
+                    >
+                      {item.displayName || item.fullAddress || item.name}
+                    </div>
+                  ))}
+                </>
+              )}
             </div>
           )}
 
           <p className="profile-label" id="profile-label">Your situation</p>
 
           <div className="profile-row" role="group" aria-labelledby="profile-label">
-            {PROFILES.map(({ key, title, icon }) => (
+            {PROFILES.map(({ key, title, emoji, desc }) => (
               <div
                 key={key}
                 className={`profile-card${profile[key] ? ' active' : ''}`}
@@ -238,8 +272,9 @@ export default function HomePage() {
                 onClick={() => toggleProfile(key)}
                 onKeyDown={(e) => e.key === 'Enter' && toggleProfile(key)}
               >
-                <img className="profile-card-img" src={icon} alt="" />
+                <span className="profile-card-emoji" aria-hidden="true">{emoji}</span>
                 <span className="profile-card-title">{title}</span>
+                <span className="profile-card-desc">{desc}</span>
                 <div className="profile-check" aria-hidden="true">
                   {profile[key] && '✓'}
                 </div>
