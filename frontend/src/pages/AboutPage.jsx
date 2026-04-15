@@ -32,6 +32,23 @@ export default function AboutPage() {
         maps, and side-by-side comparisons based on real location data.
       </p>
 
+      {/* ── ABOUT THE PLATFORM ── */}
+      <div className="nwCard" style={{ textAlign: 'left', marginBottom: 20 }}>
+        <h2 style={{ marginTop: 0, marginBottom: 14 }}>About the platform</h2>
+        <p style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-dark)', lineHeight: 1.65, marginBottom: 14 }}>
+          We built this platform to help people explore and understand neighbourhood liveability in Melbourne.
+        </p>
+        <p style={{ color: 'var(--muted-dark)', lineHeight: 1.7, fontSize: 15, marginBottom: 12 }}>
+          Many existing property websites focus mainly on prices and listings, but do not provide enough
+          information about what it is actually like to live in a neighbourhood. This can make it difficult
+          for people, especially newcomers, to choose the right place to live.
+        </p>
+        <p style={{ color: 'var(--muted-dark)', lineHeight: 1.7, fontSize: 15 }}>
+          Our platform brings together different types of data to provide a liveability score and visual
+          insights, helping users better understand each area.
+        </p>
+      </div>
+
       {/* ── HOW IT WORKS ── */}
       <div className="nwCard" style={{ textAlign: 'left', marginBottom: 20 }}>
         <h2 style={{ marginTop: 0, marginBottom: 18 }}>How to use NeighbourWise</h2>
@@ -101,13 +118,23 @@ export default function AboutPage() {
       </div>
 
       {/* ── WHO IT'S FOR ── */}
-      <div className="nwCard" style={{ textAlign: 'left' }}>
+      <div className="nwCard" style={{ textAlign: 'left', marginBottom: 20 }}>
         <h2 style={{ marginTop: 0, marginBottom: 10 }}>Who is it for?</h2>
         <p style={{ color: 'var(--muted-dark)', lineHeight: 1.7, fontSize: 15 }}>
           NeighbourWise is built for people making real decisions about where to live in Melbourne.
           Whether you are a family looking for good schools and parks, an older resident who needs
           healthcare and quiet streets, or a pet owner hunting for dog-friendly open spaces —
           choose your profile and the scores will reflect what matters most to you.
+        </p>
+      </div>
+
+      {/* ── ABOUT THE TEAM ── */}
+      <div className="nwCard" style={{ textAlign: 'left' }}>
+        <h2 style={{ marginTop: 0, marginBottom: 14 }}>About the team</h2>
+        <hr style={{ border: 'none', borderTop: '1px dashed var(--border-light)', margin: '0 0 16px' }} />
+        <p style={{ color: 'var(--muted-dark)', lineHeight: 1.7, fontSize: 15 }}>
+          We are a team of students from Monash University, working on a smart city project to improve
+          urban living decisions through data.
         </p>
       </div>
     </div>
