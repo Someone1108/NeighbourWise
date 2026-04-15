@@ -52,26 +52,64 @@ const searchAddresses = async (query) => {
 
   const url = 'https://api.mapbox.com/search/geocode/v6/forward';
 
+  // Melbourne bounding box: [west, south, east, north]
+  const melbourneBbox = [144.5937, -38.4339, 145.5125, -37.5113];
+
+  const normalizeAddress = (text) => {
+    return String(text || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[.,]/g, '')
+      .replace(/\s+/g, ' ');
+  };
+
+  const dedupeAddresses = (items) => {
+    const seen = new Set();
+    const results = [];
+
+    for (const item of items) {
+      const key = normalizeAddress(item.fullAddress || item.name);
+
+      if (!key || seen.has(key)) {
+        continue;
+      }
+
+      seen.add(key);
+      results.push(item);
+    }
+
+    return results;
+  };
+
   const response = await axios.get(url, {
     params: {
-      q: query,
+      q: query.trim(),
       access_token: accessToken,
-      limit: 5,
+      limit: 10,
       country: 'au',
+      bbox: melbourneBbox.join(','),
+      autocomplete: true,
     },
   });
 
   const features = response.data.features || [];
 
-  return features.map((feature) => ({
-    id: feature.properties?.mapbox_id || feature.id,
-    name: feature.properties?.name || feature.text || '',
-    fullAddress: feature.properties?.full_address || feature.place_name || '',
-    lat: feature.geometry?.coordinates?.[1],
-    lng: feature.geometry?.coordinates?.[0],
-    placeType: feature.properties?.feature_type || 'address',
-    source: 'mapbox',
-  }));
+  const mappedResults = features
+    .filter((feature) => {
+      const featureType = feature.properties?.feature_type || '';
+      return ['address', 'street'].includes(featureType);
+    })
+    .map((feature) => ({
+      id: feature.properties?.mapbox_id || feature.id,
+      name: feature.properties?.name || feature.text || '',
+      fullAddress: feature.properties?.full_address || feature.place_name || '',
+      lat: Number(feature.geometry?.coordinates?.[1]),
+      lng: Number(feature.geometry?.coordinates?.[0]),
+      placeType: feature.properties?.feature_type || 'address',
+      source: 'mapbox',
+    }));
+
+  return dedupeAddresses(mappedResults).slice(0, 5);
 };
 
 const searchLocations = async (query) => {
