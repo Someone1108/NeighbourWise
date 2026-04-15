@@ -2,41 +2,39 @@ export default function AboutPage() {
   return (
     <div className="nwPage">
       <h1 className="nwPageTitle">About NeighbourWise</h1>
-      <p className="nwSubtitle">How we estimate liveability using neighbourhood signals</p>
+      <p className="nwSubtitle">
+        Helping you compare Melbourne suburbs for daily convenience and lifestyle fit
+      </p>
 
       <div className="nwCard" style={{ textAlign: 'left' }}>
-        <h2 style={{ marginTop: 0 }}>Project description</h2>
+        <h2 style={{ marginTop: 0 }}>What NeighbourWise does</h2>
         <p style={{ lineHeight: 1.7 }}>
-          NeighbourWise helps you explore neighbourhood liveability in Melbourne by turning open
-          location signals such as amenities, accessibility, and safety indicators into a simple,
-          easy-to-understand score.
+          NeighbourWise helps you explore suburb liveability in Melbourne using map-based insights.
+          It turns neighbourhood signals into clear scores so you can quickly compare areas.
         </p>
 
-        <h2 style={{ marginTop: 22 }}>Target users</h2>
+        <h2 style={{ marginTop: 22 }}>Who it is for</h2>
         <p style={{ lineHeight: 1.7 }}>
-          Families, elderly residents, and pet owners who want a quick, data-backed view of how
-          different areas might fit their needs.
+          House-hunters, families with children, older residents, and pet owners who want a practical
+          view of travel convenience and neighbourhood suitability.
         </p>
 
-        <h2 style={{ marginTop: 22 }}>Explanation of liveability score</h2>
+        <h2 style={{ marginTop: 22 }}>How scoring is shown</h2>
         <p style={{ lineHeight: 1.7 }}>
-          The score is grouped into three categories: Accessibility, Safety, and Environment. Each
-          category combines multiple factors such as nearby stations, supermarket access, safety
-          context, and green spaces.
+          Liveability is presented through three categories: Accessibility, Safety, and Environment.
+          You can view the overall score and a category-by-category breakdown.
         </p>
 
-        <h2 style={{ marginTop: 22 }}>Data sources (open datasets)</h2>
+        <h2 style={{ marginTop: 22 }}>What you can do</h2>
         <p style={{ lineHeight: 1.7 }}>
-          In the final system, the backend will combine open data sources such as public transport
-          points, service locations, and safety or environment indicators to determine which factors
-          are met.
+          Search a suburb or address, choose your profile, check map-based score results, review key
+          factors, and compare shortlisted areas side by side.
         </p>
 
-        <h2 style={{ marginTop: 22 }}>How the system works</h2>
+        <h2 style={{ marginTop: 22 }}>Data and transparency</h2>
         <p style={{ lineHeight: 1.7 }}>
-          You search for a suburb or address and choose your situation. The backend then returns the
-          liveability results for the selected time range, while the front end displays the returned
-          scores, map view, and key factors in a clear way.
+          NeighbourWise is designed to use open data signals so users can understand how accessibility
+          and neighbourhood context may affect everyday living.
         </p>
       </div>
     </div>
