@@ -148,6 +148,56 @@ body {
   color: var(--muted-dark);
 }
 
+/* About page */
+.nwAboutPage {
+  background:
+    radial-gradient(1200px 380px at 8% -12%, rgba(244, 124, 32, 0.10), transparent 60%),
+    var(--bg);
+}
+
+.nwAboutSubtitle {
+  max-width: 900px;
+}
+
+.nwAboutGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 18px;
+  align-items: start;
+}
+
+.nwAboutCard {
+  text-align: left;
+  padding: 28px 30px;
+  height: 100%;
+}
+
+.nwAboutSectionTitle {
+  margin: 0 0 14px;
+  font-size: 24px;
+  line-height: 1.25;
+}
+
+.nwAboutLead {
+  font-size: 20px;
+  line-height: 1.6;
+  font-weight: 600;
+  margin: 0 0 18px;
+}
+
+.nwAboutParagraph {
+  line-height: 1.78;
+  margin: 0 0 16px;
+}
+
+.nwAboutFootnote {
+  margin-top: 6px;
+  margin-bottom: 0;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border-light);
+}
+
+
 .nwBtn {
   border: 1px solid var(--border-light);
   background: white;
