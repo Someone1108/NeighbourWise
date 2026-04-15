@@ -280,31 +280,48 @@ export default function ComparePage() {
     return 'Compare two shortlisted areas side by side'
   }, [loading, data])
 
+  // Truncate long area names for compact display
+  function shortLabel(str, max = 28) {
+    if (!str) return ''
+    return str.length > max ? str.slice(0, max - 1) + '…' : str
+  }
+
+  const winner = data
+    ? data.overall1 > data.overall2
+      ? 1
+      : data.overall2 > data.overall1
+        ? 2
+        : 0
+    : 0
+
   return (
     <div className="nwPage">
       <h1 className="nwPageTitle">Compare Areas</h1>
-      <p className="nwSubtitle">{compareSubtitle}</p>
+      <p className="nwSubtitle">
+        {data
+          ? `${shortLabel(data.area1, 22)} vs ${shortLabel(data.area2, 22)}`
+          : 'Add two areas to compare them side by side'}
+      </p>
 
+      {/* ── AREA SELECTION PANELS ── */}
       <div className="nwCompareTopGrid">
+
+        {/* Area 1 */}
         <div className="nwCard nwComparePanel">
           <div className="nwCompareLabel">Area 1</div>
           {firstArea ? (
             <>
-              <h2 className="nwCompareAreaTitle">{firstArea.locationName}</h2>
+              <h2 className="nwCompareAreaTitle" title={firstArea.locationName}>
+                {shortLabel(firstArea.locationName)}
+              </h2>
               <p className="nwCompareAreaMeta">
-                Saved from map results · {safeRangeMinutes(firstArea.rangeMinutes)} minute range
+                {safeRangeMinutes(firstArea.rangeMinutes)}-minute travel range
               </p>
-
               <div className="nwChipRow">
-                <span className="nwChip">Saved area</span>
-                <span className="nwChip">Ready to compare</span>
+                <span className="nwChip">✓ Saved from map</span>
               </div>
-
               <div className="nwBtnRow">
-                <Button
-                  variant="secondary"
-                  onClick={() => removeSavedArea(firstArea.locationName)}
-                >
+                <Button variant="secondary" onClick={() => removeSavedArea(firstArea.locationName)}>
                   Remove
                 </Button>
               </div>
@@ -312,7 +329,7 @@ export default function ComparePage() {
           ) : (
             <>
               <p className="nwCompareEmptyText">
-                No first area has been saved yet.
+                No first area saved yet. Search a suburb on the map and click "Add to Compare".
               </p>
               <div className="nwBtnRow">
                 <Button variant="primary" onClick={() => navigate('/map')}>
@@ -323,20 +340,21 @@ export default function ComparePage() {
           )}
         </div>
 
+        {/* Area 2 */}
         <div className="nwCard nwComparePanel">
           <div className="nwCompareLabel">Area 2</div>
 
           {!activeSecondArea ? (
             <>
-              <h2 className="nwCompareAreaTitle">Search a second suburb or address</h2>
-              <p className="nwCompareAreaMeta">
-                Select another area here instead of going back to the home page.
+              <h2 className="nwCompareAreaTitle">Find a second area</h2>
+              <p className="nwCompareAreaMeta" style={{ marginBottom: 12 }}>
+                Type a suburb name or address below.
               </p>
 
               <div className="nwSearchBlock">
                 <input
                   className="nwInput nwSearchInput"
-                  placeholder="Search second suburb or address"
+                  placeholder="e.g. Richmond or 45 Chapel St"
                   value={searchTerm}
                   onChange={(e) => {
                     setSearchTerm(e.target.value)
@@ -346,7 +364,7 @@ export default function ComparePage() {
                   autoComplete="off"
                 />
 
-                {searching ? <div className="nwSearchStatus">Searching...</div> : null}
+                {searching ? <div className="nwSearchStatus">Searching…</div> : null}
 
                 {!searching && hasResults && !selectedSecondArea ? (
                   <div className="nwSearchResults">
@@ -400,27 +418,26 @@ export default function ComparePage() {
                 searchTerm.trim().length >= 3 &&
                 !hasResults &&
                 !selectedSecondArea ? (
-                  <div className="nwSearchStatus">No matching suburb or address found.</div>
+                  <div className="nwSearchStatus">No results found — try a different name.</div>
                 ) : null}
               </div>
             </>
           ) : (
             <>
-              <h2 className="nwCompareAreaTitle">{getLocationLabel(activeSecondArea)}</h2>
+              <h2 className="nwCompareAreaTitle" title={getLocationLabel(activeSecondArea)}>
+                {shortLabel(getLocationLabel(activeSecondArea))}
+              </h2>
               <p className="nwCompareAreaMeta">
                 {savedSecondArea
-                  ? `Saved from map results · ${safeRangeMinutes(savedSecondArea.rangeMinutes)} minute range`
-                  : 'Selected directly on this compare page'}
+                  ? `${safeRangeMinutes(savedSecondArea.rangeMinutes)}-minute travel range`
+                  : 'Selected on this page'}
               </p>
-
               <div className="nwChipRow">
-                <span className="nwChip">Second area selected</span>
-                <span className="nwChip">Ready to compare</span>
+                <span className="nwChip">✓ Area selected</span>
               </div>
-
               <div className="nwBtnRow">
                 <Button variant="secondary" onClick={clearSecondSelection}>
-                  Choose another area
+                  Change area
                 </Button>
               </div>
             </>
@@ -428,53 +445,96 @@ export default function ComparePage() {
         </div>
       </div>
 
+      {/* ── COMPARISON RESULTS ── */}
       <div className="nwCard nwCompareResultsCard">
-        {loading ? <div className="nwLoading">Loading comparison...</div> : null}
-        {!loading && hint ? <div className="nwSubtitle">{hint}</div> : null}
+        {loading ? <div className="nwLoading">Loading comparison…</div> : null}
+
+        {!loading && hint ? (
+          <div style={{ color: 'var(--muted-dark)', fontSize: 15, lineHeight: 1.6, padding: '8px 0' }}>
+            {hint}
+          </div>
+        ) : null}
+
         {!loading && error ? <div className="nwError">{error}</div> : null}
 
         {!loading && data ? (
           <>
+            {/* Score Summary */}
             <div className="nwCompareScoreSummary">
-              <div className="nwCompareScoreBox">
-                <div className="nwCompareScoreLabel">{data.area1}</div>
-                <div className="nwCompareScoreValue">{data.overall1} / 100</div>
+              <div
+                className="nwCompareScoreBox"
+                style={winner === 1 ? { borderColor: 'var(--accent-2)', background: 'var(--teal-bg)' } : {}}
+              >
+                {winner === 1 && (
+                  <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--accent-2)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>
+                    ★ Higher Score
+                  </div>
+                )}
+                <div className="nwCompareScoreLabel" title={data.area1}>{shortLabel(data.area1)}</div>
+                <div className="nwCompareScoreValue">{data.overall1}<span style={{ fontSize: 16, fontWeight: 600, color: 'var(--muted-dark)' }}> / 100</span></div>
               </div>
+
               <div className="nwCompareScoreDivider">vs</div>
-              <div className="nwCompareScoreBox">
-                <div className="nwCompareScoreLabel">{data.area2}</div>
-                <div className="nwCompareScoreValue">{data.overall2} / 100</div>
+
+              <div
+                className="nwCompareScoreBox"
+                style={winner === 2 ? { borderColor: 'var(--accent-2)', background: 'var(--teal-bg)' } : {}}
+              >
+                {winner === 2 && (
+                  <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--accent-2)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>
+                    ★ Higher Score
+                  </div>
+                )}
+                <div className="nwCompareScoreLabel" title={data.area2}>{shortLabel(data.area2)}</div>
+                <div className="nwCompareScoreValue">{data.overall2}<span style={{ fontSize: 16, fontWeight: 600, color: 'var(--muted-dark)' }}> / 100</span></div>
               </div>
             </div>
 
+            {/* Category Table */}
             <table className="nwCompareTable" aria-label="Comparison table">
               <thead>
                 <tr>
-                  <th style={{ width: 180 }}>Category</th>
-                  <th>{data.area1}</th>
-                  <th>{data.area2}</th>
+                  <th style={{ width: 140 }}>Category</th>
+                  <th title={data.area1}>{shortLabel(data.area1, 22)}</th>
+                  <th title={data.area2}>{shortLabel(data.area2, 22)}</th>
                 </tr>
               </thead>
               <tbody>
-                {CATEGORY_KEYS.map((key) => (
-                  <tr key={key}>
-                    <td className="nwCompareRowTitle">{labelForCategory(key)}</td>
-                    <td>
-                      <div className="nwCompareCellScore">{data.scores[key][0]} / 100</div>
-                      {miniProgress(data.scores[key][0])}
-                    </td>
-                    <td>
-                      <div className="nwCompareCellScore">{data.scores[key][1]} / 100</div>
-                      {miniProgress(data.scores[key][1])}
-                    </td>
-                  </tr>
-                ))}
+                {CATEGORY_KEYS.map((key) => {
+                  const s1 = data.scores[key][0]
+                  const s2 = data.scores[key][1]
+                  return (
+                    <tr key={key}>
+                      <td className="nwCompareRowTitle">{labelForCategory(key)}</td>
+                      <td style={s1 > s2 ? { background: 'rgba(42,157,143,0.06)' } : {}}>
+                        <div className="nwCompareCellScore" style={s1 > s2 ? { color: 'var(--accent-2)' } : {}}>
+                          {s1} / 100
+                        </div>
+                        {miniProgress(s1)}
+                      </td>
+                      <td style={s2 > s1 ? { background: 'rgba(42,157,143,0.06)' } : {}}>
+                        <div className="nwCompareCellScore" style={s2 > s1 ? { color: 'var(--accent-2)' } : {}}>
+                          {s2} / 100
+                        </div>
+                        {miniProgress(s2)}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
 
-            <div className="nwCompareRecommendation">
-              <div className="nwCompareRecommendationTitle">Recommendation</div>
-              <p className="nwCompareRecommendationText">{data.recommendation}</p>
+            {/* Recommendation — bold, prominent */}
+            <div
+              className="nwCompareRecommendation"
+              style={{ borderLeftWidth: 4, borderLeftColor: 'var(--accent-2)', borderLeftStyle: 'solid', background: 'var(--teal-bg)' }}
+            >
+              <div className="nwCompareRecommendationTitle" style={{ color: 'var(--accent-2)', fontSize: 12, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                Our Recommendation
+              </div>
+              <p className="nwCompareRecommendationText" style={{ color: 'var(--text-dark)', fontWeight: 600, fontSize: 16, lineHeight: 1.6 }}>
+                {data.recommendation}
+              </p>
             </div>
           </>
         ) : null}
@@ -493,7 +553,7 @@ export default function ComparePage() {
               setData(null)
             }}
           >
-            Clear Compare List
+            Clear All
           </Button>
         </div>
       </div>
