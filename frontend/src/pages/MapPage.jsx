@@ -13,6 +13,7 @@ import {
 import { addToCompareList, loadCompareList, loadContext, saveContext } from '../utils/storage.js'
 
 const CATEGORY_KEYS = ['accessibility', 'safety', 'environment']
+const SHOW_VIEW_DETAILS = false
 
 function asSafeNumber(n, fallback) {
   return Number.isFinite(n) ? n : fallback
@@ -315,17 +316,19 @@ export default function MapPage() {
                 Add to Compare
               </Button>
 
-              <Button
-                variant="primary"
-                onClick={() => {
-                  saveContext({ selectedLocation, profile, rangeMinutes })
-                  navigate('/insights', {
-                    state: { selectedLocation, profile, rangeMinutes },
-                  })
-                }}
-              >
-                View Details
-              </Button>
+              {SHOW_VIEW_DETAILS && (
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    saveContext({ selectedLocation, profile, rangeMinutes })
+                    navigate('/insights', {
+                      state: { selectedLocation, profile, rangeMinutes },
+                    })
+                  }}
+                >
+                  View Details
+                </Button>
+              )}
 
               <Button
                 variant="secondary"
