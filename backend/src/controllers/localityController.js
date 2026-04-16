@@ -1,4 +1,9 @@
-const { getLocalityByName, getLocalityByVicNamesId } = require('../services/localityService');
+const {
+  getLocalityByName,
+  getLocalityByVicNamesId,
+  getCoverageSuburbs,
+  getCoverageMap,
+} = require('../services/localityService');
 
 const getLocality = async (req, res) => {
   try {
@@ -26,6 +31,28 @@ const getLocality = async (req, res) => {
   }
 };
 
+const getCoverageSuburbsController = async (req, res) => {
+  try {
+    const result = await getCoverageSuburbs();
+    return res.json(result);
+  } catch (error) {
+    console.error('Coverage suburbs fetch error:', error.message);
+    return res.status(500).json({ message: 'Failed to fetch coverage suburbs' });
+  }
+};
+
+const getCoverageMapController = async (req, res) => {
+  try {
+    const result = await getCoverageMap();
+    return res.json(result);
+  } catch (error) {
+    console.error('Coverage map fetch error:', error.message);
+    return res.status(500).json({ message: 'Failed to fetch coverage map' });
+  }
+};
+
 module.exports = {
   getLocality,
+  getCoverageSuburbs: getCoverageSuburbsController,
+  getCoverageMap: getCoverageMapController,
 };

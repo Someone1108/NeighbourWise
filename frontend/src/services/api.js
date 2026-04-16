@@ -92,7 +92,6 @@ export async function getPoiInsights({ lat, lng, time }) {
   )
 }
 
-
 /**
  * REAL BACKEND SEARCH
  * Returns suburb/locality matches from your backend locality point dataset.
@@ -147,6 +146,18 @@ export async function getLocalityPolygon(name) {
   return fetchJson(
     `${API_BASE_URL}/api/locality/${encodeURIComponent(suburbName)}/polygon`
   )
+}
+
+/**
+ * REAL BACKEND COVERAGE SUBURBS
+ * Returns the list of supported suburbs from the live DB.
+ */
+export async function getCoverageSuburbs() {
+  return fetchJson(`${API_BASE_URL}/api/locality/coverage`)
+}
+
+export async function getCoverageMap() {
+  return fetchJson(`${API_BASE_URL}/api/locality/coverage-map`);
 }
 
 /**

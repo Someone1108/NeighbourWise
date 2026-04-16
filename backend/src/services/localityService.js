@@ -69,7 +69,57 @@ const getLocalityByVicNamesId = async (vicnamesid) => {
   };
 };
 
+const getCoverageSuburbs = async () => {
+  const sql = `
+    select distinct
+      "LOCALITY" as name
+    from public.locality_polygon
+    where "LOCALITY" is not null
+      and trim("LOCALITY") <> ''
+    order by "LOCALITY" asc;
+  `;
+
+  const result = await pool.query(sql);
+
+  return {
+    suburbs: result.rows.map((row) => row.name).filter(Boolean),
+  };
+};
+
+const getCoverageMap = async () => {
+  const sql = `
+    select
+      id,
+      "LOCALITY" as name,
+      st_asgeojson(
+        st_simplifypreservetopology(geom, 0.00015)
+      )::json as geometry
+    from public.locality_polygon
+    where "LOCALITY" is not null
+      and trim("LOCALITY") <> ''
+    order by "LOCALITY" asc;
+  `;
+
+  const result = await pool.query(sql);
+
+  return {
+    type: 'FeatureCollection',
+    features: result.rows
+      .filter((row) => row.geometry)
+      .map((row) => ({
+        type: 'Feature',
+        properties: {
+          id: row.id,
+          locality: row.name,
+        },
+        geometry: row.geometry,
+      })),
+  };
+};
+
 module.exports = {
   getLocalityByName,
   getLocalityByVicNamesId,
+  getCoverageSuburbs,
+  getCoverageMap,
 };
