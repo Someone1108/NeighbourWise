@@ -200,25 +200,39 @@ export default function HomePage() {
             Check a suburb or address
           </h2>
 
+          {/* Visible label for WCAG 1.3.1 + 2.5.3 Label in Name */}
+          <label htmlFor="home-search-input" className="search-section-label" style={{ display: 'block', marginBottom: 8 }}>
+            Enter a suburb or address
+          </label>
+
           <div className="search-input-wrap">
             <input
+              id="home-search-input"
               value={address}
               onChange={(e) => setAddress(e.target.value)}
               placeholder="e.g. Fitzroy or 123 Swanston St"
-              aria-label="Search suburb or address"
               aria-autocomplete="list"
               aria-expanded={hasResults}
+              aria-controls={hasResults ? 'home-search-results' : undefined}
+              aria-describedby={error ? 'home-search-error' : undefined}
               autoComplete="off"
             />
             <span className="search-icon" aria-hidden="true">⌕</span>
           </div>
 
-          {error && (
-            <p className="search-error" role="alert">{error}</p>
-          )}
+          {/* role="alert" + aria-live="assertive" for immediate error announcement (WCAG 3.3.1) */}
+          <div
+            id="home-search-error"
+            role="alert"
+            aria-live="assertive"
+            aria-atomic="true"
+            style={{ minHeight: 20 }}
+          >
+            {error && <p className="search-error">{error}</p>}
+          </div>
 
           {hasResults && (
-            <div className="search-dropdown" role="listbox" aria-label="Search results">
+            <div id="home-search-results" className="search-dropdown" role="listbox" aria-label="Search results">
               {suburbResults.length > 0 && (
                 <>
                   <div className="search-dropdown-group-label" aria-hidden="true">Suburbs</div>
@@ -227,7 +241,7 @@ export default function HomePage() {
                       key={`suburb-${i}`}
                       className="search-dropdown-item"
                       role="option"
-                      aria-selected="false"
+                      aria-selected={selectedLocation?.displayName === (item.displayName || item.name)}
                       tabIndex={0}
                       onClick={() => onSelectLocation(item)}
                       onKeyDown={(e) => e.key === 'Enter' && onSelectLocation(item)}
@@ -246,7 +260,7 @@ export default function HomePage() {
                       key={`address-${i}`}
                       className="search-dropdown-item"
                       role="option"
-                      aria-selected="false"
+                      aria-selected={selectedLocation?.fullAddress === (item.fullAddress || item.name)}
                       tabIndex={0}
                       onClick={() => onSelectLocation(item)}
                       onKeyDown={(e) => e.key === 'Enter' && onSelectLocation(item)}

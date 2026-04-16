@@ -18,7 +18,14 @@ export default function ScoreBar({ category, score, outOf = 100 }) {
           {safeScore} / {safeOut}
         </div>
       </div>
-      <div className="nwProgressOuter" role="progressbar" aria-valuenow={safeScore} aria-valuemax={safeOut}>
+      <div
+        className="nwProgressOuter"
+        role="progressbar"
+        aria-valuenow={safeScore}
+        aria-valuemin={0}
+        aria-valuemax={safeOut}
+        aria-label={`${label}: ${safeScore} out of ${safeOut}`}
+      >
         <div className="nwProgressInner" style={{ width: `${percent}%` }} />
       </div>
     </section>

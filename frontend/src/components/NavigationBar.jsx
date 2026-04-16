@@ -41,20 +41,32 @@ export default function NavigationBar() {
         </Link>
 
         <nav className="nav-links" aria-label="Primary navigation">
-          <Link to="/" className={isActive('/') ? 'active' : ''}>
+          <Link
+            to="/"
+            className={isActive('/') ? 'active' : ''}
+            aria-current={isActive('/') ? 'page' : undefined}
+          >
             Home
           </Link>
 
-          <Link to="/compare" className={isActive('/compare') ? 'active' : ''}>
+          <Link
+            to="/compare"
+            className={isActive('/compare') ? 'active' : ''}
+            aria-current={isActive('/compare') ? 'page' : undefined}
+          >
             Compare
             {compareCount > 0 && (
-              <span className="nwCompareBadge" aria-label={`${compareCount} areas saved`}>
+              <span className="nwCompareBadge" aria-label={`${compareCount} areas saved for comparison`}>
                 {compareCount}
               </span>
             )}
           </Link>
 
-          <Link to="/about" className={isActive('/about') ? 'active' : ''}>
+          <Link
+            to="/about"
+            className={isActive('/about') ? 'active' : ''}
+            aria-current={isActive('/about') ? 'page' : undefined}
+          >
             About
           </Link>
         </nav>
