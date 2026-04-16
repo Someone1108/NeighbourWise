@@ -336,7 +336,7 @@ export default function MapPage() {
                 }}
               >
                 Add to Compare
-              </button>
+              </Button>
 
               <button
                 className="home-cta"
