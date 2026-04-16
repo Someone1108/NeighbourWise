@@ -13,6 +13,7 @@ import {
 import { addToCompareList, loadCompareList, loadContext, saveContext } from '../utils/storage.js'
 
 const CATEGORY_KEYS = ['accessibility', 'safety', 'environment']
+const SHOW_VIEW_DETAILS = false
 
 function asSafeNumber(n, fallback) {
   return Number.isFinite(n) ? n : fallback
@@ -157,19 +158,45 @@ export default function MapPage() {
 
   return (
     <div className="nwPage">
-      <div style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '0 12px', marginBottom: 18 }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'baseline',
+          flexWrap: 'wrap',
+          gap: '0 12px',
+          marginBottom: 18,
+        }}
+      >
         <h1 className="nwPageTitle" style={{ marginBottom: 0 }}>
           {String(locationName || 'Neighbourhood Map')}
         </h1>
-        <span style={{ fontSize: 15, color: 'var(--muted-dark)', fontWeight: 500 }}>
+        <span
+          style={{
+            fontSize: 15,
+            color: 'var(--muted-dark)',
+            fontWeight: 500,
+          }}
+        >
           Liveability Map
         </span>
       </div>
 
       <div className="nwMapLayout">
-        <section className="nwMapLeft" aria-label="Interactive neighbourhood map">
-          {/* aria-live region announces loading state to screen readers (WCAG 4.1.3) */}
-          <div aria-live="polite" aria-atomic="true" className="nwLoading" style={{ position: loading ? 'static' : 'absolute', visibility: loading ? 'visible' : 'hidden', height: loading ? 'auto' : 0, overflow: 'hidden' }}>
+        <section
+          className="nwMapLeft"
+          aria-label="Interactive neighbourhood map"
+        >
+          <div
+            aria-live="polite"
+            aria-atomic="true"
+            className="nwLoading"
+            style={{
+              position: loading ? 'static' : 'absolute',
+              visibility: loading ? 'visible' : 'hidden',
+              height: loading ? 'auto' : 0,
+              overflow: 'hidden',
+            }}
+          >
             {loading ? 'Loading map data, please wait…' : ''}
           </div>
 
@@ -191,11 +218,16 @@ export default function MapPage() {
 
         <aside className="nwMapRight">
           <div className="nwCard" style={{ textAlign: 'left' }}>
-
-            {/* ── LIVEABILITY SCORE (top, most prominent) ── */}
             <div style={{ marginBottom: 4 }} aria-label="Liveability scores">
               <div
-                style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--accent-2)', marginBottom: 2 }}
+                style={{
+                  fontSize: 11,
+                  fontWeight: 800,
+                  letterSpacing: '0.1em',
+                  textTransform: 'uppercase',
+                  color: 'var(--accent-2)',
+                  marginBottom: 2,
+                }}
                 id="liveability-score-label"
               >
                 Liveability Score
@@ -210,19 +242,37 @@ export default function MapPage() {
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {CATEGORY_KEYS.map((k) => (
-                  <ScoreBar key={k} category={k} score={mapData?.scores?.[k]} outOf={100} />
+                  <ScoreBar
+                    key={k}
+                    category={k}
+                    score={mapData?.scores?.[k]}
+                    outOf={100}
+                  />
                 ))}
               </div>
             </div>
 
-            <hr style={{ border: 'none', borderTop: '1px solid var(--border-light)', margin: '16px 0' }} />
+            <hr
+              style={{
+                border: 'none',
+                borderTop: '1px solid var(--border-light)',
+                margin: '16px 0',
+              }}
+            />
 
-            {/* COMPACT CONTROLS */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-
-              {/* Travel Time */}
               <fieldset style={{ border: 'none', padding: 0, margin: 0 }}>
-                <legend style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--muted-dark)', marginBottom: 7, padding: 0 }}>
+                <legend
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 800,
+                    letterSpacing: '0.06em',
+                    textTransform: 'uppercase',
+                    color: 'var(--muted-dark)',
+                    marginBottom: 7,
+                    padding: 0,
+                  }}
+                >
                   Travel Time
                 </legend>
                 <div style={{ display: 'flex', gap: 6 }}>
@@ -242,9 +292,18 @@ export default function MapPage() {
                 </div>
               </fieldset>
 
-              {/* Nearby Places */}
               <fieldset style={{ border: 'none', padding: 0, margin: 0 }}>
-                <legend style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--muted-dark)', marginBottom: 7, padding: 0 }}>
+                <legend
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 800,
+                    letterSpacing: '0.06em',
+                    textTransform: 'uppercase',
+                    color: 'var(--muted-dark)',
+                    marginBottom: 7,
+                    padding: 0,
+                  }}
+                >
                   Nearby Places
                 </legend>
                 <div style={{ display: 'flex', gap: 6 }}>
@@ -269,12 +328,25 @@ export default function MapPage() {
                 </div>
               </fieldset>
 
-              {/* Map Layer */}
               <fieldset style={{ border: 'none', padding: 0, margin: 0 }}>
-                <legend style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--muted-dark)', marginBottom: 7, padding: 0 }}>
+                <legend
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 800,
+                    letterSpacing: '0.06em',
+                    textTransform: 'uppercase',
+                    color: 'var(--muted-dark)',
+                    marginBottom: 7,
+                    padding: 0,
+                  }}
+                >
                   Map Layer
                 </legend>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }} role="radiogroup" aria-label="Select map layer">
+                <div
+                  style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}
+                  role="radiogroup"
+                  aria-label="Select map layer"
+                >
                   {[
                     { key: 'none', label: 'Default' },
                     { key: 'heat', label: '🌡 Heat' },
@@ -285,7 +357,12 @@ export default function MapPage() {
                       key={key}
                       type="button"
                       className={`nwRangeBtn ${activeLayer === key ? 'nwRangeBtnActive' : ''}`}
-                      style={{ padding: '8px 4px', fontSize: 13, margin: 0, textAlign: 'center' }}
+                      style={{
+                        padding: '8px 4px',
+                        fontSize: 13,
+                        margin: 0,
+                        textAlign: 'center',
+                      }}
                       onClick={() => setActiveLayer(key)}
                       aria-pressed={activeLayer === key}
                     >
@@ -296,20 +373,7 @@ export default function MapPage() {
               </fieldset>
             </div>
 
-            {/* ACTION BUTTONS  */}
             <div className="nwBtnRow" style={{ marginTop: 16 }}>
-              <Button
-                variant="primary"
-                onClick={() => {
-                  saveContext({ selectedLocation, profile, rangeMinutes })
-                  navigate('/insights', {
-                    state: { selectedLocation, profile, rangeMinutes },
-                  })
-                }}
-              >
-                View Details
-              </Button>
-
               <Button
                 variant="secondary"
                 onClick={() => {
@@ -338,8 +402,22 @@ export default function MapPage() {
                 Add to Compare
               </Button>
 
-              <button
-                className="home-cta"
+              {SHOW_VIEW_DETAILS && (
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    saveContext({ selectedLocation, profile, rangeMinutes })
+                    navigate('/insights', {
+                      state: { selectedLocation, profile, rangeMinutes },
+                    })
+                  }}
+                >
+                  View Details
+                </Button>
+              )}
+
+              <Button
+                variant="secondary"
                 onClick={() => {
                   const count = loadCompareList().length
                   if (count < 2) {
@@ -350,11 +428,19 @@ export default function MapPage() {
                 }}
               >
                 Compare Areas
-              </button>
+              </Button>
             </div>
 
-            {/* role="status" is a polite live region — announces hint without interrupting (WCAG 4.1.3) */}
-            <div role="status" aria-live="polite" style={{ marginTop: 10, fontSize: 13, color: 'var(--muted-dark)', minHeight: 20 }}>
+            <div
+              role="status"
+              aria-live="polite"
+              style={{
+                marginTop: 10,
+                fontSize: 13,
+                color: 'var(--muted-dark)',
+                minHeight: 20,
+              }}
+            >
               {compareHint || ''}
             </div>
           </div>
