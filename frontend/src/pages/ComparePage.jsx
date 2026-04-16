@@ -39,6 +39,10 @@ function getLocationLabel(item) {
   )
 }
 
+function isPostcodeQuery(value) {
+  return /^\d{4}$/.test(String(value || '').trim())
+}
+
 function miniProgress(score, outOf = 100) {
   const s = Number.isFinite(score) ? score : 0
   const o = Number.isFinite(outOf) && outOf > 0 ? outOf : 100
@@ -74,6 +78,7 @@ export default function ComparePage() {
   const activeSecondArea = savedSecondArea || selectedSecondArea
 
   const hasResults = suburbResults.length > 0 || addressResults.length > 0
+  const postcodeSearch = isPostcodeQuery(searchTerm)
 
   useEffect(() => {
     if (savedSecondArea) {
@@ -104,7 +109,7 @@ export default function ComparePage() {
       return
     }
 
-    if (query.length < 3) {
+    if (!postcodeSearch && query.length < 3) {
       setSuburbResults([])
       setAddressResults([])
       setSearching(false)
@@ -142,7 +147,7 @@ export default function ComparePage() {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [searchTerm, selectedSecondArea, savedSecondArea])
+  }, [searchTerm, selectedSecondArea, savedSecondArea, postcodeSearch])
 
   useEffect(() => {
     if (!firstArea) {
@@ -154,7 +159,7 @@ export default function ComparePage() {
     }
 
     if (!activeSecondArea) {
-      setHint('Search and select a second suburb or address to compare.')
+      setHint('Search and select a second suburb, postcode, or address to compare.')
       setError('')
       setData(null)
       setLoading(false)
@@ -254,14 +259,14 @@ export default function ComparePage() {
     setError('')
   }
 
-  function removeSavedArea(locationName) {
-    const next = removeFromCompareList(locationName)
+  function removeSavedArea(areaItem) {
+    const next = removeFromCompareList(areaItem)
     setCompareList(next)
   }
 
   function clearSecondSelection() {
     if (savedSecondArea) {
-      const next = removeFromCompareList(savedSecondArea.locationName)
+      const next = removeFromCompareList(savedSecondArea)
       setCompareList(next)
     }
     setSelectedSecondArea(null)
@@ -269,7 +274,7 @@ export default function ComparePage() {
     setSuburbResults([])
     setAddressResults([])
     setData(null)
-    setHint('Search and select a second suburb or address to compare.')
+    setHint('Search and select a second suburb, postcode, or address to compare.')
   }
 
   const compareSubtitle = useMemo(() => {
@@ -280,7 +285,6 @@ export default function ComparePage() {
     return 'Compare two shortlisted areas side by side'
   }, [loading, data])
 
-  // Truncate long area names for compact display
   function shortLabel(str, max = 28) {
     if (!str) return ''
     return str.length > max ? str.slice(0, max - 1) + '…' : str
@@ -303,10 +307,7 @@ export default function ComparePage() {
           : 'Add two areas to compare them side by side'}
       </p>
 
-      {/* ── AREA SELECTION PANELS ── */}
       <div className="nwCompareTopGrid">
-
-        {/* Area 1 */}
         <div className="nwCard nwComparePanel">
           <div className="nwCompareLabel">Area 1</div>
           {firstArea ? (
@@ -321,7 +322,7 @@ export default function ComparePage() {
                 <span className="nwChip">✓ Saved from map</span>
               </div>
               <div className="nwBtnRow">
-                <Button variant="secondary" onClick={() => removeSavedArea(firstArea.locationName)}>
+                <Button variant="secondary" onClick={() => removeSavedArea(firstArea)}>
                   Remove
                 </Button>
               </div>
@@ -340,7 +341,6 @@ export default function ComparePage() {
           )}
         </div>
 
-        {/* Area 2 */}
         <div className="nwCard nwComparePanel">
           <div className="nwCompareLabel">Area 2</div>
 
@@ -348,21 +348,20 @@ export default function ComparePage() {
             <>
               <h2 className="nwCompareAreaTitle">Find a second area</h2>
               <p className="nwCompareAreaMeta" style={{ marginBottom: 12 }}>
-                Type a suburb name or address below.
+                Type a suburb, postcode, or address below.
               </p>
 
               <div className="nwSearchBlock">
-                {/* Visible label for WCAG 1.3.1 + 2.5.3 Label in Name */}
                 <label
                   htmlFor="compare-search-input"
                   style={{ display: 'block', fontSize: 13, fontWeight: 700, color: 'var(--muted-dark)', marginBottom: 6 }}
                 >
-                  Search suburb or address
+                  Search suburb, postcode or address
                 </label>
                 <input
                   id="compare-search-input"
                   className="nwInput nwSearchInput"
-                  placeholder="e.g. Richmond or 45 Chapel St"
+                  placeholder="e.g. Richmond, 3076, or 45 Chapel St"
                   value={searchTerm}
                   onChange={(e) => {
                     setSearchTerm(e.target.value)
@@ -392,14 +391,14 @@ export default function ComparePage() {
                           {result.displayName || result.name}
                         </div>
                         <div className="nwSearchResultMeta">
-                          {result.state || 'Suburb'}
+                          {result.state || result.placeType || 'Suburb'}
                         </div>
                       </button>
                     ))}
 
                     {addressResults.length > 0 ? (
                       <div className="nwSearchGroupLabel nwSearchGroupDivider">
-                        Addresses
+                        {postcodeSearch ? 'Postcodes / addresses' : 'Addresses'}
                       </div>
                     ) : null}
 
@@ -424,7 +423,8 @@ export default function ComparePage() {
                 ) : null}
 
                 {!searching &&
-                searchTerm.trim().length >= 3 &&
+                ((!postcodeSearch && searchTerm.trim().length >= 3) ||
+                  postcodeSearch) &&
                 !hasResults &&
                 !selectedSecondArea ? (
                   <div className="nwSearchStatus">No results found — try a different name.</div>
@@ -454,9 +454,7 @@ export default function ComparePage() {
         </div>
       </div>
 
-      {/* ── COMPARISON RESULTS ── */}
       <div className="nwCard nwCompareResultsCard">
-        {/* aria-live="polite" announces loading/status updates to screen readers (WCAG 4.1.3) */}
         <div aria-live="polite" aria-atomic="true" style={{ minHeight: 24 }}>
           {loading ? (
             <div className="nwLoading">Loading comparison…</div>
@@ -467,14 +465,12 @@ export default function ComparePage() {
           ) : null}
         </div>
 
-        {/* role="alert" interrupts immediately for errors (WCAG 3.3.1 Error Identification) */}
         {!loading && error ? (
           <div className="nwError" role="alert" aria-live="assertive">{error}</div>
         ) : null}
 
         {!loading && data ? (
           <>
-            {/* Score Summary */}
             <div className="nwCompareScoreSummary">
               <div
                 className="nwCompareScoreBox"
@@ -505,7 +501,6 @@ export default function ComparePage() {
               </div>
             </div>
 
-            {/* Category Table */}
             <table className="nwCompareTable" aria-label="Comparison table">
               <thead>
                 <tr>
@@ -539,7 +534,6 @@ export default function ComparePage() {
               </tbody>
             </table>
 
-            {/* Recommendation — bold, prominent */}
             <div
               className="nwCompareRecommendation"
               style={{ borderLeftWidth: 4, borderLeftColor: 'var(--accent-2)', borderLeftStyle: 'solid', background: 'var(--teal-bg)' }}
