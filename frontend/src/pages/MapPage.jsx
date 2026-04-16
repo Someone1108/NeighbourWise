@@ -189,13 +189,13 @@ export default function MapPage() {
         <aside className="nwMapRight">
           <div className="nwCard" style={{ textAlign: 'left' }}>
 
-            {/* ── LIVEABILITY SCORE (top, most prominent) ── */}
+            {/* LIVEABILITY SCORE (top, most prominent)  */}
             <div style={{ marginBottom: 4 }}>
               <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--accent-2)', marginBottom: 2 }}>
                 Liveability Score
               </div>
               <div className="nwOverallScore" style={{ marginBottom: 10 }}>
-                {mapData ? mapData.overallScore : '–'} / 100
+                {mapData ? mapData.overallScore : '-'} / 100
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {CATEGORY_KEYS.map((k) => (
@@ -206,7 +206,7 @@ export default function MapPage() {
 
             <hr style={{ border: 'none', borderTop: '1px solid var(--border-light)', margin: '16px 0' }} />
 
-            {/* ── COMPACT CONTROLS ── */}
+            {/* COMPACT CONTROLS */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
               {/* Travel Time */}
@@ -283,7 +283,7 @@ export default function MapPage() {
               </div>
             </div>
 
-            {/* ── ACTION BUTTONS ── */}
+            {/* ACTION BUTTONS  */}
             <div className="nwBtnRow" style={{ marginTop: 16 }}>
               <Button
                 variant="primary"
