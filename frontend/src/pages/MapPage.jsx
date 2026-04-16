@@ -167,8 +167,11 @@ export default function MapPage() {
       </div>
 
       <div className="nwMapLayout">
-        <section className="nwMapLeft">
-          {loading ? <div className="nwLoading">Loading map...</div> : null}
+        <section className="nwMapLeft" aria-label="Interactive neighbourhood map">
+          {/* aria-live region announces loading state to screen readers (WCAG 4.1.3) */}
+          <div aria-live="polite" aria-atomic="true" className="nwLoading" style={{ position: loading ? 'static' : 'absolute', visibility: loading ? 'visible' : 'hidden', height: loading ? 'auto' : 0, overflow: 'hidden' }}>
+            {loading ? 'Loading map data, please wait…' : ''}
+          </div>
 
           <NeighbourMap
             coordinates={
@@ -190,11 +193,19 @@ export default function MapPage() {
           <div className="nwCard" style={{ textAlign: 'left' }}>
 
             {/* ── LIVEABILITY SCORE (top, most prominent) ── */}
-            <div style={{ marginBottom: 4 }}>
-              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--accent-2)', marginBottom: 2 }}>
+            <div style={{ marginBottom: 4 }} aria-label="Liveability scores">
+              <div
+                style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--accent-2)', marginBottom: 2 }}
+                id="liveability-score-label"
+              >
                 Liveability Score
               </div>
-              <div className="nwOverallScore" style={{ marginBottom: 10 }}>
+              <div
+                className="nwOverallScore"
+                style={{ marginBottom: 10 }}
+                aria-labelledby="liveability-score-label"
+                aria-live="polite"
+              >
                 {mapData ? mapData.overallScore : '–'} / 100
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -210,11 +221,11 @@ export default function MapPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
               {/* Travel Time */}
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--muted-dark)', marginBottom: 7 }}>
+              <fieldset style={{ border: 'none', padding: 0, margin: 0 }}>
+                <legend style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--muted-dark)', marginBottom: 7, padding: 0 }}>
                   Travel Time
-                </div>
-                <div style={{ display: 'flex', gap: 6 }} role="radiogroup" aria-label="Travel time in minutes">
+                </legend>
+                <div style={{ display: 'flex', gap: 6 }}>
                   {[10, 20, 30].map((m) => (
                     <button
                       key={m}
@@ -222,26 +233,27 @@ export default function MapPage() {
                       className={`nwRangeBtn ${rangeMinutes === m ? 'nwRangeBtnActive' : ''}`}
                       style={{ flex: 1, padding: '8px 4px', fontSize: 13, margin: 0 }}
                       onClick={() => setRangeMinutes(m)}
-                      aria-checked={rangeMinutes === m}
+                      aria-pressed={rangeMinutes === m}
+                      aria-label={`${m} minute travel time`}
                     >
                       {m} min
                     </button>
                   ))}
                 </div>
-              </div>
+              </fieldset>
 
               {/* Nearby Places */}
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--muted-dark)', marginBottom: 7 }}>
+              <fieldset style={{ border: 'none', padding: 0, margin: 0 }}>
+                <legend style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--muted-dark)', marginBottom: 7, padding: 0 }}>
                   Nearby Places
-                </div>
-                <div style={{ display: 'flex', gap: 6 }} role="radiogroup" aria-label="Show or hide nearby places">
+                </legend>
+                <div style={{ display: 'flex', gap: 6 }}>
                   <button
                     type="button"
                     className={`nwRangeBtn ${showInsights ? 'nwRangeBtnActive' : ''}`}
                     style={{ flex: 1, padding: '8px 4px', fontSize: 13, margin: 0 }}
                     onClick={() => setShowInsights(true)}
-                    aria-checked={showInsights}
+                    aria-pressed={showInsights}
                   >
                     Show
                   </button>
@@ -250,19 +262,19 @@ export default function MapPage() {
                     className={`nwRangeBtn ${!showInsights ? 'nwRangeBtnActive' : ''}`}
                     style={{ flex: 1, padding: '8px 4px', fontSize: 13, margin: 0 }}
                     onClick={() => setShowInsights(false)}
-                    aria-checked={!showInsights}
+                    aria-pressed={!showInsights}
                   >
                     Hide
                   </button>
                 </div>
-              </div>
+              </fieldset>
 
               {/* Map Layer */}
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--muted-dark)', marginBottom: 7 }}>
+              <fieldset style={{ border: 'none', padding: 0, margin: 0 }}>
+                <legend style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--muted-dark)', marginBottom: 7, padding: 0 }}>
                   Map Layer
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                </legend>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }} role="radiogroup" aria-label="Select map layer">
                   {[
                     { key: 'none', label: 'Default' },
                     { key: 'heat', label: '🌡 Heat' },
@@ -275,30 +287,19 @@ export default function MapPage() {
                       className={`nwRangeBtn ${activeLayer === key ? 'nwRangeBtnActive' : ''}`}
                       style={{ padding: '8px 4px', fontSize: 13, margin: 0, textAlign: 'center' }}
                       onClick={() => setActiveLayer(key)}
+                      aria-pressed={activeLayer === key}
                     >
                       {label}
                     </button>
                   ))}
                 </div>
-              </div>
+              </fieldset>
             </div>
 
             {/* ── ACTION BUTTONS ── */}
-            <div className="nwBtnRow" style={{ marginTop: 16 }}>
-              <Button
-                variant="primary"
-                onClick={() => {
-                  saveContext({ selectedLocation, profile, rangeMinutes })
-                  navigate('/insights', {
-                    state: { selectedLocation, profile, rangeMinutes },
-                  })
-                }}
-              >
-                View Details
-              </Button>
-
-              <Button
-                variant="secondary"
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 16 }}>
+              <button
+                className="home-cta"
                 onClick={() => {
                   const compareItem = {
                     locationName: locationName,
@@ -323,10 +324,10 @@ export default function MapPage() {
                 }}
               >
                 Add to Compare
-              </Button>
+              </button>
 
-              <Button
-                variant="secondary"
+              <button
+                className="home-cta"
                 onClick={() => {
                   const count = loadCompareList().length
                   if (count < 2) {
@@ -337,14 +338,13 @@ export default function MapPage() {
                 }}
               >
                 Compare Areas
-              </Button>
+              </button>
             </div>
 
-            {compareHint ? (
-              <div style={{ marginTop: 10, fontSize: 13, color: 'var(--muted-dark)' }}>
-                {compareHint}
-              </div>
-            ) : null}
+            {/* role="status" is a polite live region — announces hint without interrupting (WCAG 4.1.3) */}
+            <div role="status" aria-live="polite" style={{ marginTop: 10, fontSize: 13, color: 'var(--muted-dark)', minHeight: 20 }}>
+              {compareHint || ''}
+            </div>
           </div>
         </aside>
       </div>

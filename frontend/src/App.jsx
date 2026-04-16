@@ -11,8 +11,9 @@ export default function App() {
   return (
     <BrowserRouter>
       <div className="nwAppShell">
+        <a href="#main-content" className="nwSkipLink">Skip to main content</a>
         <NavigationBar />
-        <main className="nwMain">
+        <main id="main-content" className="nwMain" tabIndex={-1}>
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/about" element={<AboutPage />} />
