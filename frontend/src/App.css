@@ -1704,3 +1704,47 @@ body {
   color: #607089;
   font-weight: 700;
 }
+
+.coverageStateCard {
+  max-width: 420px;
+  text-align: center;
+  padding: 24px;
+}
+
+.coverageStateTitle {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #162845;
+  margin-bottom: 10px;
+}
+
+.coverageStateText {
+  font-size: 0.98rem;
+  line-height: 1.6;
+  color: #607089;
+}
+
+.coverageStateActions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
+
+.coverageRetryBtn,
+.coverageRefreshBtn {
+  border-radius: 12px;
+  padding: 10px 16px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid #cfd9e4;
+  background: #ffffff;
+  color: #162845;
+}
+
+.coverageRetryBtn {
+  background: #162845;
+  color: #ffffff;
+  border-color: #162845;
+}
