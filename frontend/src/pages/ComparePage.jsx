@@ -116,6 +116,19 @@ export default function ComparePage() {
       return
     }
 
+    const words = query.toLowerCase().split(/\s+/).filter(Boolean)
+
+    function dedupeAndFilter(arr) {
+      const seen = new Set()
+      return arr.filter((item) => {
+        const label = (item.displayName || item.fullAddress || item.name || '').toLowerCase()
+        const key = label
+        if (seen.has(key)) return false
+        seen.add(key)
+        return words.every((w) => label.includes(w))
+      })
+    }
+
     let cancelled = false
     setSearching(true)
 
@@ -134,8 +147,8 @@ export default function ComparePage() {
               ? results[1].value
               : []
 
-          setSuburbResults(localities)
-          setAddressResults(addresses)
+          setSuburbResults(dedupeAndFilter(localities))
+          setAddressResults(dedupeAndFilter(addresses))
         })
         .finally(() => {
           if (cancelled) return
