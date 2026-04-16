@@ -29,6 +29,10 @@ function getDisplayLocationName(selectedLocation) {
   )
 }
 
+function getLocationKind(selectedLocation) {
+  return selectedLocation?.placeType || selectedLocation?.type || ''
+}
+
 export default function MapPage() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -54,8 +58,15 @@ export default function MapPage() {
   const selectedLocation = context?.selectedLocation
   const locationName = getDisplayLocationName(selectedLocation)
   const profile = context?.profile
-  const isSuburb = selectedLocation?.type === 'suburb'
-  const isAddress = selectedLocation?.type === 'address'
+  const locationKind = getLocationKind(selectedLocation)
+
+  const isSuburb =
+    locationKind === 'suburb' || locationKind === 'locality'
+
+  const isAddress =
+    locationKind === 'address' ||
+    locationKind === 'street' ||
+    locationKind === 'postcode'
 
   useEffect(() => {
     if (!context || !selectedLocation || !profile) {
@@ -104,8 +115,8 @@ export default function MapPage() {
         ? getLayerDataForSuburb(selectedLocation.name)
         : isAddress
           ? getLayerDataForAddress(
-              selectedLocation.lat,
-              selectedLocation.lng,
+              Number(selectedLocation.lat),
+              Number(selectedLocation.lng),
               rangeMinutes
             )
           : Promise.resolve(null),
@@ -116,7 +127,6 @@ export default function MapPage() {
         setMapData(data)
         setSuburbPolygon(polygon)
         setPoiData(poiResponse?.results || [])
-        console.log('poiResponse:', poiResponse)
         setLayerData(layers)
       })
       .catch((err) => {
@@ -124,7 +134,7 @@ export default function MapPage() {
         console.error('MapPage load error:', err)
         setError(
           isAddress
-            ? 'Failed to load address map data.'
+            ? 'Failed to load postcode/address map data.'
             : 'Failed to load suburb map data.'
         )
       })
@@ -151,10 +161,6 @@ export default function MapPage() {
       </div>
     )
   }
-
-  console.log('selectedLocation:', selectedLocation)
-  console.log('rangeMinutes:', rangeMinutes)
-  console.log('poiData:', poiData)
 
   return (
     <div className="nwPage">
@@ -203,7 +209,7 @@ export default function MapPage() {
           <NeighbourMap
             coordinates={
               selectedLocation
-                ? { lat: selectedLocation.lat, lng: selectedLocation.lng }
+                ? { lat: Number(selectedLocation.lat), lng: Number(selectedLocation.lng) }
                 : mapData?.coordinates
             }
             radiusMeters={mapData?.radiusMeters}
@@ -378,6 +384,7 @@ export default function MapPage() {
                 variant="secondary"
                 onClick={() => {
                   const compareItem = {
+                    id: selectedLocation?.id || '',
                     locationName: locationName,
                     displayName:
                       selectedLocation?.displayName ||
@@ -386,9 +393,12 @@ export default function MapPage() {
                       '',
                     fullAddress: selectedLocation?.fullAddress || '',
                     name: selectedLocation?.name || '',
-                    type: selectedLocation?.type || 'suburb',
+                    type: selectedLocation?.type || selectedLocation?.placeType || 'suburb',
+                    placeType: selectedLocation?.placeType || selectedLocation?.type || 'suburb',
+                    postcode: selectedLocation?.postcode || null,
                     lat: selectedLocation?.lat,
                     lng: selectedLocation?.lng,
+                    source: selectedLocation?.source || '',
                     profile,
                     rangeMinutes,
                     selectedLocation,

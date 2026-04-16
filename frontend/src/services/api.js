@@ -107,14 +107,14 @@ export async function searchLocalities(query) {
 
   return results.map((item) => ({
     ...item,
-    type: 'suburb',
-    displayName: item.name,
+    type: item.placeType || 'suburb',
+    displayName: item.fullAddress || item.name,
   }))
 }
 
 /**
- * REAL BACKEND ADDRESS SEARCH
- * Returns address matches from backend Mapbox endpoint.
+ * REAL BACKEND ADDRESS / POSTCODE SEARCH
+ * Returns address/postcode-aware matches from backend Mapbox endpoint.
  */
 export async function searchAddresses(query) {
   const q = String(query || '').trim()
@@ -127,7 +127,7 @@ export async function searchAddresses(query) {
 
   return results.map((item) => ({
     ...item,
-    type: 'address',
+    type: item.placeType || 'address',
     displayName: item.fullAddress || item.name,
   }))
 }
@@ -157,7 +157,7 @@ export async function getCoverageSuburbs() {
 }
 
 export async function getCoverageMap() {
-  return fetchJson(`${API_BASE_URL}/api/locality/coverage-map`);
+  return fetchJson(`${API_BASE_URL}/api/locality/coverage-map`)
 }
 
 /**
@@ -354,10 +354,10 @@ export function validateSearchInput(input) {
   const s = String(input || '').trim()
 
   if (!s) {
-    return { ok: false, message: 'Please enter a suburb or address.' }
+    return { ok: false, message: 'Please enter a suburb, postcode, or address.' }
   }
 
-  if (s.length < 3) {
+  if (!/^\d{4}$/.test(s) && s.length < 3) {
     return { ok: false, message: 'Input is too short. Please be more specific.' }
   }
 

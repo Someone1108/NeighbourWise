@@ -8,7 +8,7 @@ const searchAddress = async (req, res) => {
       return res.status(400).json({ message: 'Query is required' });
     }
 
-    const results = await searchLocations(q);
+    const results = await searchLocations(q.trim());
     return res.json(results);
   } catch (error) {
     console.error('Location search error:', error.message);
