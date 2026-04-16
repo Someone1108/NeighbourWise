@@ -1,10 +1,16 @@
 const express = require('express');
-const { getLocality } = require('../controllers/localityController');
+const {
+  getLocality,
+  getCoverageSuburbs,
+  getCoverageMap,
+} = require('../controllers/localityController');
 const { getLocalityByName } = require('../services/localityService');
 
 const router = express.Router();
 
 router.get('/', getLocality);
+router.get('/coverage', getCoverageSuburbs);
+router.get('/coverage-map', getCoverageMap);
 
 router.get('/:name/polygon', async (req, res) => {
   try {
