@@ -139,3 +139,4 @@ backend/src/data/heat_urban_2018.geojson
 backend/src/data/vegetation_2018.geojson
 backend/src/data/*.qmd
 backend/src/data/vegetation_features.gpkg
+.DS_Store

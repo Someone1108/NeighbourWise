@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Figtree:wght@400;500;600;700;800;900&display=swap');
+
 :root {
   --bg: #eef1f6;
   --card: #ffffff;
@@ -11,16 +13,19 @@
   --border-light: #d0dae6;
 
   --accent: #f47c20;
+  --accent-dark: #e06818;
   --accent-2: #2a9d8f;
+  --accent-2-dark: #1e8577;
   --accent-bg: rgba(244, 124, 32, 0.14);
+  --teal-bg: rgba(42, 157, 143, 0.10);
 
   --success: #1f9d68;
   --danger: #c53b3b;
 
   --shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --sans: 'Figtree', system-ui, sans-serif;
+  --heading: 'DM Serif Display', Georgia, serif;
   --mono: ui-monospace, Consolas, monospace;
 
   font: 18px/145% var(--sans);
@@ -55,9 +60,7 @@ input {
 }
 
 #root {
-  width: 1200px;
-  max-width: 100%;
-  margin: 0 auto;
+  width: 100%;
   min-height: 100svh;
   display: flex;
   flex-direction: column;

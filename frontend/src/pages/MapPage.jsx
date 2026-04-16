@@ -158,17 +158,47 @@ export default function MapPage() {
 
   return (
     <div className="nwPage">
-      <h1 className="nwPageTitle" style={{ marginBottom: 6 }}>
-        Neighbourhood liveability map
-      </h1>
-
-      <p className="nwSubtitle" style={{ marginBottom: 18 }}>
-        Selected: {String(locationName || '')}
-      </p>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'baseline',
+          flexWrap: 'wrap',
+          gap: '0 12px',
+          marginBottom: 18,
+        }}
+      >
+        <h1 className="nwPageTitle" style={{ marginBottom: 0 }}>
+          {String(locationName || 'Neighbourhood Map')}
+        </h1>
+        <span
+          style={{
+            fontSize: 15,
+            color: 'var(--muted-dark)',
+            fontWeight: 500,
+          }}
+        >
+          Liveability Map
+        </span>
+      </div>
 
       <div className="nwMapLayout">
-        <section className="nwMapLeft">
-          {loading ? <div className="nwLoading">Loading map...</div> : null}
+        <section
+          className="nwMapLeft"
+          aria-label="Interactive neighbourhood map"
+        >
+          <div
+            aria-live="polite"
+            aria-atomic="true"
+            className="nwLoading"
+            style={{
+              position: loading ? 'static' : 'absolute',
+              visibility: loading ? 'visible' : 'hidden',
+              height: loading ? 'auto' : 0,
+              overflow: 'hidden',
+            }}
+          >
+            {loading ? 'Loading map data, please wait…' : ''}
+          </div>
 
           <NeighbourMap
             coordinates={
@@ -188,106 +218,162 @@ export default function MapPage() {
 
         <aside className="nwMapRight">
           <div className="nwCard" style={{ textAlign: 'left' }}>
-            <div style={{ fontWeight: 900, color: 'var(--text-dark)' }}>
-              Range selection
-            </div>
-
-            <div className="nwRangeButtons" role="radiogroup" aria-label="Range minutes">
-              {[10, 20, 30].map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  className={`nwRangeBtn ${rangeMinutes === m ? 'nwRangeBtnActive' : ''}`}
-                  onClick={() => setRangeMinutes(m)}
-                  aria-checked={rangeMinutes === m}
-                >
-                  {m} minutes
-                </button>
-              ))}
-            </div>
-
-            <div style={{ marginTop: 14 }}>
-              <div style={{ fontWeight: 900, color: 'var(--text-dark)', marginBottom: 8 }}>
-                Insights display
+            <div style={{ marginBottom: 4 }} aria-label="Liveability scores">
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 800,
+                  letterSpacing: '0.1em',
+                  textTransform: 'uppercase',
+                  color: 'var(--accent-2)',
+                  marginBottom: 2,
+                }}
+                id="liveability-score-label"
+              >
+                Liveability Score
               </div>
-
-              <div className="nwRangeButtons" role="radiogroup" aria-label="Insights display">
-                <button
-                  type="button"
-                  className={`nwRangeBtn ${showInsights ? 'nwRangeBtnActive' : ''}`}
-                  onClick={() => setShowInsights(true)}
-                  aria-checked={showInsights}
-                >
-                  Show insights
-                </button>
-
-                <button
-                  type="button"
-                  className={`nwRangeBtn ${!showInsights ? 'nwRangeBtnActive' : ''}`}
-                  onClick={() => setShowInsights(false)}
-                  aria-checked={!showInsights}
-                >
-                  Hide insights
-                </button>
+              <div
+                className="nwOverallScore"
+                style={{ marginBottom: 10 }}
+                aria-labelledby="liveability-score-label"
+                aria-live="polite"
+              >
+                {mapData ? mapData.overallScore : '–'} / 100
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {CATEGORY_KEYS.map((k) => (
+                  <ScoreBar
+                    key={k}
+                    category={k}
+                    score={mapData?.scores?.[k]}
+                    outOf={100}
+                  />
+                ))}
               </div>
             </div>
 
-            <div style={{ marginTop: 16 }}>
-              <div style={{ fontWeight: 900, color: 'var(--text-dark)', marginBottom: 8 }}>
-                Map insight layers
-              </div>
+            <hr
+              style={{
+                border: 'none',
+                borderTop: '1px solid var(--border-light)',
+                margin: '16px 0',
+              }}
+            />
 
-              <div className="nwRangeButtons">
-                <button
-                  type="button"
-                  className={`nwRangeBtn ${activeLayer === 'none' ? 'nwRangeBtnActive' : ''}`}
-                  onClick={() => setActiveLayer('none')}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <fieldset style={{ border: 'none', padding: 0, margin: 0 }}>
+                <legend
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 800,
+                    letterSpacing: '0.06em',
+                    textTransform: 'uppercase',
+                    color: 'var(--muted-dark)',
+                    marginBottom: 7,
+                    padding: 0,
+                  }}
                 >
-                  None
-                </button>
-
-                <button
-                  type="button"
-                  className={`nwRangeBtn ${activeLayer === 'heat' ? 'nwRangeBtnActive' : ''}`}
-                  onClick={() => setActiveLayer('heat')}
-                >
-                  Heat
-                </button>
-
-                <button
-                  type="button"
-                  className={`nwRangeBtn ${activeLayer === 'vegetation' ? 'nwRangeBtnActive' : ''}`}
-                  onClick={() => setActiveLayer('vegetation')}
-                >
-                  Vegetation
-                </button>
-
-                <button
-                  type="button"
-                  className={`nwRangeBtn ${activeLayer === 'zoning' ? 'nwRangeBtnActive' : ''}`}
-                  onClick={() => setActiveLayer('zoning')}
-                >
-                  Zoning
-                </button>
-              </div>
-            </div>
-
-            <div className="nwScoreStack">
-              <div>
-                <div style={{ fontWeight: 900, color: 'var(--text-dark)' }}>
-                  Overall liveability
+                  Travel Time
+                </legend>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {[10, 20, 30].map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      className={`nwRangeBtn ${rangeMinutes === m ? 'nwRangeBtnActive' : ''}`}
+                      style={{ flex: 1, padding: '8px 4px', fontSize: 13, margin: 0 }}
+                      onClick={() => setRangeMinutes(m)}
+                      aria-pressed={rangeMinutes === m}
+                      aria-label={`${m} minute travel time`}
+                    >
+                      {m} min
+                    </button>
+                  ))}
                 </div>
-                <div className="nwOverallScore">
-                  {mapData ? mapData.overallScore : '-'} / 100
-                </div>
-              </div>
+              </fieldset>
 
-              {CATEGORY_KEYS.map((k) => (
-                <ScoreBar key={k} category={k} score={mapData?.scores?.[k]} outOf={100} />
-              ))}
+              <fieldset style={{ border: 'none', padding: 0, margin: 0 }}>
+                <legend
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 800,
+                    letterSpacing: '0.06em',
+                    textTransform: 'uppercase',
+                    color: 'var(--muted-dark)',
+                    marginBottom: 7,
+                    padding: 0,
+                  }}
+                >
+                  Nearby Places
+                </legend>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button
+                    type="button"
+                    className={`nwRangeBtn ${showInsights ? 'nwRangeBtnActive' : ''}`}
+                    style={{ flex: 1, padding: '8px 4px', fontSize: 13, margin: 0 }}
+                    onClick={() => setShowInsights(true)}
+                    aria-pressed={showInsights}
+                  >
+                    Show
+                  </button>
+                  <button
+                    type="button"
+                    className={`nwRangeBtn ${!showInsights ? 'nwRangeBtnActive' : ''}`}
+                    style={{ flex: 1, padding: '8px 4px', fontSize: 13, margin: 0 }}
+                    onClick={() => setShowInsights(false)}
+                    aria-pressed={!showInsights}
+                  >
+                    Hide
+                  </button>
+                </div>
+              </fieldset>
+
+              <fieldset style={{ border: 'none', padding: 0, margin: 0 }}>
+                <legend
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 800,
+                    letterSpacing: '0.06em',
+                    textTransform: 'uppercase',
+                    color: 'var(--muted-dark)',
+                    marginBottom: 7,
+                    padding: 0,
+                  }}
+                >
+                  Map Layer
+                </legend>
+                <div
+                  style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}
+                  role="radiogroup"
+                  aria-label="Select map layer"
+                >
+                  {[
+                    { key: 'none', label: 'Default' },
+                    { key: 'heat', label: '🌡 Heat' },
+                    { key: 'vegetation', label: '🌿 Green' },
+                    { key: 'zoning', label: '🏙 Zoning' },
+                  ].map(({ key, label }) => (
+                    <button
+                      key={key}
+                      type="button"
+                      className={`nwRangeBtn ${activeLayer === key ? 'nwRangeBtnActive' : ''}`}
+                      style={{
+                        padding: '8px 4px',
+                        fontSize: 13,
+                        margin: 0,
+                        textAlign: 'center',
+                      }}
+                      onClick={() => setActiveLayer(key)}
+                      aria-pressed={activeLayer === key}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
             </div>
 
-            <div className="nwBtnRow">
+            <div className="nwBtnRow" style={{ marginTop: 16 }}>
               <Button
                 variant="secondary"
                 onClick={() => {
@@ -345,11 +431,18 @@ export default function MapPage() {
               </Button>
             </div>
 
-            {compareHint ? (
-              <div style={{ marginTop: 10, color: 'var(--text)' }}>
-                {compareHint}
-              </div>
-            ) : null}
+            <div
+              role="status"
+              aria-live="polite"
+              style={{
+                marginTop: 10,
+                fontSize: 13,
+                color: 'var(--muted-dark)',
+                minHeight: 20,
+              }}
+            >
+              {compareHint || ''}
+            </div>
           </div>
         </aside>
       </div>
