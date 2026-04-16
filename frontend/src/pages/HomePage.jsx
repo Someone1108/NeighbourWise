@@ -150,36 +150,23 @@ export default function HomePage() {
     }
   }, [])
 
+  async function loadCoverageMap() {
+    try {
+      setCoverageMapLoading(true)
+      setCoverageMapError('')
+      const data = await getCoverageMap()
+      setCoverageMapData(data)
+    } catch (error) {
+      console.error('Failed to load coverage map:', error)
+      setCoverageMapError('Failed to load coverage map')
+      setCoverageMapData(null)
+    } finally {
+      setCoverageMapLoading(false)
+    }
+  }
+
   useEffect(() => {
-    let cancelled = false
-
-    async function loadCoverageMap() {
-      try {
-        setCoverageMapLoading(true)
-        setCoverageMapError('')
-        const data = await getCoverageMap()
-
-        if (!cancelled) {
-          setCoverageMapData(data)
-        }
-      } catch (error) {
-        console.error('Failed to load coverage map:', error)
-        if (!cancelled) {
-          setCoverageMapError('Failed to load coverage map')
-          setCoverageMapData(null)
-        }
-      } finally {
-        if (!cancelled) {
-          setCoverageMapLoading(false)
-        }
-      }
-    }
-
     loadCoverageMap()
-
-    return () => {
-      cancelled = true
-    }
   }, [])
 
   useEffect(() => {
@@ -322,6 +309,7 @@ export default function HomePage() {
                 data={coverageMapData}
                 loading={coverageMapLoading}
                 error={coverageMapError}
+                onRetry={loadCoverageMap}
               />
             </div>
           </div>
@@ -504,6 +492,7 @@ export default function HomePage() {
               data={coverageMapData}
               loading={coverageMapLoading}
               error={coverageMapError}
+              onRetry={loadCoverageMap}
             />
 
             <div className="coverageModalFooter">
