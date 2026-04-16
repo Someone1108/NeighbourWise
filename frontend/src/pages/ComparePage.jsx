@@ -352,7 +352,15 @@ export default function ComparePage() {
               </p>
 
               <div className="nwSearchBlock">
+                {/* Visible label for WCAG 1.3.1 + 2.5.3 Label in Name */}
+                <label
+                  htmlFor="compare-search-input"
+                  style={{ display: 'block', fontSize: 13, fontWeight: 700, color: 'var(--muted-dark)', marginBottom: 6 }}
+                >
+                  Search suburb or address
+                </label>
                 <input
+                  id="compare-search-input"
                   className="nwInput nwSearchInput"
                   placeholder="e.g. Richmond or 45 Chapel St"
                   value={searchTerm}
@@ -360,7 +368,8 @@ export default function ComparePage() {
                     setSearchTerm(e.target.value)
                     setError('')
                   }}
-                  aria-label="Search second suburb or address"
+                  aria-autocomplete="list"
+                  aria-expanded={hasResults && !selectedSecondArea}
                   autoComplete="off"
                 />
 
@@ -447,15 +456,21 @@ export default function ComparePage() {
 
       {/* ── COMPARISON RESULTS ── */}
       <div className="nwCard nwCompareResultsCard">
-        {loading ? <div className="nwLoading">Loading comparison…</div> : null}
+        {/* aria-live="polite" announces loading/status updates to screen readers (WCAG 4.1.3) */}
+        <div aria-live="polite" aria-atomic="true" style={{ minHeight: 24 }}>
+          {loading ? (
+            <div className="nwLoading">Loading comparison…</div>
+          ) : hint ? (
+            <div style={{ color: 'var(--muted-dark)', fontSize: 15, lineHeight: 1.6, padding: '8px 0' }}>
+              {hint}
+            </div>
+          ) : null}
+        </div>
 
-        {!loading && hint ? (
-          <div style={{ color: 'var(--muted-dark)', fontSize: 15, lineHeight: 1.6, padding: '8px 0' }}>
-            {hint}
-          </div>
+        {/* role="alert" interrupts immediately for errors (WCAG 3.3.1 Error Identification) */}
+        {!loading && error ? (
+          <div className="nwError" role="alert" aria-live="assertive">{error}</div>
         ) : null}
-
-        {!loading && error ? <div className="nwError">{error}</div> : null}
 
         {!loading && data ? (
           <>

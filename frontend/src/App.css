@@ -1,3 +1,46 @@
+/* ── WCAG 2.2 Skip Link (2.4.1 Bypass Blocks) ── */
+.nwSkipLink {
+  position: absolute;
+  top: -100%;
+  left: 16px;
+  z-index: 9999;
+  background: #10213d;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 14px;
+  padding: 10px 18px;
+  border-radius: 0 0 8px 8px;
+  text-decoration: none;
+  transition: top 0.15s ease;
+}
+
+.nwSkipLink:focus {
+  top: 0;
+  outline: 3px solid #fcd34d;
+  outline-offset: 2px;
+}
+
+/* ── WCAG 2.2 Global Focus Appearance (2.4.11) ──
+   All interactive elements get a consistent, high-contrast focus ring.
+   Min 2px perimeter, ≥3:1 contrast against adjacent colors. */
+:focus-visible {
+  outline: 3px solid #f47c20;
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* Override per-element focus styles to use the global standard */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+[role="button"]:focus-visible,
+[role="option"]:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid #f47c20;
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
 /* App shell */
 .nwAppShell {
   width: 100%;
@@ -38,9 +81,7 @@ body {
 
 .nwNavInner {
   width: 100%;
-  max-width: 1280px;
   height: 100%;
-  margin: 0 auto;
   padding: 0 40px;
   display: flex;
   align-items: center;
@@ -963,7 +1004,7 @@ body {
   transform: translateY(-50%);
   color: var(--muted-dark);
   pointer-events: none;
-  font-size: 17px;
+  font-size: 24px;
   line-height: 1;
 }
 
@@ -1202,7 +1243,7 @@ body {
 
 @media (max-width: 980px) {
   .nwNavInner {
-    padding: 0 20px;
+    padding: 0 18px;
   }
 
   .nwPage {
