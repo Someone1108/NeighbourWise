@@ -21,17 +21,17 @@ const VALUE_PROPS = [
   {
     icon: '🏆',
     title: 'Liveability Score',
-    desc: 'Instant suburb ratings across accessibility, safety and environment',
+    desc: 'See suburb ratings across accessibility, safety and environment.',
   },
   {
     icon: '🗺️',
     title: 'Map Insights',
-    desc: 'Insights, heatmaps and green space in one interactive view',
+    desc: 'Explore heat, vegetation, zoning and local area context in one map.',
   },
   {
     icon: '⚖️',
     title: 'Compare Areas',
-    desc: 'Side-by-side suburb data to help you decide with confidence',
+    desc: 'View two suburbs side by side to make a more confident decision.',
   },
 ]
 
@@ -498,7 +498,7 @@ export default function HomePage() {
             <div className="coverageModalFooter">
               <p>
                 This view highlights overall Melbourne coverage. Search results can be
-                explored by suburb or address across the supported area.
+                explored by suburb or address across all supported area.
               </p>
             </div>
           </div>
