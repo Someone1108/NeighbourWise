@@ -73,6 +73,10 @@ export default function MapPage() {
     locationKind === "postcode";
 
   useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, []);
+
+  useEffect(() => {
     if (!context || !selectedLocation || !profile) {
       setError("Missing selected location. Please start from Home.");
       setLoading(false);
