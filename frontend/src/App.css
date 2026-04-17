@@ -51,6 +51,7 @@ input:focus-visible,
 .nwMain {
   width: 100%;
   flex: 1 1 auto;
+  padding-top: 64px;
 }
 
 /* Navigation */
@@ -76,7 +77,7 @@ input:focus-visible,
 }
 
 body {
-  padding-top: 64px;
+  padding-top: 0;
 }
 
 .nwNavInner {
@@ -162,7 +163,7 @@ body {
   width: 100%;
   max-width: 100%;
   margin: 0;
-  padding: 28px 40px 56px;
+  padding: 12px 40px 56px;
   box-sizing: border-box;
   background: var(--bg);
 }

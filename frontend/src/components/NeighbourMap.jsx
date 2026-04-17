@@ -232,6 +232,39 @@ function LegendRow({ color, fillColor, label }) {
   );
 }
 
+function getHeatValue(feature) {
+  const p = feature?.properties || {};
+  return (
+    p.uhi ||
+    p.uhi18_m ||
+    p.UHI18_M ||
+    p.heat_value ||
+    p.value ||
+    p.gridcode ||
+    null
+  );
+}
+
+function getVegetationValue(feature) {
+  const p = feature?.properties || {};
+  return (
+    p.peranyveg || p.PERANYVEG || p.vegetation || p.veg_value || p.value || null
+  );
+}
+
+function formatMetric(value, suffix = "", decimals = 1) {
+  if (value === null || value === undefined || value === "") {
+    return "Not available";
+  }
+
+  const num = Number(value);
+  if (Number.isFinite(num)) {
+    return `${num.toFixed(decimals)}${suffix}`;
+  }
+
+  return String(value);
+}
+
 export default function NeighbourMap({
   coordinates,
   radiusMeters,
@@ -262,9 +295,22 @@ export default function NeighbourMap({
   }, [coordinates]);
 
   const showZoningLegend =
+    activeLayer === "zoning" &&
     zoningLayer &&
     Array.isArray(zoningLayer.features) &&
     zoningLayer.features.length > 0;
+
+  const showHeatLegend =
+    activeLayer === "heat" &&
+    heatLayer &&
+    Array.isArray(heatLayer.features) &&
+    heatLayer.features.length > 0;
+
+  const showVegetationLegend =
+    activeLayer === "vegetation" &&
+    vegetationLayer &&
+    Array.isArray(vegetationLayer.features) &&
+    vegetationLayer.features.length > 0;
 
   useEffect(() => {
     if (!coords || mapRef.current) return;
@@ -397,12 +443,19 @@ export default function NeighbourMap({
     ) {
       heatLayerRef.current = L.geoJSON(heatLayer, {
         renderer: rendererRef.current,
-        interactive: false,
+        interactive: true,
         style: {
           color: "#D73027",
           weight: 1,
           fillColor: "#FC8D59",
           fillOpacity: 0.45
+        },
+        onEachFeature: (feature, layer) => {
+          const value = getHeatValue(feature);
+
+          layer.bindPopup(
+            `<strong>Heat layer</strong><br/>Urban heat score: ${formatMetric(value)}`
+          );
         }
       }).addTo(map);
 
@@ -426,12 +479,19 @@ export default function NeighbourMap({
     ) {
       vegetationLayerRef.current = L.geoJSON(vegetationLayer, {
         renderer: rendererRef.current,
-        interactive: false,
+        interactive: true,
         style: {
           color: "#1B7837",
           weight: 1,
           fillColor: "#5AAE61",
           fillOpacity: 0.4
+        },
+        onEachFeature: (feature, layer) => {
+          const value = getVegetationValue(feature);
+
+          layer.bindPopup(
+            `<strong>Vegetation layer</strong><br/>Vegetation cover: ${formatMetric(value, "%")}`
+          );
         }
       }).addTo(map);
 
@@ -590,6 +650,82 @@ export default function NeighbourMap({
             fillColor={ZONING_COLORS.other.fillColor}
             label={ZONING_COLORS.other.label}
           />
+        </div>
+      ) : null}
+
+      {showHeatLegend ? (
+        <div
+          style={{
+            position: "absolute",
+            right: 12,
+            bottom: 28,
+            zIndex: 1000,
+            background: "rgba(255,255,255,0.96)",
+            borderRadius: 12,
+            padding: "10px 12px",
+            boxShadow: "0 4px 14px rgba(0,0,0,0.16)",
+            minWidth: 210,
+            border: "1px solid rgba(0,0,0,0.08)"
+          }}
+        >
+          <div style={{ fontWeight: 800, fontSize: 13, color: "#111827" }}>
+            Heat legend
+          </div>
+
+          <LegendRow
+            color="#D73027"
+            fillColor="#FC8D59"
+            label="Urban heat layer"
+          />
+
+          <div
+            style={{
+              marginTop: 8,
+              fontSize: 12,
+              color: "#4b5563",
+              lineHeight: 1.45
+            }}
+          >
+            Click at any point on the map to view the heat level of that area.
+          </div>
+        </div>
+      ) : null}
+
+      {showVegetationLegend ? (
+        <div
+          style={{
+            position: "absolute",
+            right: 12,
+            bottom: 28,
+            zIndex: 1000,
+            background: "rgba(255,255,255,0.96)",
+            borderRadius: 12,
+            padding: "10px 12px",
+            boxShadow: "0 4px 14px rgba(0,0,0,0.16)",
+            minWidth: 210,
+            border: "1px solid rgba(0,0,0,0.08)"
+          }}
+        >
+          <div style={{ fontWeight: 800, fontSize: 13, color: "#111827" }}>
+            Vegetation legend
+          </div>
+
+          <LegendRow
+            color="#1B7837"
+            fillColor="#5AAE61"
+            label="Vegetation cover layer"
+          />
+
+          <div
+            style={{
+              marginTop: 8,
+              fontSize: 12,
+              color: "#4b5563",
+              lineHeight: 1.45
+            }}
+          >
+            Click on the map to view the vegetation cover percentage in that area.
+          </div>
         </div>
       ) : null}
     </div>
