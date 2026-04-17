@@ -454,7 +454,7 @@ export default function NeighbourMap({
           const value = getHeatValue(feature);
 
           layer.bindPopup(
-            `<strong>Heat layer</strong><br/>Urban heat score: ${formatMetric(value)}`
+            `<strong>Heat layer</strong><br/>Urban heat intensity: ${formatMetric(value)}`
           );
         }
       }).addTo(map);
