@@ -203,49 +203,129 @@ export default function MapPage() {
         </span>
       </div>
 
-      <div className="nwMapLayout">
-        <section
-          className="nwMapLeft"
-          aria-label="Interactive neighbourhood map"
-        >
-          <div
-            aria-live="polite"
-            aria-atomic="true"
-            className="nwLoading"
-            style={{
-              position: loading ? "static" : "absolute",
-              visibility: loading ? "visible" : "hidden",
-              height: loading ? "auto" : 0,
-              overflow: "hidden"
-            }}
+      <div className="nwMapLayout nwMapLayoutPolished">
+        <div className="nwMapLeftCol">
+          <section
+            className="nwMapLeft"
+            aria-label="Interactive neighbourhood map"
           >
-            {loading ? "Loading map data, please wait…" : ""}
+            <div
+              aria-live="polite"
+              aria-atomic="true"
+              className="nwLoading"
+              style={{
+                position: loading ? "static" : "absolute",
+                visibility: loading ? "visible" : "hidden",
+                height: loading ? "auto" : 0,
+                overflow: "hidden"
+              }}
+            >
+              {loading ? "Loading map data, please wait…" : ""}
+            </div>
+
+            <NeighbourMap
+              coordinates={
+                selectedLocation
+                  ? {
+                      lat: Number(selectedLocation.lat),
+                      lng: Number(selectedLocation.lng)
+                    }
+                  : mapData?.coordinates
+              }
+              radiusMeters={mapData?.radiusMeters}
+              pointsOfInterest={showInsights ? poiData : []}
+              suburbPolygon={isSuburb ? suburbPolygon : null}
+              selectedLabel={locationName}
+              heatLayer={activeLayer === "heat" ? layerData?.heat : null}
+              vegetationLayer={
+                activeLayer === "vegetation" ? layerData?.vegetation : null
+              }
+              zoningLayer={activeLayer === "zoning" ? layerData?.zoning : null}
+              activeLayer={activeLayer}
+            />
+          </section>
+
+          <div className="nwMapActionsRow">
+            <Button
+              variant="accent"
+              onClick={() => {
+                const compareItem = {
+                  id: selectedLocation?.id || "",
+                  locationName: locationName,
+                  displayName:
+                    selectedLocation?.displayName ||
+                    selectedLocation?.fullAddress ||
+                    selectedLocation?.name ||
+                    "",
+                  fullAddress: selectedLocation?.fullAddress || "",
+                  name: selectedLocation?.name || "",
+                  type:
+                    selectedLocation?.type ||
+                    selectedLocation?.placeType ||
+                    "suburb",
+                  placeType:
+                    selectedLocation?.placeType ||
+                    selectedLocation?.type ||
+                    "suburb",
+                  postcode: selectedLocation?.postcode || null,
+                  lat: selectedLocation?.lat,
+                  lng: selectedLocation?.lng,
+                  source: selectedLocation?.source || "",
+                  profile,
+                  rangeMinutes,
+                  selectedLocation
+                };
+
+                const list = addToCompareList(compareItem);
+                setCompareHint(`Added to compare (${list.length}/2).`);
+                navigate("/compare");
+              }}
+            >
+              Add to Compare
+            </Button>
+
+            {SHOW_VIEW_DETAILS && (
+              <Button
+                variant="primary"
+                onClick={() => {
+                  saveContext({ selectedLocation, profile, rangeMinutes });
+                  navigate("/insights", {
+                    state: { selectedLocation, profile, rangeMinutes }
+                  });
+                }}
+              >
+                View Details
+              </Button>
+            )}
+
+            <Button
+              variant="dark"
+              onClick={() => {
+                const count = loadCompareList().length;
+                if (count < 2) {
+                  setCompareHint(
+                    "Please add two areas before opening Compare."
+                  );
+                  return;
+                }
+                navigate("/compare");
+              }}
+            >
+              Compare Areas
+            </Button>
           </div>
 
-          <NeighbourMap
-            coordinates={
-              selectedLocation
-                ? {
-                    lat: Number(selectedLocation.lat),
-                    lng: Number(selectedLocation.lng)
-                  }
-                : mapData?.coordinates
-            }
-            radiusMeters={mapData?.radiusMeters}
-            pointsOfInterest={showInsights ? poiData : []}
-            suburbPolygon={isSuburb ? suburbPolygon : null}
-            selectedLabel={locationName}
-            heatLayer={activeLayer === "heat" ? layerData?.heat : null}
-            vegetationLayer={
-              activeLayer === "vegetation" ? layerData?.vegetation : null
-            }
-            zoningLayer={activeLayer === "zoning" ? layerData?.zoning : null}
-            activeLayer={activeLayer}
-          />
-        </section>
+          <div
+            role="status"
+            aria-live="polite"
+            className="nwMapActionsHint"
+          >
+            {compareHint || ""}
+          </div>
+        </div>
 
         <aside className="nwMapRight">
-          <div className="nwCard" style={{ textAlign: "left" }}>
+          <div className="nwCard nwMapSidebarCard" style={{ textAlign: "left" }}>
             <div style={{ marginBottom: 4 }} aria-label="Liveability scores">
               <div
                 style={{
@@ -432,88 +512,6 @@ export default function MapPage() {
               </fieldset>
             </div>
 
-            <div className="nwBtnRow" style={{ marginTop: 16 }}>
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  const compareItem = {
-                    id: selectedLocation?.id || "",
-                    locationName: locationName,
-                    displayName:
-                      selectedLocation?.displayName ||
-                      selectedLocation?.fullAddress ||
-                      selectedLocation?.name ||
-                      "",
-                    fullAddress: selectedLocation?.fullAddress || "",
-                    name: selectedLocation?.name || "",
-                    type:
-                      selectedLocation?.type ||
-                      selectedLocation?.placeType ||
-                      "suburb",
-                    placeType:
-                      selectedLocation?.placeType ||
-                      selectedLocation?.type ||
-                      "suburb",
-                    postcode: selectedLocation?.postcode || null,
-                    lat: selectedLocation?.lat,
-                    lng: selectedLocation?.lng,
-                    source: selectedLocation?.source || "",
-                    profile,
-                    rangeMinutes,
-                    selectedLocation
-                  };
-
-                  const list = addToCompareList(compareItem);
-                  setCompareHint(`Added to compare (${list.length}/2).`);
-                  navigate("/compare");
-                }}
-              >
-                Add to Compare
-              </Button>
-
-              {SHOW_VIEW_DETAILS && (
-                <Button
-                  variant="secondary"
-                  onClick={() => {
-                    saveContext({ selectedLocation, profile, rangeMinutes });
-                    navigate("/insights", {
-                      state: { selectedLocation, profile, rangeMinutes }
-                    });
-                  }}
-                >
-                  View Details
-                </Button>
-              )}
-
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  const count = loadCompareList().length;
-                  if (count < 2) {
-                    setCompareHint(
-                      "Please add two areas before opening Compare."
-                    );
-                    return;
-                  }
-                  navigate("/compare");
-                }}
-              >
-                Compare Areas
-              </Button>
-            </div>
-
-            <div
-              role="status"
-              aria-live="polite"
-              style={{
-                marginTop: 10,
-                fontSize: 13,
-                color: "var(--muted-dark)",
-                minHeight: 20
-              }}
-            >
-              {compareHint || ""}
-            </div>
           </div>
         </aside>
       </div>

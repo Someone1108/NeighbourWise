@@ -231,18 +231,43 @@ export default function HomePage() {
           <div className="hero-overlay" aria-hidden="true" />
 
           <div className="hero-content">
-            <span className="hero-eyebrow">Melbourne · Liveability Explorer</span>
+            <span className="hero-eyebrow hero-fade-in">Melbourne · Liveability Explorer</span>
 
-            <h1 className="hero-headline">
+            <h1 className="hero-headline hero-fade-in hero-fade-in-1">
               Melbourne neighbourhoods,
               <br />
               scored for <em>the way you live.</em>
             </h1>
 
-            <p className="hero-subtitle">
+            <p className="hero-subtitle hero-fade-in hero-fade-in-2">
               Data-backed insights across accessibility, safety and environment -
               personalised to your situation.
             </p>
+
+            <div className="hero-cta-row hero-fade-in hero-fade-in-3">
+              <button
+                type="button"
+                className="hero-cta-primary"
+                onClick={() =>
+                  document
+                    .getElementById('home-search-input')
+                    ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                }
+              >
+                Check a suburb
+                <span className="hero-cta-arrow" aria-hidden="true">→</span>
+              </button>
+
+              <button
+                type="button"
+                className="hero-cta-ghost"
+                onClick={() =>
+                  document.getElementById('value-prop')?.scrollIntoView({ behavior: 'smooth' })
+                }
+              >
+                How it works
+              </button>
+            </div>
           </div>
 
           <button
@@ -252,7 +277,6 @@ export default function HomePage() {
               document.getElementById('value-prop')?.scrollIntoView({ behavior: 'smooth' })
             }
           >
-            <span>Explore</span>
             <div className="hero-scroll-chevron" aria-hidden="true" />
           </button>
         </section>
