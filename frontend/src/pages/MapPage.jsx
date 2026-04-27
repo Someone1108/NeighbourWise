@@ -8,7 +8,8 @@ import {
   getLocalityPolygon,
   getPoiInsights,
   getLayerDataForSuburb,
-  getLayerDataForAddress
+  getLayerDataForAddress,
+  getLiveabilityScore
 } from "../services/api.js";
 import {
   addToCompareList,
@@ -52,6 +53,10 @@ export default function MapPage() {
   const [showInsights, setShowInsights] = useState(true);
   const [activeLayer, setActiveLayer] = useState("none");
   const [layerData, setLayerData] = useState(null);
+ 
+
+  // ⭐ 新增：用來存後端計算好的總分和三個小分
+  const [scoreData, setScoreData] = useState(null);
 
   const context = useMemo(() => {
     const stateCtx = location.state;
@@ -115,27 +120,41 @@ export default function MapPage() {
       time: Number(rangeMinutes)
     });
 
+    const layerPromise = isSuburb
+      ? getLayerDataForSuburb(selectedLocation.name)
+      : isAddress
+        ? getLayerDataForAddress(
+            Number(selectedLocation.lat),
+            Number(selectedLocation.lng),
+            rangeMinutes
+          )
+        : Promise.resolve(null);
+
+    // ⭐ 新增：呼叫後端 liveability 分數 API
+    const scorePromise = getLiveabilityScore({
+      lat: Number(selectedLocation.lat),
+      lng: Number(selectedLocation.lng),
+      time: Number(rangeMinutes),
+      persona: profile || "default"
+    });
+
     Promise.all([
       mapContextPromise,
       polygonPromise,
       poiPromise,
-      isSuburb
-        ? getLayerDataForSuburb(selectedLocation.name)
-        : isAddress
-          ? getLayerDataForAddress(
-              Number(selectedLocation.lat),
-              Number(selectedLocation.lng),
-              rangeMinutes
-            )
-          : Promise.resolve(null)
+      layerPromise,
+      scorePromise
     ])
-      .then(([data, polygon, poiResponse, layers]) => {
+      .then(([data, polygon, poiResponse, layers, scores]) => {
         if (cancelled) return;
 
         setMapData(data);
         setSuburbPolygon(polygon);
         setPoiData(poiResponse?.results || []);
         setLayerData(layers);
+
+        // ⭐ 新增：把後端分數存起來
+        setScoreData(scores);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -252,20 +271,24 @@ export default function MapPage() {
               >
                 Liveability Score
               </div>
+
               <div
                 className="nwOverallScore"
                 style={{ marginBottom: 10 }}
                 aria-labelledby="liveability-score-label"
                 aria-live="polite"
               >
-                {mapData ? mapData.overallScore : "–"} / 100
+                {/* ⭐ 改成顯示後端 liveabilityScore */}
+                {scoreData ? Number(scoreData.liveabilityScore).toFixed(2) : "–"} / 100
               </div>
+
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {CATEGORY_KEYS.map((k) => (
                   <ScoreBar
                     key={k}
                     category={k}
-                    score={mapData?.scores?.[k]}
+                    // ⭐ 改成顯示後端三個小分
+                    score={scoreData?.scores?.[k]}
                     outOf={100}
                   />
                 ))}

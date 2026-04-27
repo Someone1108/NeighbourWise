@@ -389,3 +389,16 @@ export async function getLayerDataForAddress(lat, lng, rangeMinutes) {
     `${API_BASE_URL}/api/layers/address?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}&minutes=${encodeURIComponent(safeRange)}&radiusMeters=${encodeURIComponent(radiusMeters)}`
   )
 }
+
+export async function getLiveabilityScore({ lat, lng, time, persona }) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    throw new Error('Valid lat/lng are required')
+  }
+
+  const safeTime = [10, 20, 30].includes(Number(time)) ? Number(time) : 20
+  const safePersona = persona || 'default'
+
+  return fetchJson(
+    `${API_BASE_URL}/api/score/liveability?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}&time=${encodeURIComponent(safeTime)}&persona=${encodeURIComponent(safePersona)}`
+  )
+}

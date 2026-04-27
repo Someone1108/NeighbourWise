@@ -1,4 +1,7 @@
+const { MAX_DISTANCE_MAP } = require('../utils/distanceConfig');
+
 const axios = require('axios');
+const pool = require('../utils/db');
 
 const MAPBOX_TOKEN = process.env.MAPBOX_TOKEN;
 
@@ -8,14 +11,10 @@ const categoryMap = {
   train_station: 'railway_station',
   school: 'school',
   supermarket: 'supermarket',
-  bus_stop: 'bus_stop'
+  bus_stop: 'bus_stop',
+  dog_park: 'dog_park'
 };
 
-const MAX_DISTANCE_MAP = {
-  10: 0.8,
-  20: 1.6,
-  30: 2.4
-};
 
 // Haversine formula：計算兩點距離（公里）
 const calculateDistanceKm = (lat1, lng1, lat2, lng2) => {
@@ -49,15 +48,14 @@ const normalizePoiName = (name) => {
 // 根據「名稱 + 很接近的座標」去重
 const dedupePois = (pois) => {
   const unique = [];
-  const DUPLICATE_DISTANCE_KM = 0.12; // 約 120 公尺，可再調整
+  const DUPLICATE_DISTANCE_KM = 0.12;
 
   for (const poi of pois) {
     const normalizedName = normalizePoiName(poi.name);
 
     const isDuplicate = unique.some((existing) => {
       const sameCategory = existing.type === poi.type;
-      const sameName =
-        normalizePoiName(existing.name) === normalizedName;
+      const sameName = normalizePoiName(existing.name) === normalizedName;
 
       const bothHaveCoords =
         existing.lat != null &&
@@ -81,12 +79,16 @@ const dedupePois = (pois) => {
   return unique;
 };
 
-// 單一 category 查詢，是因為 mapbox 一次只能查一個 category
+// 從 Mapbox 抓單一 category
 const fetchSingleCategory = async ({ lat, lng, type }) => {
   const category = categoryMap[type];
 
-  if (!category) {
-    throw new Error(`Unsupported POI type: ${type}`);
+  if (!category || type === 'dog_park') {
+    throw new Error(`Unsupported Mapbox POI type: ${type}`);
+  }
+
+  if (!MAPBOX_TOKEN) {
+    throw new Error('MAPBOX_TOKEN is missing in .env');
   }
 
   const url = `https://api.mapbox.com/search/searchbox/v1/category/${category}`;
@@ -118,38 +120,83 @@ const fetchSingleCategory = async ({ lat, lng, type }) => {
       lat: poiLat,
       lng: poiLng,
       type,
-      distanceKm: distanceKm != null ? Number(distanceKm.toFixed(2)) : null
+      distanceKm: distanceKm != null ? Number(distanceKm.toFixed(2)) : null,
+      source: 'mapbox'
     };
   });
 };
 
+// 從資料庫抓 dog park
+const fetchDogParksFromDB = async ({ lat, lng }) => {
+  const sql = `
+    select
+      pet_point_id as id,
+      st_y(geom) as lat,
+      st_x(geom) as lng,
+      st_distance(
+        geom::geography,
+        st_setsrid(st_makepoint($1, $2), 4326)::geography
+      ) / 1000 as distance_km
+    from public.pet_friendly_spaces_points
+    order by distance_km asc
+    limit 50;
+  `;
+
+  const values = [lng, lat];
+
+  const result = await pool.query(sql, values);
+
+  return result.rows.map((row) => ({
+    id: `dog-park-${row.id}`,
+    name: 'Dog Park',
+    address: '',
+    lat: Number(row.lat),
+    lng: Number(row.lng),
+    type: 'dog_park',
+    distanceKm: Number(Number(row.distance_km).toFixed(2)),
+    source: 'supabase'
+  }));
+};
+
+// 統一判斷資料來源
+const fetchCategoryByType = async ({ lat, lng, type }) => {
+  if (type === 'dog_park') {
+    return fetchDogParksFromDB({ lat, lng });
+  }
+
+  return fetchSingleCategory({ lat, lng, type });
+};
+
+// 抓所有 POI insights
 const fetchPoiInsights = async ({ lat, lng, time }) => {
   const allTypes = Object.keys(categoryMap);
 
   const allResults = await Promise.all(
     allTypes.map((poiType) =>
-      fetchSingleCategory({ lat, lng, type: poiType })
+      fetchCategoryByType({ lat, lng, type: poiType })
     )
   );
 
   let results = allResults.flat();
 
-  // 如果有 time，就依照 10/20/30 分鐘做距離過濾
   if (time && MAX_DISTANCE_MAP[time]) {
-    const maxDistance = MAX_DISTANCE_MAP[time];
+    // ⭐ distanceConfig 是「公尺」，這裡轉成公里
+    const maxDistanceKm = MAX_DISTANCE_MAP[time] / 1000;
+
     results = results.filter(
-      (poi) => poi.distanceKm !== null && poi.distanceKm <= maxDistance
+      (poi) =>
+        poi.distanceKm !== null &&
+        Number.isFinite(poi.distanceKm) &&
+        poi.distanceKm <= maxDistanceKm
     );
   }
 
-  // 先依距離排序，讓去重後優先保留較近的點
   results.sort((a, b) => {
     if (a.distanceKm == null) return 1;
     if (b.distanceKm == null) return -1;
     return a.distanceKm - b.distanceKm;
   });
 
-  // 用名稱 + 座標接近度 去重
   const uniqueResults = dedupePois(results);
 
   return {
