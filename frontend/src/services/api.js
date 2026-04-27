@@ -92,6 +92,16 @@ export async function getPoiInsights({ lat, lng, time }) {
   )
 }
 
+export async function getAqiForLocation({ lat, lng }) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    throw new Error('Valid lat/lng are required')
+  }
+
+  return fetchJson(
+    `${API_BASE_URL}/api/aqi?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}`
+  )
+}
+
 /**
  * REAL BACKEND SEARCH
  * Returns suburb/locality matches from your backend locality point dataset.

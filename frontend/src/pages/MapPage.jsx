@@ -7,6 +7,7 @@ import {
   getMapContext,
   getLocalityPolygon,
   getPoiInsights,
+  getAqiForLocation,
   getLayerDataForSuburb,
   getLayerDataForAddress
 } from "../services/api.js";
@@ -52,6 +53,7 @@ export default function MapPage() {
   const [showInsights, setShowInsights] = useState(true);
   const [activeLayer, setActiveLayer] = useState("none");
   const [layerData, setLayerData] = useState(null);
+  const [aqiData, setAqiData] = useState(null);
 
   const context = useMemo(() => {
     const stateCtx = location.state;
@@ -115,10 +117,22 @@ export default function MapPage() {
       time: Number(rangeMinutes)
     });
 
+    const aqiPromise = getAqiForLocation({
+      lat: Number(selectedLocation.lat),
+      lng: Number(selectedLocation.lng)
+    }).catch((err) => {
+      console.error("AQI load error:", err);
+      return {
+        available: false,
+        reason: "AQI data is unavailable"
+      };
+    });
+
     Promise.all([
       mapContextPromise,
       polygonPromise,
       poiPromise,
+      aqiPromise,
       isSuburb
         ? getLayerDataForSuburb(selectedLocation.name)
         : isAddress
@@ -129,12 +143,13 @@ export default function MapPage() {
             )
           : Promise.resolve(null)
     ])
-      .then(([data, polygon, poiResponse, layers]) => {
+      .then(([data, polygon, poiResponse, aqiResponse, layers]) => {
         if (cancelled) return;
 
         setMapData(data);
         setSuburbPolygon(polygon);
         setPoiData(poiResponse?.results || []);
+        setAqiData(aqiResponse || null);
         setLayerData(layers);
       })
       .catch((err) => {
@@ -269,6 +284,54 @@ export default function MapPage() {
                     outOf={100}
                   />
                 ))}
+              </div>
+
+              <div
+                style={{
+                  marginTop: 12,
+                  padding: "10px 12px",
+                  border: "1px solid var(--border-light)",
+                  borderRadius: 8,
+                  background: "rgba(42,157,143,0.06)"
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 10,
+                    alignItems: "baseline"
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 800,
+                      color: "var(--muted-dark)",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.06em"
+                    }}
+                  >
+                    Air Quality
+                  </span>
+                  <strong style={{ color: "var(--accent-2)" }}>
+                    {aqiData?.available && Number.isFinite(aqiData.score)
+                      ? `${aqiData.score} / 100`
+                      : "Unavailable"}
+                  </strong>
+                </div>
+                <div
+                  style={{
+                    marginTop: 5,
+                    fontSize: 12,
+                    lineHeight: 1.45,
+                    color: "var(--muted-dark)"
+                  }}
+                >
+                  {aqiData?.available && aqiData.site
+                    ? `EPA AirWatch station: ${aqiData.site.name} (${aqiData.site.distanceKm} km away)`
+                    : aqiData?.reason || "EPA AirWatch data will appear here once configured."}
+                </div>
               </div>
             </div>
 

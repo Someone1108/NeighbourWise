@@ -5,6 +5,7 @@ const searchRoutes = require('./routes/searchRoutes');
 const localityRoutes = require('./routes/localityRoutes');
 const insightRoutes = require('./routes/insightRoutes');
 const layerRoutes = require('./routes/layerRoutes');
+const aqiRoutes = require('./routes/aqiRoutes');
 
 const app = express();
 
@@ -19,5 +20,6 @@ app.use('/api/search', searchRoutes);
 app.use('/api/locality', localityRoutes);
 app.use('/api/insights', insightRoutes);
 app.use('/api/layers', layerRoutes);
+app.use('/api/aqi', aqiRoutes);
 
 module.exports = app;
