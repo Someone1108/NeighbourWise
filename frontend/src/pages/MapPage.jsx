@@ -18,7 +18,7 @@ import {
 } from "../utils/storage.js";
 
 const CATEGORY_KEYS = ["accessibility", "safety", "environment"];
-const SHOW_VIEW_DETAILS = false;
+const SHOW_VIEW_DETAILS = true;
 
 function asSafeNumber(n, fallback) {
   return Number.isFinite(n) ? n : fallback;
@@ -36,6 +36,14 @@ function getDisplayLocationName(selectedLocation) {
 
 function getLocationKind(selectedLocation) {
   return selectedLocation?.placeType || selectedLocation?.type || "";
+}
+
+function getProfileLabel(profile) {
+  if (!profile) return null;
+  if (profile.familyWithChildren) return "Family";
+  if (profile.elderly) return "Elderly";
+  if (profile.petOwner) return "Pet Owner";
+  return null;
 }
 
 export default function MapPage() {
@@ -252,6 +260,18 @@ export default function MapPage() {
               >
                 Liveability Score
               </div>
+              {getProfileLabel(profile) && (
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: "var(--muted-dark)",
+                    fontWeight: 600,
+                    marginBottom: 6
+                  }}
+                >
+                  Scored for: {getProfileLabel(profile)}
+                </div>
+              )}
               <div
                 className="nwOverallScore"
                 style={{ marginBottom: 10 }}
@@ -453,7 +473,7 @@ export default function MapPage() {
 
               {SHOW_VIEW_DETAILS && (
                 <Button
-                  variant="primary"
+                  variant="secondary"
                   onClick={() => {
                     saveContext({ selectedLocation, profile, rangeMinutes });
                     navigate("/insights", {
