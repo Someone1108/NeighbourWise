@@ -19,7 +19,7 @@ import {
 } from "../utils/storage.js";
 
 const CATEGORY_KEYS = ["accessibility", "safety", "environment"];
-const SHOW_VIEW_DETAILS = false;
+const SHOW_VIEW_DETAILS = true;
 
 function asSafeNumber(n, fallback) {
   return Number.isFinite(n) ? n : fallback;
@@ -37,6 +37,14 @@ function getDisplayLocationName(selectedLocation) {
 
 function getLocationKind(selectedLocation) {
   return selectedLocation?.placeType || selectedLocation?.type || "";
+}
+
+function getProfileLabel(profile) {
+  if (!profile) return null;
+  if (profile.familyWithChildren) return "Family";
+  if (profile.elderly) return "Elderly";
+  if (profile.petOwner) return "Pet Owner";
+  return null;
 }
 
 export default function MapPage() {
@@ -210,21 +218,17 @@ export default function MapPage() {
         </span>
       </div>
 
-      <div className="nwMapLayout">
+      <div className="nwMapLayout nwMapLayoutPolished">
         <section
           className="nwMapLeft"
           aria-label="Interactive neighbourhood map"
         >
+          {/* Loading announcement is screen-reader only — visible space-taking
+              text was causing the map to shift relative to the sidebar. */}
           <div
             aria-live="polite"
             aria-atomic="true"
-            className="nwLoading"
-            style={{
-              position: loading ? "static" : "absolute",
-              visibility: loading ? "visible" : "hidden",
-              height: loading ? "auto" : 0,
-              overflow: "hidden"
-            }}
+            className="nwSrOnly"
           >
             {loading ? "Loading map data, please wait…" : ""}
           </div>
@@ -249,10 +253,80 @@ export default function MapPage() {
             zoningLayer={activeLayer === "zoning" ? layerData?.zoning : null}
             activeLayer={activeLayer}
           />
+
+          <div className="nwMapFloatingBar" role="group" aria-label="Map actions">
+            <Button
+              variant="accent"
+              onClick={() => {
+                const compareItem = {
+                  id: selectedLocation?.id || "",
+                  locationName: locationName,
+                  displayName:
+                    selectedLocation?.displayName ||
+                    selectedLocation?.fullAddress ||
+                    selectedLocation?.name ||
+                    "",
+                  fullAddress: selectedLocation?.fullAddress || "",
+                  name: selectedLocation?.name || "",
+                  type:
+                    selectedLocation?.type ||
+                    selectedLocation?.placeType ||
+                    "suburb",
+                  placeType:
+                    selectedLocation?.placeType ||
+                    selectedLocation?.type ||
+                    "suburb",
+                  postcode: selectedLocation?.postcode || null,
+                  lat: selectedLocation?.lat,
+                  lng: selectedLocation?.lng,
+                  source: selectedLocation?.source || "",
+                  profile,
+                  rangeMinutes,
+                  selectedLocation
+                };
+
+                const list = addToCompareList(compareItem);
+                setCompareHint(`Added to compare (${list.length}/2).`);
+                navigate("/compare");
+              }}
+            >
+              Add to Compare
+            </Button>
+
+            {SHOW_VIEW_DETAILS && (
+              <Button
+                variant="primary"
+                onClick={() => {
+                  saveContext({ selectedLocation, profile, rangeMinutes });
+                  navigate("/insights", {
+                    state: { selectedLocation, profile, rangeMinutes }
+                  });
+                }}
+              >
+                View Details
+              </Button>
+            )}
+
+            <Button
+              variant="dark"
+              onClick={() => {
+                const count = loadCompareList().length;
+                if (count < 2) {
+                  setCompareHint(
+                    "Please add two areas before opening Compare."
+                  );
+                  return;
+                }
+                navigate("/compare");
+              }}
+            >
+              Compare Areas
+            </Button>
+          </div>
         </section>
 
         <aside className="nwMapRight">
-          <div className="nwCard" style={{ textAlign: "left" }}>
+          <div className="nwCard nwMapSidebarCard" style={{ textAlign: "left" }}>
             <div style={{ marginBottom: 4 }} aria-label="Liveability scores">
               <div
                 style={{
@@ -267,15 +341,27 @@ export default function MapPage() {
               >
                 Liveability Score
               </div>
+              {getProfileLabel(profile) && (
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: "var(--muted-dark)",
+                    fontWeight: 600,
+                    marginBottom: 6
+                  }}
+                >
+                  Scored for: {getProfileLabel(profile)}
+                </div>
+              )}
               <div
                 className="nwOverallScore"
-                style={{ marginBottom: 10 }}
+                style={{ marginBottom: 6 }}
                 aria-labelledby="liveability-score-label"
                 aria-live="polite"
               >
                 {mapData ? mapData.overallScore : "–"} / 100
               </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {CATEGORY_KEYS.map((k) => (
                   <ScoreBar
                     key={k}
@@ -339,11 +425,11 @@ export default function MapPage() {
               style={{
                 border: "none",
                 borderTop: "1px solid var(--border-light)",
-                margin: "16px 0"
+                margin: "12px 0"
               }}
             />
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               <fieldset style={{ border: "none", padding: 0, margin: 0 }}>
                 <legend
                   style={{
@@ -352,7 +438,7 @@ export default function MapPage() {
                     letterSpacing: "0.06em",
                     textTransform: "uppercase",
                     color: "var(--muted-dark)",
-                    marginBottom: 7,
+                    marginBottom: 4,
                     padding: 0
                   }}
                 >
@@ -388,7 +474,7 @@ export default function MapPage() {
                     letterSpacing: "0.06em",
                     textTransform: "uppercase",
                     color: "var(--muted-dark)",
-                    marginBottom: 7,
+                    marginBottom: 4,
                     padding: 0
                   }}
                 >
@@ -434,7 +520,7 @@ export default function MapPage() {
                     letterSpacing: "0.06em",
                     textTransform: "uppercase",
                     color: "var(--muted-dark)",
-                    marginBottom: 7,
+                    marginBottom: 4,
                     padding: 0
                   }}
                 >
@@ -475,90 +561,16 @@ export default function MapPage() {
               </fieldset>
             </div>
 
-            <div className="nwBtnRow" style={{ marginTop: 16 }}>
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  const compareItem = {
-                    id: selectedLocation?.id || "",
-                    locationName: locationName,
-                    displayName:
-                      selectedLocation?.displayName ||
-                      selectedLocation?.fullAddress ||
-                      selectedLocation?.name ||
-                      "",
-                    fullAddress: selectedLocation?.fullAddress || "",
-                    name: selectedLocation?.name || "",
-                    type:
-                      selectedLocation?.type ||
-                      selectedLocation?.placeType ||
-                      "suburb",
-                    placeType:
-                      selectedLocation?.placeType ||
-                      selectedLocation?.type ||
-                      "suburb",
-                    postcode: selectedLocation?.postcode || null,
-                    lat: selectedLocation?.lat,
-                    lng: selectedLocation?.lng,
-                    source: selectedLocation?.source || "",
-                    profile,
-                    rangeMinutes,
-                    selectedLocation
-                  };
-
-                  const list = addToCompareList(compareItem);
-                  setCompareHint(`Added to compare (${list.length}/2).`);
-                  navigate("/compare");
-                }}
-              >
-                Add to Compare
-              </Button>
-
-              {SHOW_VIEW_DETAILS && (
-                <Button
-                  variant="primary"
-                  onClick={() => {
-                    saveContext({ selectedLocation, profile, rangeMinutes });
-                    navigate("/insights", {
-                      state: { selectedLocation, profile, rangeMinutes }
-                    });
-                  }}
-                >
-                  View Details
-                </Button>
-              )}
-
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  const count = loadCompareList().length;
-                  if (count < 2) {
-                    setCompareHint(
-                      "Please add two areas before opening Compare."
-                    );
-                    return;
-                  }
-                  navigate("/compare");
-                }}
-              >
-                Compare Areas
-              </Button>
-            </div>
-
-            <div
-              role="status"
-              aria-live="polite"
-              style={{
-                marginTop: 10,
-                fontSize: 13,
-                color: "var(--muted-dark)",
-                minHeight: 20
-              }}
-            >
-              {compareHint || ""}
-            </div>
           </div>
         </aside>
+      </div>
+
+      <div
+        role="status"
+        aria-live="polite"
+        className="nwMapActionsHint"
+      >
+        {compareHint || ""}
       </div>
     </div>
   );
