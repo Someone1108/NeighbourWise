@@ -35,6 +35,13 @@ const VALUE_PROPS = [
   },
 ]
 
+const HOW_TO_STEPS = [
+  { step: '1', label: 'Search', desc: 'Type a suburb name or street address in Melbourne.' },
+  { step: '2', label: 'Choose your profile', desc: 'Tell us your situation — family, elderly, or pet owner — so scores reflect what matters to you.' },
+  { step: '3', label: 'Explore', desc: 'See the liveability map, detailed scores, and nearby places of interest.' },
+  { step: '4', label: 'Compare', desc: 'Add areas to your compare list to weigh up two suburbs side by side.' },
+]
+
 export default function HomePage() {
   const navigate = useNavigate()
 
@@ -254,7 +261,7 @@ export default function HomePage() {
                     ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
                 }
               >
-                Check a suburb
+                Explore Liveability
                 <span className="hero-cta-arrow" aria-hidden="true">→</span>
               </button>
 
@@ -296,6 +303,28 @@ export default function HomePage() {
               </div>
             ))}
           </div>
+        </section>
+
+        <section className="howto-section" aria-labelledby="howto-heading">
+          <div className="howto-header">
+            <p className="howto-header-label">How it works</p>
+            <h2 id="howto-heading">Find your fit in four simple steps</h2>
+          </div>
+
+          <ol className="howto-steps">
+            {HOW_TO_STEPS.map(({ step, label, desc }, i) => (
+              <li key={step} className="howto-step">
+                <div className="howto-step-number" aria-hidden="true">{step}</div>
+                <div className="howto-step-body">
+                  <div className="howto-step-label">{label}</div>
+                  <p className="howto-step-desc">{desc}</p>
+                </div>
+                {i < HOW_TO_STEPS.length - 1 && (
+                  <span className="howto-step-arrow" aria-hidden="true">→</span>
+                )}
+              </li>
+            ))}
+          </ol>
         </section>
 
         <section className="coverageSection" aria-labelledby="coverage-heading">
@@ -354,38 +383,29 @@ export default function HomePage() {
               Enter a suburb or address
             </label>
 
-            <div className="search-input-wrap">
-              <input
-                id="home-search-input"
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                placeholder="e.g. Fitzroy or 123 Swanston St"
-                aria-autocomplete="list"
-                aria-expanded={hasResults}
-                aria-controls={hasResults ? 'home-search-results' : undefined}
-                aria-describedby={error ? 'home-search-error' : undefined}
-                autoComplete="off"
-              />
-              <span className="search-icon" aria-hidden="true">⌕</span>
-            </div>
+            <div className="search-field">
+              <div className="search-input-wrap">
+                <input
+                  id="home-search-input"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  placeholder="e.g. Fitzroy or 123 Swanston St"
+                  aria-autocomplete="list"
+                  aria-expanded={hasResults}
+                  aria-controls={hasResults ? 'home-search-results' : undefined}
+                  aria-describedby={error ? 'home-search-error' : undefined}
+                  autoComplete="off"
+                />
+                <span className="search-icon" aria-hidden="true">⌕</span>
+              </div>
 
-            <div
-              id="home-search-error"
-              role="alert"
-              aria-live="assertive"
-              aria-atomic="true"
-              style={{ minHeight: 20 }}
-            >
-              {error && <p className="search-error">{error}</p>}
-            </div>
-
-            {hasResults && (
-              <div
-                id="home-search-results"
-                className="search-dropdown"
-                role="listbox"
-                aria-label="Search results"
-              >
+              {hasResults && (
+                <div
+                  id="home-search-results"
+                  className="search-dropdown"
+                  role="listbox"
+                  aria-label="Search results"
+                >
                 {suburbResults.length > 0 && (
                   <>
                     <div className="search-dropdown-group-label" aria-hidden="true">Suburbs</div>
@@ -426,8 +446,19 @@ export default function HomePage() {
                     ))}
                   </>
                 )}
-              </div>
-            )}
+                </div>
+              )}
+            </div>
+
+            <div
+              id="home-search-error"
+              role="alert"
+              aria-live="assertive"
+              aria-atomic="true"
+              style={{ minHeight: 20 }}
+            >
+              {error && <p className="search-error">{error}</p>}
+            </div>
 
             <p className="profile-label" id="profile-label">Your situation</p>
 

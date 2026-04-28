@@ -204,48 +204,42 @@ export default function MapPage() {
       </div>
 
       <div className="nwMapLayout nwMapLayoutPolished">
-        <div className="nwMapLeftCol">
-          <section
-            className="nwMapLeft"
-            aria-label="Interactive neighbourhood map"
+        <section
+          className="nwMapLeft"
+          aria-label="Interactive neighbourhood map"
+        >
+          {/* Loading announcement is screen-reader only — visible space-taking
+              text was causing the map to shift relative to the sidebar. */}
+          <div
+            aria-live="polite"
+            aria-atomic="true"
+            className="nwSrOnly"
           >
-            <div
-              aria-live="polite"
-              aria-atomic="true"
-              className="nwLoading"
-              style={{
-                position: loading ? "static" : "absolute",
-                visibility: loading ? "visible" : "hidden",
-                height: loading ? "auto" : 0,
-                overflow: "hidden"
-              }}
-            >
-              {loading ? "Loading map data, please wait…" : ""}
-            </div>
+            {loading ? "Loading map data, please wait…" : ""}
+          </div>
 
-            <NeighbourMap
-              coordinates={
-                selectedLocation
-                  ? {
-                      lat: Number(selectedLocation.lat),
-                      lng: Number(selectedLocation.lng)
-                    }
-                  : mapData?.coordinates
-              }
-              radiusMeters={mapData?.radiusMeters}
-              pointsOfInterest={showInsights ? poiData : []}
-              suburbPolygon={isSuburb ? suburbPolygon : null}
-              selectedLabel={locationName}
-              heatLayer={activeLayer === "heat" ? layerData?.heat : null}
-              vegetationLayer={
-                activeLayer === "vegetation" ? layerData?.vegetation : null
-              }
-              zoningLayer={activeLayer === "zoning" ? layerData?.zoning : null}
-              activeLayer={activeLayer}
-            />
-          </section>
+          <NeighbourMap
+            coordinates={
+              selectedLocation
+                ? {
+                    lat: Number(selectedLocation.lat),
+                    lng: Number(selectedLocation.lng)
+                  }
+                : mapData?.coordinates
+            }
+            radiusMeters={mapData?.radiusMeters}
+            pointsOfInterest={showInsights ? poiData : []}
+            suburbPolygon={isSuburb ? suburbPolygon : null}
+            selectedLabel={locationName}
+            heatLayer={activeLayer === "heat" ? layerData?.heat : null}
+            vegetationLayer={
+              activeLayer === "vegetation" ? layerData?.vegetation : null
+            }
+            zoningLayer={activeLayer === "zoning" ? layerData?.zoning : null}
+            activeLayer={activeLayer}
+          />
 
-          <div className="nwMapActionsRow">
+          <div className="nwMapFloatingBar" role="group" aria-label="Map actions">
             <Button
               variant="accent"
               onClick={() => {
@@ -314,15 +308,7 @@ export default function MapPage() {
               Compare Areas
             </Button>
           </div>
-
-          <div
-            role="status"
-            aria-live="polite"
-            className="nwMapActionsHint"
-          >
-            {compareHint || ""}
-          </div>
-        </div>
+        </section>
 
         <aside className="nwMapRight">
           <div className="nwCard nwMapSidebarCard" style={{ textAlign: "left" }}>
@@ -354,13 +340,13 @@ export default function MapPage() {
               )}
               <div
                 className="nwOverallScore"
-                style={{ marginBottom: 10 }}
+                style={{ marginBottom: 6 }}
                 aria-labelledby="liveability-score-label"
                 aria-live="polite"
               >
                 {mapData ? mapData.overallScore : "–"} / 100
               </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {CATEGORY_KEYS.map((k) => (
                   <ScoreBar
                     key={k}
@@ -376,11 +362,11 @@ export default function MapPage() {
               style={{
                 border: "none",
                 borderTop: "1px solid var(--border-light)",
-                margin: "16px 0"
+                margin: "12px 0"
               }}
             />
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               <fieldset style={{ border: "none", padding: 0, margin: 0 }}>
                 <legend
                   style={{
@@ -389,7 +375,7 @@ export default function MapPage() {
                     letterSpacing: "0.06em",
                     textTransform: "uppercase",
                     color: "var(--muted-dark)",
-                    marginBottom: 7,
+                    marginBottom: 4,
                     padding: 0
                   }}
                 >
@@ -425,7 +411,7 @@ export default function MapPage() {
                     letterSpacing: "0.06em",
                     textTransform: "uppercase",
                     color: "var(--muted-dark)",
-                    marginBottom: 7,
+                    marginBottom: 4,
                     padding: 0
                   }}
                 >
@@ -471,7 +457,7 @@ export default function MapPage() {
                     letterSpacing: "0.06em",
                     textTransform: "uppercase",
                     color: "var(--muted-dark)",
-                    marginBottom: 7,
+                    marginBottom: 4,
                     padding: 0
                   }}
                 >
@@ -514,6 +500,14 @@ export default function MapPage() {
 
           </div>
         </aside>
+      </div>
+
+      <div
+        role="status"
+        aria-live="polite"
+        className="nwMapActionsHint"
+      >
+        {compareHint || ""}
       </div>
     </div>
   );

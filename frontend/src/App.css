@@ -1,3 +1,16 @@
+/* Visually hidden but readable by screen readers (standard sr-only pattern) */
+.nwSrOnly {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* WCAG 2.2 Skip Link (2.4.1 Bypass Blocks) */
 .nwSkipLink {
   position: absolute;
@@ -320,18 +333,13 @@ body {
   align-items: stretch;
 }
 
-/* Left column wraps the map + the action buttons row below it. */
-.nwMapLeftCol {
-  flex: 1 1 65%;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  min-width: 0;
-}
-
 .nwMapLeft {
-  /* Map sized to leave room for action buttons within one viewport. */
-  height: clamp(380px, calc(100vh - 360px), 540px);
+  flex: 1 1 65%;
+  /* Fills the viewport on tall screens, but capped so it never gets absurdly
+     tall on 4K monitors. align-items:stretch on .nwMapLayout means the right
+     sidebar matches this height automatically. */
+  min-height: clamp(460px, calc(100vh - 240px), 900px);
+  position: relative;
 }
 
 .nwMapRight {
@@ -339,8 +347,7 @@ body {
   width: 380px;
 }
 
-/* Polished MapPage layout: keep right sidebar visually aligned with the
-   left column (map + actions). */
+/* Polished MapPage layout: keep right sidebar visually aligned with map. */
 .nwMapLayoutPolished .nwMapRight {
   display: flex;
 }
@@ -350,33 +357,88 @@ body {
   flex-direction: column;
   width: 100%;
   height: 100%;
+  padding: 16px 18px;
   background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
   overflow-y: auto;
 }
 
-/* Action row placed directly under the map (inside the left column only) */
-.nwMapActionsRow {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+/* ── Sidebar density tightening so the whole page fits one viewport ── */
+.nwMapSidebarCard .nwOverallScore {
+  font-size: 36px;
+  margin: 4px 0 6px;
 }
 
-.nwMapActionsRow .nwBtn {
+.nwMapSidebarCard .nwScoreBar {
+  padding: 9px 12px 8px;
+  border-radius: 14px;
+}
+
+.nwMapSidebarCard .nwScoreBarLabel,
+.nwMapSidebarCard .nwScoreBarValue {
+  font-size: 13px;
+}
+
+.nwMapSidebarCard .nwProgressOuter {
+  margin-top: 6px;
+  height: 6px;
+}
+
+.nwMapSidebarCard .nwRangeBtn {
+  padding: 7px 4px !important;
+  font-size: 12px !important;
+}
+
+/* ── Floating action bar overlaid on the map ── */
+.nwMapFloatingBar {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  /* Stay above leaflet panes (200-700) and zoom controls (we set those
+     to 500 earlier), but still below the navbar (2000). */
+  z-index: 1000;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 8px;
+  width: min(560px, calc(100% - 32px));
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 18px;
+  box-shadow:
+    0 14px 36px rgba(15, 23, 42, 0.22),
+    0 2px 6px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+}
+
+.nwMapFloatingBar .nwBtn {
   width: 100%;
-  padding: 14px 18px;
-  font-size: 15px;
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: 12px;
+  white-space: nowrap;
+  letter-spacing: 0.01em;
   text-align: center;
 }
 
 .nwMapActionsHint {
-  font-size: 13px;
+  margin-top: 12px;
+  font-size: 12px;
   color: var(--muted-dark);
-  min-height: 20px;
+  min-height: 18px;
 }
 
 @media (max-width: 720px) {
-  .nwMapActionsRow {
-    grid-template-columns: 1fr;
+  .nwMapFloatingBar {
+    bottom: 12px;
+    padding: 6px;
+    gap: 6px;
+  }
+  .nwMapFloatingBar .nwBtn {
+    padding: 8px 10px;
+    font-size: 12px;
   }
 }
 
@@ -1226,6 +1288,141 @@ body {
   margin: 0;
 }
 
+/* HOW IT WORKS — moved from About page, lives between value-prop and coverage */
+.howto-section {
+  background: #ffffff;
+  padding: 72px 40px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.howto-header {
+  text-align: center;
+  max-width: 620px;
+  margin: 0 auto 48px;
+}
+
+.howto-header-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+  margin-bottom: 10px;
+}
+
+.howto-header h2 {
+  font-family: var(--heading);
+  font-size: clamp(24px, 3vw, 34px);
+  font-weight: 500;
+  letter-spacing: -0.3px;
+  color: var(--text-h);
+  margin: 0;
+  line-height: 1.2;
+}
+
+.howto-steps {
+  list-style: none;
+  margin: 0 auto;
+  padding: 0;
+  max-width: 1080px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  align-items: stretch;
+}
+
+.howto-step {
+  position: relative;
+  background: #f8fafc;
+  border: 1px solid var(--border-light);
+  border-radius: 20px;
+  padding: 26px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.howto-step:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.08);
+  border-color: rgba(42, 157, 143, 0.32);
+  background: #ffffff;
+}
+
+.howto-step-number {
+  font-family: var(--heading);
+  font-size: 44px;
+  line-height: 1;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--accent-2) 0%, #4cc4b3 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+.howto-step-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.howto-step-label {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text-dark);
+}
+
+.howto-step-desc {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--muted-dark);
+}
+
+/* Connecting arrow between steps on wide screens */
+.howto-step-arrow {
+  position: absolute;
+  right: -14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--accent-2);
+  background: #ffffff;
+  border-radius: 999px;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+  z-index: 1;
+}
+
+@media (max-width: 980px) {
+  .howto-steps {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  /* In a 2-col grid, hide arrow at the end of row 1 (step 2) */
+  .howto-step:nth-child(2n) .howto-step-arrow {
+    display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .howto-section {
+    padding: 52px 20px;
+  }
+  .howto-steps {
+    grid-template-columns: 1fr;
+  }
+  .howto-step-arrow {
+    display: none;
+  }
+}
+
 /* SEARCH SECTION */
 .search-section {
   background: white;
@@ -1234,7 +1431,7 @@ body {
 }
 
 .search-inner {
-  max-width: 600px;
+  max-width: 880px;
   margin: 0 auto;
 }
 
@@ -1292,15 +1489,24 @@ body {
   line-height: 1;
 }
 
+/* Wrap input + dropdown so the dropdown can absolute-position relative to it */
+.search-field {
+  position: relative;
+}
+
 .search-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 50;
   background: white;
   border-radius: 14px;
-  margin-top: 6px;
   margin-bottom: 4px;
-  max-height: 220px;
+  max-height: 280px;
   overflow-y: auto;
   border: 1.5px solid var(--border-light);
-  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.1);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.18);
 }
 
 .search-dropdown-group-label {

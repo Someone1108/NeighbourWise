@@ -22,13 +22,6 @@ const SCORE_CATEGORIES = [
   },
 ]
 
-const HOW_TO_STEPS = [
-  { step: '1', label: 'Search', desc: 'Type a suburb name or street address in Melbourne.' },
-  { step: '2', label: 'Choose your profile', desc: 'Tell us your situation — family, elderly, or pet owner — so scores reflect what matters to you.' },
-  { step: '3', label: 'Explore', desc: 'See the liveability map, detailed scores, and nearby places of interest.' },
-  { step: '4', label: 'Compare', desc: 'Add areas to your compare list to weigh up two suburbs side by side.' },
-]
-
 export default function AboutPage() {
   return (
     <div className="nwPage nwAboutPage">
@@ -62,24 +55,6 @@ export default function AboutPage() {
               insights, helping users better understand each area.
             </p>
           </div>
-        </div>
-      </section>
-
-      {/* ── HOW IT WORKS ── */}
-      <section className="nwAboutSection">
-        <div className="nwAboutSectionHead">
-          <p className="nwAboutSectionEyebrow">How it works</p>
-          <h2 className="nwAboutSectionTitle">Four simple steps</h2>
-        </div>
-
-        <div className="nwAboutStepGrid">
-          {HOW_TO_STEPS.map(({ step, label, desc }) => (
-            <div key={step} className="nwAboutStepCard">
-              <div className="nwAboutStepNumber" aria-hidden="true">{step}</div>
-              <div className="nwAboutStepLabel">{label}</div>
-              <p className="nwAboutStepDesc">{desc}</p>
-            </div>
-          ))}
         </div>
       </section>
 
