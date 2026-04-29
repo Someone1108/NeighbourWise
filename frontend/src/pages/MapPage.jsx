@@ -9,7 +9,8 @@ import {
   getPoiInsights,
   getAqiForLocation,
   getLayerDataForSuburb,
-  getLayerDataForAddress
+  getLayerDataForAddress,
+  getLiveabilityScore
 } from "../services/api.js";
 import {
   addToCompareList,
@@ -61,6 +62,8 @@ export default function MapPage() {
   const [showInsights, setShowInsights] = useState(true);
   const [activeLayer, setActiveLayer] = useState("none");
   const [layerData, setLayerData] = useState(null);
+
+  const [scoreData, setScoreData] = useState(null);
   const [aqiData, setAqiData] = useState(null);
 
   const context = useMemo(() => {
@@ -125,6 +128,23 @@ export default function MapPage() {
       time: Number(rangeMinutes)
     });
 
+    const layerPromise = isSuburb
+      ? getLayerDataForSuburb(selectedLocation.name)
+      : isAddress
+        ? getLayerDataForAddress(
+            Number(selectedLocation.lat),
+            Number(selectedLocation.lng),
+            rangeMinutes
+          )
+        : Promise.resolve(null);
+
+    const scorePromise = getLiveabilityScore({
+      lat: Number(selectedLocation.lat),
+      lng: Number(selectedLocation.lng),
+      time: Number(rangeMinutes),
+      persona: profile || "default"
+    });
+
     const aqiPromise = getAqiForLocation({
       lat: Number(selectedLocation.lat),
       lng: Number(selectedLocation.lng)
@@ -140,25 +160,19 @@ export default function MapPage() {
       mapContextPromise,
       polygonPromise,
       poiPromise,
-      aqiPromise,
-      isSuburb
-        ? getLayerDataForSuburb(selectedLocation.name)
-        : isAddress
-          ? getLayerDataForAddress(
-              Number(selectedLocation.lat),
-              Number(selectedLocation.lng),
-              rangeMinutes
-            )
-          : Promise.resolve(null)
+      layerPromise,
+      scorePromise,
+      aqiPromise
     ])
-      .then(([data, polygon, poiResponse, aqiResponse, layers]) => {
+      .then(([data, polygon, poiResponse, layers, scores, aqiResponse]) => {
         if (cancelled) return;
 
         setMapData(data);
         setSuburbPolygon(polygon);
         setPoiData(poiResponse?.results || []);
-        setAqiData(aqiResponse || null);
         setLayerData(layers);
+        setScoreData(scores);
+        setAqiData(aqiResponse || null);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -223,13 +237,7 @@ export default function MapPage() {
           className="nwMapLeft"
           aria-label="Interactive neighbourhood map"
         >
-          {/* Loading announcement is screen-reader only — visible space-taking
-              text was causing the map to shift relative to the sidebar. */}
-          <div
-            aria-live="polite"
-            aria-atomic="true"
-            className="nwSrOnly"
-          >
+          <div aria-live="polite" aria-atomic="true" className="nwSrOnly">
             {loading ? "Loading map data, please wait…" : ""}
           </div>
 
@@ -341,6 +349,7 @@ export default function MapPage() {
               >
                 Liveability Score
               </div>
+
               {getProfileLabel(profile) && (
                 <div
                   style={{
@@ -353,20 +362,25 @@ export default function MapPage() {
                   Scored for: {getProfileLabel(profile)}
                 </div>
               )}
+
               <div
                 className="nwOverallScore"
                 style={{ marginBottom: 6 }}
                 aria-labelledby="liveability-score-label"
                 aria-live="polite"
               >
-                {mapData ? mapData.overallScore : "–"} / 100
+                {scoreData
+                  ? Number(scoreData.liveabilityScore).toFixed(2)
+                  : "–"}{" "}
+                / 100
               </div>
+
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {CATEGORY_KEYS.map((k) => (
                   <ScoreBar
                     key={k}
                     category={k}
-                    score={mapData?.scores?.[k]}
+                    score={scoreData?.scores?.[k]}
                     outOf={100}
                   />
                 ))}
@@ -406,6 +420,7 @@ export default function MapPage() {
                       : "Unavailable"}
                   </strong>
                 </div>
+
                 <div
                   style={{
                     marginTop: 5,
@@ -416,7 +431,8 @@ export default function MapPage() {
                 >
                   {aqiData?.available && aqiData.site
                     ? `EPA AirWatch station: ${aqiData.site.name} (${aqiData.site.distanceKm} km away)`
-                    : aqiData?.reason || "EPA AirWatch data will appear here once configured."}
+                    : aqiData?.reason ||
+                      "EPA AirWatch data will appear here once configured."}
                 </div>
               </div>
             </div>
@@ -444,12 +460,15 @@ export default function MapPage() {
                 >
                   Neighbourhood Range
                 </legend>
+
                 <div style={{ display: "flex", gap: 6 }}>
                   {[10, 20, 30].map((m) => (
                     <button
                       key={m}
                       type="button"
-                      className={`nwRangeBtn ${rangeMinutes === m ? "nwRangeBtnActive" : ""}`}
+                      className={`nwRangeBtn ${
+                        rangeMinutes === m ? "nwRangeBtnActive" : ""
+                      }`}
                       style={{
                         flex: 1,
                         padding: "8px 4px",
@@ -480,10 +499,13 @@ export default function MapPage() {
                 >
                   Nearby Amenities
                 </legend>
+
                 <div style={{ display: "flex", gap: 6 }}>
                   <button
                     type="button"
-                    className={`nwRangeBtn ${showInsights ? "nwRangeBtnActive" : ""}`}
+                    className={`nwRangeBtn ${
+                      showInsights ? "nwRangeBtnActive" : ""
+                    }`}
                     style={{
                       flex: 1,
                       padding: "8px 4px",
@@ -495,9 +517,12 @@ export default function MapPage() {
                   >
                     Show
                   </button>
+
                   <button
                     type="button"
-                    className={`nwRangeBtn ${!showInsights ? "nwRangeBtnActive" : ""}`}
+                    className={`nwRangeBtn ${
+                      !showInsights ? "nwRangeBtnActive" : ""
+                    }`}
                     style={{
                       flex: 1,
                       padding: "8px 4px",
@@ -526,6 +551,7 @@ export default function MapPage() {
                 >
                   Map Layer
                 </legend>
+
                 <div
                   style={{
                     display: "grid",
@@ -544,7 +570,9 @@ export default function MapPage() {
                     <button
                       key={key}
                       type="button"
-                      className={`nwRangeBtn ${activeLayer === key ? "nwRangeBtnActive" : ""}`}
+                      className={`nwRangeBtn ${
+                        activeLayer === key ? "nwRangeBtnActive" : ""
+                      }`}
                       style={{
                         padding: "8px 4px",
                         fontSize: 13,
@@ -560,16 +588,11 @@ export default function MapPage() {
                 </div>
               </fieldset>
             </div>
-
           </div>
         </aside>
       </div>
 
-      <div
-        role="status"
-        aria-live="polite"
-        className="nwMapActionsHint"
-      >
+      <div role="status" aria-live="polite" className="nwMapActionsHint">
         {compareHint || ""}
       </div>
     </div>
