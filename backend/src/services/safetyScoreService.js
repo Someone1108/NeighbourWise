@@ -193,7 +193,7 @@ async function getSafetyScore({ lat, lng, time = 20, persona = 'default' }) {
   const safetyScore = clampScore(rawSafetyScore);
 
   return {
-    safetyScore: Number(safetyScore.toFixed(2)),
+    safetyScore: Math.round(safetyScore),
     time,
     persona,
     radiusMeters,
