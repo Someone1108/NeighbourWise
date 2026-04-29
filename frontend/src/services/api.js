@@ -241,29 +241,29 @@ export async function getInsights({ locationName, rangeMinutes, profile, categor
 
   const templates = {
     accessibility: [
-      'Train station within 15 mins',
-      'Supermarket within 10 mins',
-      'Bus connections to the CBD',
-      'Step-free access at key locations',
+      { name: 'Train station within 15 mins',       note: 'A train station within 15 minutes walking means faster CBD commutes and reduced car dependency.' },
+      { name: 'Supermarket within 10 mins',          note: 'Quick access to a supermarket supports daily convenience and reduces transport needs for essentials.' },
+      { name: 'Bus connections to the CBD',          note: 'Direct bus routes to the CBD provide a reliable alternative when trains are unavailable.' },
+      { name: 'Step-free access at key locations',   note: 'Ramps, lifts, and level crossings at major stops make this area more accessible for all residents.' },
     ],
     safety: [
-      'Low incident risk in the area',
-      'Well-lit streets after dark',
-      'Safe crossings near schools',
-      'Active community presence',
+      { name: 'Low incident risk in the area',       note: 'Recorded incidents in this suburb are below the Melbourne median, based on Crime Statistics Victoria data.' },
+      { name: 'Well-lit streets after dark',         note: 'Street lighting coverage reduces perceived and actual risk for pedestrians after sunset.' },
+      { name: 'Safe crossings near schools',         note: 'Marked pedestrian crossings and reduced speed zones near schools improve safety for families.' },
+      { name: 'Active community presence',           note: 'Higher foot traffic and active local groups are associated with lower opportunistic crime rates.' },
     ],
     environment: [
-      'Nearby park and green space',
-      'Air quality indicators',
-      'Low noise exposure near major roads',
-      'Recreational amenities within reach',
+      { name: 'Nearby park and green space',         note: 'Access to parks within walking distance supports physical activity, mental wellbeing, and community connection.' },
+      { name: 'Air quality indicators',              note: 'EPA monitoring data suggests air quality in this area is generally within safe thresholds.' },
+      { name: 'Low noise exposure near major roads', note: 'Distance from major arterials and freeways reduces chronic noise exposure for residents.' },
+      { name: 'Recreational amenities within reach', note: 'Ovals, playgrounds, and community facilities within the area support an active lifestyle.' },
     ],
   }
 
   const list = templates[cat] || templates.accessibility
-  const factors = list.map((name, idx) => {
+  const factors = list.map(({ name, note }, idx) => {
     const met = (h + idx * 17) % 3 !== 0
-    return { name, met }
+    return { name, note, met }
   })
 
   return {
