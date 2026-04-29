@@ -32,7 +32,7 @@ const getLiveabilityScore = async ({
     E.environmentScore * weights.E;
 
   return {
-    liveabilityScore: Math.round(liveability * 100) / 100,
+    liveabilityScore: Math.round(liveability),
     time,
     persona,
     scores: {

@@ -153,7 +153,7 @@ const getAccessibilityScore = async ({
   }
 
   return {
-    accessibilityScore: Number(totalScore.toFixed(2)),
+    accessibilityScore: Math.round(totalScore),
     time,
     persona,
     breakdown

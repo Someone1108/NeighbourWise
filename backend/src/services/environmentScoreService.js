@@ -4,11 +4,13 @@
 
 const pool = require('../utils/db');
 const { MAX_DISTANCE_MAP } = require('../utils/distanceConfig');
+const { getAqiForLocation } = require('./aqiService');
 
 const ENVIRONMENT_WEIGHTS = {
-  green: 0.45,
-  heat: 0.35,
-  zoning: 0.20
+  green: 0.35,
+  heat: 0.30,
+  zoning: 0.15,
+  airQuality: 0.20
 };
 
 const HEAT_MIN = -8.6;
@@ -212,22 +214,44 @@ const getEnvironmentScore = async ({
 
   const zoningScore = calculateAverage(zoningScores);
 
-  // 4. Missing data fallback
+  // 4. Air quality score
+  let airQualityResult = null;
+  let airQualityScore = null;
+
+  try {
+    airQualityResult = await getAqiForLocation({
+      lat: safeLat,
+      lng: safeLng
+    });
+
+    airQualityScore = airQualityResult.available
+      ? airQualityResult.score
+      : null;
+  } catch (err) {
+    console.error('Air quality API error:', err.message);
+    airQualityScore = null;
+  }
+
+  // 5. Missing data fallback
   const missingData = {
-    green: greenScore === null,
-    heat: heatScore === null,
-    zoning: zoningScore === null
+  green: greenScore === null,
+  heat: heatScore === null,
+  zoning: zoningScore === null,
+  airQuality: airQualityScore === null
   };
 
   const finalGreenScore = greenScore ?? 50;
   const finalHeatScore = heatScore ?? 50;
   const finalZoningScore = zoningScore ?? 60;
-
+  const finalAirQualityScore = airQualityScore ?? 50;
+  
   // 5. Final Environment score
   const rawEnvironmentScore =
     finalGreenScore * ENVIRONMENT_WEIGHTS.green +
     finalHeatScore * ENVIRONMENT_WEIGHTS.heat +
-    finalZoningScore * ENVIRONMENT_WEIGHTS.zoning;
+    finalZoningScore * ENVIRONMENT_WEIGHTS.zoning +
+    finalAirQualityScore * ENVIRONMENT_WEIGHTS.airQuality;
+
 
   function calibrateEnvironmentScore(score) {
     return 25 + score * 0.75;
@@ -236,19 +260,22 @@ const getEnvironmentScore = async ({
   const environmentScore = calibrateEnvironmentScore(rawEnvironmentScore);
 
   return {
-    environmentScore: round2(environmentScore),
+    environmentScore: Math.round(environmentScore),
     time: selectedTime,
     persona,
     radiusMeters,
     scores: {
       green: finalGreenScore,
       heat: finalHeatScore,
-      zoning: finalZoningScore
+      zoning: finalZoningScore,
+      airQuality: finalAirQualityScore
     },
     rawData: {
       avgGreen: avgGreen !== null && avgGreen !== undefined ? Number(avgGreen) : null,
       avgHeat: avgHeat !== null && avgHeat !== undefined ? Number(avgHeat) : null,
-      zoningCount: zoningResult.rows.length
+      zoningCount: zoningResult.rows.length,
+      airQualitySite: airQualityResult?.site || null,
+      airQualitySource: airQualityResult?.source || null
     },
     missingData,
     weights: ENVIRONMENT_WEIGHTS
