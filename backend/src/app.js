@@ -6,6 +6,7 @@ const localityRoutes = require('./routes/localityRoutes');
 const insightRoutes = require('./routes/insightRoutes');
 const layerRoutes = require('./routes/layerRoutes');
 const scoreRoutes = require('./routes/scoreRoutes');
+const aqiRoutes = require('./routes/aqiRoutes');
 
 const app = express();
 
@@ -21,5 +22,6 @@ app.use('/api/locality', localityRoutes);
 app.use('/api/insights', insightRoutes);
 app.use('/api/layers', layerRoutes);
 app.use('/api/score', scoreRoutes);
+app.use('/api/aqi', aqiRoutes);
 
 module.exports = app;

@@ -14,6 +14,12 @@ import {
 
 const CATEGORY_KEYS = ['accessibility', 'safety', 'environment']
 
+const CATEGORY_META = {
+  accessibility: { label: 'Accessibility', icon: '🚌', tint: 'rgba(8, 145, 178, 0.12)' },
+  safety: { label: 'Safety', icon: '🛡', tint: 'rgba(244, 124, 32, 0.12)' },
+  environment: { label: 'Environment', icon: '🌿', tint: 'rgba(42, 157, 143, 0.12)' },
+}
+
 function safeRangeMinutes(value) {
   const n = Number(value)
   if ([10, 20, 30].includes(n)) return n
@@ -21,12 +27,7 @@ function safeRangeMinutes(value) {
 }
 
 function labelForCategory(key) {
-  const map = {
-    accessibility: 'Accessibility',
-    safety: 'Safety',
-    environment: 'Environment',
-  }
-  return map[key] || key
+  return CATEGORY_META[key]?.label || key
 }
 
 function getLocationLabel(item) {
@@ -321,7 +322,7 @@ export default function ComparePage() {
       </p>
 
       <div className="nwCompareTopGrid">
-        <div className="nwCard nwComparePanel">
+        <div className="nwCard nwComparePanel nwComparePanel--area1">
           <div className="nwCompareLabel">Area 1</div>
           {firstArea ? (
             <>
@@ -354,7 +355,7 @@ export default function ComparePage() {
           )}
         </div>
 
-        <div className="nwCard nwComparePanel">
+        <div className="nwCard nwComparePanel nwComparePanel--area2">
           <div className="nwCompareLabel">Area 2</div>
 
           {!activeSecondArea ? (
@@ -526,9 +527,19 @@ export default function ComparePage() {
                 {CATEGORY_KEYS.map((key) => {
                   const s1 = data.scores[key][0]
                   const s2 = data.scores[key][1]
+                  const meta = CATEGORY_META[key] || {}
                   return (
                     <tr key={key}>
-                      <td className="nwCompareRowTitle">{labelForCategory(key)}</td>
+                      <td className="nwCompareRowTitle">
+                        <span
+                          className="nwCompareCategoryIcon"
+                          style={{ background: meta.tint }}
+                          aria-hidden="true"
+                        >
+                          {meta.icon}
+                        </span>
+                        {labelForCategory(key)}
+                      </td>
                       <td style={s1 > s2 ? { background: 'rgba(42,157,143,0.06)' } : {}}>
                         <div className="nwCompareCellScore" style={s1 > s2 ? { color: 'var(--accent-2)' } : {}}>
                           {s1} / 100
