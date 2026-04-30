@@ -75,6 +75,39 @@ async function fetchJson(url) {
   return response.json()
 }
 
+const cachedGetRequests = new Map()
+
+async function fetchCachedJson(url) {
+  if (cachedGetRequests.has(url)) {
+    return cachedGetRequests.get(url)
+  }
+
+  const request = fetchJson(url).catch((error) => {
+    cachedGetRequests.delete(url)
+    throw error
+  })
+
+  cachedGetRequests.set(url, request)
+  return request
+}
+
+function normalizePersona(input) {
+  if (typeof input === 'string') {
+    const key = input.trim().toLowerCase()
+    if (['default', 'family', 'elderly', 'pet'].includes(key)) return key
+    if (key === 'pet_owner') return 'pet'
+    return 'default'
+  }
+
+  if (input && typeof input === 'object') {
+    if (input.familyWithChildren) return 'family'
+    if (input.elderly) return 'elderly'
+    if (input.petOwner) return 'pet'
+  }
+
+  return 'default'
+}
+
 /**
  * REAL BACKEND POI INSIGHTS
  * Returns nearby points of interest (POIs) based on user location,
@@ -406,25 +439,9 @@ export async function getLiveabilityScore({ lat, lng, time, persona }) {
   }
 
   const safeTime = [10, 20, 30].includes(Number(time)) ? Number(time) : 20
-  function normalizePersona(input) {
-    if (typeof input === 'string') {
-      const key = input.trim().toLowerCase()
-      if (['default', 'family', 'elderly', 'pet'].includes(key)) return key
-      if (key === 'pet_owner') return 'pet'
-      return 'default'
-    }
-
-    if (input && typeof input === 'object') {
-      if (input.familyWithChildren) return 'family'
-      if (input.elderly) return 'elderly'
-      if (input.petOwner) return 'pet'
-    }
-
-    return 'default'
-  }
   const safePersona = normalizePersona(persona)
 
-  return fetchJson(
+  return fetchCachedJson(
     `${API_BASE_URL}/api/score/liveability?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}&time=${encodeURIComponent(safeTime)}&persona=${encodeURIComponent(safePersona)}`
   )
 }
@@ -444,11 +461,11 @@ export async function getCensusProfileForLocation(selectedLocation) {
 
   if (placeType === 'suburb' || placeType === 'locality') {
     if (!name) throw new Error('Suburb name is required')
-    return fetchJson(`${API_BASE_URL}/api/census/suburb/${encodeURIComponent(name)}`)
+    return fetchCachedJson(`${API_BASE_URL}/api/census/suburb/${encodeURIComponent(name)}`)
   }
 
   if (placeType === 'postcode' && postcode) {
-    return fetchJson(`${API_BASE_URL}/api/census/postcode/${encodeURIComponent(postcode)}`)
+    return fetchCachedJson(`${API_BASE_URL}/api/census/postcode/${encodeURIComponent(postcode)}`)
   }
 
   const lat = Number(selectedLocation.lat)
@@ -458,7 +475,35 @@ export async function getCensusProfileForLocation(selectedLocation) {
     throw new Error('Valid lat/lng are required for Census location lookup')
   }
 
-  return fetchJson(
+  return fetchCachedJson(
     `${API_BASE_URL}/api/census/location?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}`
   )
+}
+
+export async function prefetchInsightPageData({ selectedLocation, rangeMinutes, profile }) {
+  const lat = Number(selectedLocation?.lat)
+  const lng = Number(selectedLocation?.lng)
+
+  if (!selectedLocation || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return null
+  }
+
+  const scoreP = getLiveabilityScore({
+    lat,
+    lng,
+    time: rangeMinutes,
+    persona: profile || 'default',
+  }).catch((err) => {
+    console.error('Insight score prefetch error:', err)
+    return null
+  })
+
+  const censusP = getCensusProfileForLocation(selectedLocation).catch((err) => {
+    console.error('Insight Census prefetch error:', err)
+    return null
+  })
+
+  const [scoreData, censusProfile] = await Promise.all([scoreP, censusP])
+
+  return { scoreData, censusProfile }
 }
