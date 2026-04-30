@@ -85,6 +85,13 @@ export default function MapPage() {
     locationKind === "street" ||
     locationKind === "postcode";
 
+  const scoreValue = Number(
+    scoreData?.liveabilityScore ?? mapData?.overallScore
+  );
+  const overallScore = Number.isFinite(scoreValue) ? scoreValue : null;
+  const overallScoreDisplay =
+    overallScore === null ? "–" : Math.round(overallScore);
+
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, []);
@@ -335,7 +342,6 @@ export default function MapPage() {
 
         <aside className="nwMapRight">
           <div className="nwCard nwMapSidebarCard" style={{ textAlign: "left" }}>
-<<<<<<< HEAD
             <div className="nwScoreHeader" aria-label="Liveability scores">
               <div className="nwScoreHeaderTop">
                 <div className="nwScoreHeaderInfo">
@@ -349,7 +355,7 @@ export default function MapPage() {
                     Overall<br />Liveability
                   </h2>
                   {(() => {
-                    const s = mapData?.overallScore;
+                    const s = overallScore;
                     let tier = { label: "—", className: "is-na" };
                     if (Number.isFinite(s)) {
                       if (s >= 80) tier = { label: "Excellent", className: "is-excellent" };
@@ -371,62 +377,24 @@ export default function MapPage() {
                   )}
                 </div>
 
-=======
-            <div style={{ marginBottom: 4 }} aria-label="Liveability scores">
-              <div
-                style={{
-                  fontSize: 11,
-                  fontWeight: 800,
-                  letterSpacing: "0.1em",
-                  textTransform: "uppercase",
-                  color: "var(--accent-2)",
-                  marginBottom: 2
-                }}
-                id="liveability-score-label"
-              >
-                Liveability Score
-              </div>
-
-              {getProfileLabel(profile) && (
->>>>>>> origin/develop
                 <div
                   className="nwScoreDonut"
                   aria-labelledby="liveability-score-label"
                   aria-live="polite"
                   style={{
-                    "--nw-score": Number.isFinite(mapData?.overallScore)
-                      ? mapData.overallScore
-                      : 0
+                    "--nw-score": overallScore ?? 0
                   }}
                 >
                   <div className="nwScoreDonutInner">
                     <div className="nwScoreDonutValue">
-                      {mapData ? mapData.overallScore : "–"}
+                      {overallScoreDisplay}
                     </div>
                     <div className="nwScoreDonutOf">/100</div>
                   </div>
                 </div>
-<<<<<<< HEAD
               </div>
 
               <div className="nwScoreHeaderBars">
-=======
-              )}
-
-              <div
-                className="nwOverallScore"
-                style={{ marginBottom: 6 }}
-                aria-labelledby="liveability-score-label"
-                aria-live="polite"
-              >
-                {scoreData
-                  ? Number(scoreData.liveabilityScore).toFixed(2)
-                  : "–"}{" "}
-                / 100
-              </div>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
->>>>>>> origin/develop
                 {CATEGORY_KEYS.map((k) => (
                   <ScoreBar
                     key={k}
