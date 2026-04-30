@@ -10,7 +10,8 @@ import {
   getAqiForLocation,
   getLayerDataForSuburb,
   getLayerDataForAddress,
-  getLiveabilityScore
+  getLiveabilityScore,
+  prefetchInsightPageData
 } from "../services/api.js";
 import {
   addToCompareList,
@@ -199,6 +200,30 @@ export default function MapPage() {
       cancelled = true;
     };
   }, [context, selectedLocation, profile, rangeMinutes, isSuburb, isAddress]);
+
+  useEffect(() => {
+    if (loading || error || !selectedLocation || !profile) return;
+
+    let cancelled = false;
+    const runPrefetch = () => {
+      if (cancelled) return;
+      prefetchInsightPageData({ selectedLocation, profile, rangeMinutes });
+    };
+
+    const idleId =
+      typeof window.requestIdleCallback === "function"
+        ? window.requestIdleCallback(runPrefetch, { timeout: 1500 })
+        : window.setTimeout(runPrefetch, 500);
+
+    return () => {
+      cancelled = true;
+      if (typeof window.cancelIdleCallback === "function") {
+        window.cancelIdleCallback(idleId);
+      } else {
+        window.clearTimeout(idleId);
+      }
+    };
+  }, [loading, error, selectedLocation, profile, rangeMinutes]);
 
   if (error) {
     return (

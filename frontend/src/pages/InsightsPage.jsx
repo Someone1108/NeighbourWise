@@ -57,42 +57,152 @@ function getProfileLabel(profile) {
   return null
 }
 
-function buildInterpretation(scores, locationName, profileLabel, rangeMinutes) {
-  const area = locationName || 'this area'
-  const profileText = profileLabel
-    ? `for a ${profileLabel.toLowerCase()} profile`
-    : 'for a general profile'
-  const rangeText = `${rangeMinutes}-minute`
-
+function buildInterpretationSummary(scores, profileLabel, rangeMinutes) {
   const rows = CATEGORIES.map((key) => {
-    const value = Number(scores?.[key] ?? 0)
+    const value = Number(scores?.[key])
     const avg = Number(MELBOURNE_AVG[key] ?? 0)
-    const delta = value - avg
-    return { key, value, avg, delta }
+    const delta = Number.isFinite(value) ? value - avg : null
+    return {
+      key,
+      label: CATEGORY_CONFIG[key].label,
+      value,
+      avg,
+      delta,
+    }
+  }).filter((row) => Number.isFinite(row.value))
+
+  if (!rows.length) return null
+
+  const byScore = [...rows].sort((a, b) => b.value - a.value)
+  const strongest = byScore[0]
+  const weakest = byScore[byScore.length - 1]
+  const middle = byScore[1]
+  const scoreSpread = strongest.value - weakest.value
+  const profileText = profileLabel ? ` for a ${profileLabel.toLowerCase()} profile` : ''
+  const focusLabel = strongest.label.toLowerCase()
+  const tradeoffLabel = weakest.label.toLowerCase()
+
+  const headline = `Best fit: ${focusLabel}-focused living`
+  const verdict =
+    middle && strongest.key !== weakest.key
+      ? `This area's strongest signal is ${strongest.label}, scoring ${Math.round(strongest.value)}/100. ${middle.label} is close behind at ${Math.round(middle.value)}/100, while ${weakest.label} is the main trade-off at ${Math.round(weakest.value)}/100.`
+      : `This area's strongest signal is ${strongest.label}, scoring ${Math.round(strongest.value)}/100.`
+
+  const context =
+    scoreSpread <= 8
+      ? 'The category scores are fairly close, so this is a balanced area rather than one with a single standout strength.'
+      : `${strongest.label} stands out most clearly, while ${weakest.label.toLowerCase()} is the area to check more carefully.`
+
+  const nextAction =
+    strongest.key === weakest.key
+      ? `Use this score as a comparison guide for your ${rangeMinutes}-minute search${profileText}.`
+      : `If ${tradeoffLabel} is a top priority, it may be worth comparing a few nearby alternatives before deciding.`
+
+  return {
+    headline,
+    verdict,
+    closingLine: `${context} ${nextAction}`,
+    rows,
+  }
+}
+
+function categoryComparisonText(rows = []) {
+  if (!rows.length) return ''
+
+  const parts = rows.map((row) => {
+    const delta = Number(row.delta)
+    if (!Number.isFinite(delta)) return `${row.label} has no city average to compare against`
+    if (Math.abs(delta) <= 2) return `${row.label} is close to the Melbourne average`
+    if (delta > 0) return `${row.label} is above the Melbourne average`
+    return `${row.label} is below the Melbourne average`
   })
 
-  const byDelta = [...rows].sort((a, b) => a.delta - b.delta)
-  const lowestDelta = byDelta[0]
-  const middleDelta = byDelta[1]
-  const highestDelta = byDelta[2]
+  return parts.join('. ') + '.'
+}
 
-  const highestLabel = CATEGORY_CONFIG[highestDelta.key].label
-  const middleLabel = CATEGORY_CONFIG[middleDelta.key].label
-  const lowestLabel = CATEGORY_CONFIG[lowestDelta.key].label
+function findIndicator(indicators, category, namePart) {
+  const factors = indicators?.[category]?.factors || []
+  const needle = String(namePart).toLowerCase()
+  return factors.find((factor) => String(factor.name || '').toLowerCase().includes(needle))
+}
 
-  function deltaText(delta) {
-    if (delta >= 0) return `${delta.toFixed(1)} points above Melbourne average`
-    return `${Math.abs(delta).toFixed(1)} points below Melbourne average`
+function compactIndicatorPhrase(factor, fallbackLabel) {
+  if (!factor) return `${fallbackLabel} unavailable`
+  const score = Number(factor.score)
+  if (!Number.isFinite(score)) return `${factor.name} is unavailable`
+
+  const name = String(factor.name || fallbackLabel).toLowerCase()
+  if (score >= 80) return `${name} looks like a clear strength`
+  if (score >= 65) return `${name} looks reliable`
+  if (score >= 50) return `${name} is usable, but not a standout`
+  return `${name} may need extra planning`
+}
+
+function buildSituationHighlights(profile, scores, indicators) {
+  if (!profile) return null
+
+  const accessibility = Number(scores?.accessibility)
+  const safety = Number(scores?.safety)
+  const environment = Number(scores?.environment)
+
+  if (profile.familyWithChildren) {
+    const school = findIndicator(indicators, 'accessibility', 'school')
+    const park = findIndicator(indicators, 'accessibility', 'park')
+    return {
+      title: 'For a family household',
+      summary: 'For a family household, the key checks are school access, parks and safety.',
+      points: [
+        compactIndicatorPhrase(school, 'School access'),
+        compactIndicatorPhrase(park, 'Park access'),
+        Number.isFinite(safety)
+          ? safety >= 65
+            ? 'the safety signal is generally reassuring'
+            : 'the safety signal is worth checking more carefully'
+          : 'safety context is unavailable',
+      ],
+    }
   }
 
-  function absoluteBand(score) {
-    if (score >= 80) return 'strong in absolute level'
-    if (score >= 65) return 'good in absolute level'
-    if (score >= 50) return 'moderate in absolute level'
-    return 'low in absolute level'
+  if (profile.elderly) {
+    const bus = findIndicator(indicators, 'accessibility', 'bus stop')
+    const train = findIndicator(indicators, 'accessibility', 'train')
+    const hospital = findIndicator(indicators, 'accessibility', 'hospital')
+    return {
+      title: 'For an older resident',
+      summary: 'For an older resident, the key checks are transport, healthcare and outdoor comfort.',
+      points: [
+        compactIndicatorPhrase(bus, 'Bus stop coverage'),
+        compactIndicatorPhrase(train, 'Train station access'),
+        compactIndicatorPhrase(hospital, 'Hospital access'),
+        Number.isFinite(environment)
+          ? environment >= 65
+            ? 'outdoor comfort looks reasonably supportive'
+            : 'outdoor comfort may need extra consideration'
+          : 'outdoor comfort is unavailable',
+      ],
+    }
   }
 
-  return `${area} performs relatively best on ${highestLabel} (${highestDelta.value}/100), which is ${deltaText(highestDelta.delta)} and ${absoluteBand(highestDelta.value)}. ${middleLabel} is ${middleDelta.value}/100 (${deltaText(middleDelta.delta)}), showing a middle position versus city baseline. The main improvement area is ${lowestLabel} at ${lowestDelta.value}/100, which is ${deltaText(lowestDelta.delta)}. For your ${rangeText} search ${profileText}, this area is more suitable if your priority is ${highestLabel.toLowerCase()}, while users who care most about ${lowestLabel.toLowerCase()} may want to compare a few nearby alternatives.`
+  if (profile.petOwner) {
+    const dogPark = findIndicator(indicators, 'accessibility', 'dog park')
+    const park = findIndicator(indicators, 'accessibility', 'park')
+    const green = findIndicator(indicators, 'environment', 'green')
+    return {
+      title: 'For a pet owner',
+      summary: 'For a pet owner, the key checks are parks, green coverage and daily access.',
+      points: [
+        compactIndicatorPhrase(dogPark || park, 'Park access'),
+        compactIndicatorPhrase(green, 'Green coverage'),
+        Number.isFinite(accessibility)
+          ? accessibility >= 65
+            ? 'daily access looks convenient overall'
+            : 'daily access may require more planning'
+          : 'daily access is unavailable',
+      ],
+    }
+  }
+
+  return null
 }
 
 const ACCESSIBILITY_FACTOR_LABELS = {
@@ -127,6 +237,74 @@ const INDICATOR_WEIGHT_CONFIG = {
 
 const TIME_DISTANCE_KM = { 10: 0.8, 20: 1.6, 30: 2.4 }
 
+function getIndicatorStatus(score) {
+  const value = Number(score)
+  if (!Number.isFinite(value)) {
+    return { label: 'Unavailable', tone: 'neutral' }
+  }
+  if (value >= 80) return { label: 'Strong', tone: 'positive' }
+  if (value >= 65) return { label: 'Good', tone: 'positive' }
+  if (value >= 50) return { label: 'Needs attention', tone: 'caution' }
+  return { label: 'Limited', tone: 'negative' }
+}
+
+function getImpactText(score, categoryLabel) {
+  const value = Number(score)
+  if (!Number.isFinite(value)) return 'Impact unavailable'
+  if (value >= 80) return `Strongly improves ${categoryLabel.toLowerCase()}`
+  if (value >= 65) return `Supports ${categoryLabel.toLowerCase()}`
+  if (value >= 50) return `Slightly reduces ${categoryLabel.toLowerCase()}`
+  return `Pulls ${categoryLabel.toLowerCase()} down`
+}
+
+function summarizeCategory(category, factors = []) {
+  const label = CATEGORY_CONFIG[category]?.label || 'This category'
+  const scored = factors
+    .map((factor) => ({ ...factor, numericScore: Number(factor.score) }))
+    .filter((factor) => Number.isFinite(factor.numericScore))
+
+  if (!scored.length) {
+    return `No detailed ${label.toLowerCase()} indicators are available yet.`
+  }
+
+  const sorted = [...scored].sort((a, b) => b.numericScore - a.numericScore)
+  const best = sorted[0]
+  const weakest = sorted[sorted.length - 1]
+
+  if (weakest.numericScore < 60 && best.numericScore >= 70) {
+    return `${label} is helped most by ${best.name.toLowerCase()}, while ${weakest.name.toLowerCase()} is the main thing pulling the score down.`
+  }
+
+  if (weakest.numericScore >= 65) {
+    return `${label} is fairly balanced, with ${best.name.toLowerCase()} as the strongest contributor.`
+  }
+
+  return `${label} has mixed signals. ${best.name} performs best, but ${weakest.name.toLowerCase()} needs attention.`
+}
+
+function groupIndicatorFactors(factors = []) {
+  const strengths = []
+  const needsAttention = []
+  const supporting = []
+
+  factors.forEach((factor) => {
+    const score = Number(factor.score)
+    if (Number.isFinite(score) && score >= 75) {
+      strengths.push(factor)
+    } else if (Number.isFinite(score) && score < 60) {
+      needsAttention.push(factor)
+    } else {
+      supporting.push(factor)
+    }
+  })
+
+  return [
+    { title: 'Biggest strengths', factors: strengths },
+    { title: 'Needs attention', factors: needsAttention },
+    { title: 'Supporting factors', factors: supporting },
+  ].filter((group) => group.factors.length > 0)
+}
+
 function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
   const accessibilityBreakdown = breakdown.accessibility?.breakdown || {}
   const safety = breakdown.safety || {}
@@ -159,89 +337,139 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
 
     return {
       name: ACCESSIBILITY_FACTOR_LABELS[type] || type.replaceAll('_', ' '),
+      score,
       met: score >= 60,
-      summary: `Score ${score.toFixed(1)}/100`,
+      summary: `${getIndicatorStatus(score).label}: ${score.toFixed(1)}/100`,
+      plainText: `${ACCESSIBILITY_FACTOR_LABELS[type] || type.replaceAll('_', ' ')} scores ${score.toFixed(1)}/100. The nearest result is ${distanceText}, with ${count} found in the selected range.`,
+      impact: getImpactText(score, 'Accessibility'),
       lines: [
-        `Nearest place: ${distanceText}`,
-        `Found in range: ${count} (target ${target})`,
-        `Formula parts: distance ${distanceScore.toFixed(1)} + count ${countScore.toFixed(1)}`,
         convenienceHint,
       ],
-      note: `Distance weight ${indicatorWeights.distance}, count weight ${indicatorWeights.count}.`,
+      details: [
+        `Nearest place: ${distanceText}`,
+        `Availability: ${count} found, target ${target}`,
+        `Distance score: ${distanceScore.toFixed(1)}/100`,
+        `Availability score: ${countScore.toFixed(1)}/100`,
+        `Weighting: distance ${Math.round(indicatorWeights.distance * 100)}%, availability ${Math.round(indicatorWeights.count * 100)}%`,
+      ],
     }
   })
+
+  const crimeScore = Number(safety?.scores?.crime)
+  const zoningSafetyScore = Number(safety?.scores?.zoning)
+  const finalSafetyScore = Number(safety?.safetyScore)
 
   const safetyFactors = [
     {
       name: 'Crime context score',
-      met: Number(safety?.scores?.crime) >= 60,
-      summary: `Crime score ${safety?.scores?.crime ?? 'N/A'}/100`,
+      score: crimeScore,
+      met: crimeScore >= 60,
+      summary: Number.isFinite(crimeScore) ? `${getIndicatorStatus(crimeScore).label}: ${crimeScore}/100` : 'Unavailable',
+      plainText: Number.isFinite(crimeScore)
+        ? `Crime context scores ${crimeScore}/100 based on nearby suburb crime patterns.`
+        : 'Crime context is unavailable for this area.',
+      impact: getImpactText(crimeScore, 'Safety'),
       lines: [
-        `Nearby suburbs used: ${safety?.crimeDetails?.suburbCount ?? 0}`,
-        Number(safety?.scores?.crime) >= 60
+        crimeScore >= 60
           ? 'Lower crime risk in this selected range.'
           : 'Crime risk is relatively higher in this selected range.',
       ],
+      details: [`Nearby suburbs used: ${safety?.crimeDetails?.suburbCount ?? 0}`],
     },
     {
       name: 'Zoning safety score',
-      met: Number(safety?.scores?.zoning) >= 60,
-      summary: `Zoning score ${safety?.scores?.zoning ?? 'N/A'}/100`,
+      score: zoningSafetyScore,
+      met: zoningSafetyScore >= 60,
+      summary: Number.isFinite(zoningSafetyScore) ? `${getIndicatorStatus(zoningSafetyScore).label}: ${zoningSafetyScore}/100` : 'Unavailable',
+      plainText: Number.isFinite(zoningSafetyScore)
+        ? `Zoning safety scores ${zoningSafetyScore}/100 from nearby land-use patterns.`
+        : 'Zoning safety is unavailable for this area.',
+      impact: getImpactText(zoningSafetyScore, 'Safety'),
       lines: [
-        `Zoning features used: ${safety?.zoningDetails?.zoneCount ?? 0}`,
         'Land-use around you is translated into safety-friendly scores.',
       ],
+      details: [`Zoning features used: ${safety?.zoningDetails?.zoneCount ?? 0}`],
     },
     {
       name: 'Combined safety output',
-      met: Number(safety?.safetyScore) >= 60,
-      summary: `Final safety score ${safety?.safetyScore ?? 'N/A'}/100`,
+      score: finalSafetyScore,
+      met: finalSafetyScore >= 60,
+      summary: Number.isFinite(finalSafetyScore) ? `${getIndicatorStatus(finalSafetyScore).label}: ${finalSafetyScore}/100` : 'Unavailable',
+      plainText: Number.isFinite(finalSafetyScore)
+        ? `The final safety score is ${finalSafetyScore}/100 after combining crime and zoning signals.`
+        : 'The final safety score is unavailable for this area.',
+      impact: getImpactText(finalSafetyScore, 'Safety'),
       lines: [
-        'Final mix: crime 57% + zoning 43%',
-        Number(safety?.safetyScore) >= 60
+        finalSafetyScore >= 60
           ? 'Overall, this area feels comparatively safer.'
           : 'Overall, safety conditions are more mixed here.',
       ],
+      details: ['Final mix: crime 57%, zoning 43%'],
     },
   ]
+
+  const greenScore = Number(environment?.scores?.green)
+  const heatScore = Number(environment?.scores?.heat)
+  const zoningComfortScore = Number(environment?.scores?.zoning)
+  const airQualityScore = Number(environment?.scores?.airQuality)
 
   const environmentFactors = [
     {
       name: 'Green coverage',
-      met: Number(environment?.scores?.green) >= 60,
-      summary: `Green score ${environment?.scores?.green ?? 'N/A'}/100`,
+      score: greenScore,
+      met: greenScore >= 60,
+      summary: Number.isFinite(greenScore) ? `${getIndicatorStatus(greenScore).label}: ${greenScore}/100` : 'Unavailable',
+      plainText: Number.isFinite(greenScore)
+        ? `Green coverage scores ${greenScore}/100 based on vegetation and green space nearby.`
+        : 'Green coverage is unavailable for this area.',
+      impact: getImpactText(greenScore, 'Environment'),
       lines: [
-        Number(environment?.scores?.green) >= 60
+        greenScore >= 60
           ? 'Good amount of vegetation and green cover nearby.'
           : 'Green cover is more limited in this selected range.',
       ],
     },
     {
       name: 'Urban heat',
-      met: Number(environment?.scores?.heat) >= 60,
-      summary: `Heat score ${environment?.scores?.heat ?? 'N/A'}/100`,
+      score: heatScore,
+      met: heatScore >= 60,
+      summary: Number.isFinite(heatScore) ? `${getIndicatorStatus(heatScore).label}: ${heatScore}/100` : 'Unavailable',
+      plainText: Number.isFinite(heatScore)
+        ? `Urban heat scores ${heatScore}/100. Higher scores mean cooler and more comfortable outdoor conditions.`
+        : 'Urban heat is unavailable for this area.',
+      impact: getImpactText(heatScore, 'Environment'),
       lines: [
         'Higher score means cooler and more comfortable outdoor conditions.',
       ],
     },
     {
       name: 'Environmental zoning comfort',
-      met: Number(environment?.scores?.zoning) >= 60,
-      summary: `Zoning comfort score ${environment?.scores?.zoning ?? 'N/A'}/100`,
+      score: zoningComfortScore,
+      met: zoningComfortScore >= 60,
+      summary: Number.isFinite(zoningComfortScore) ? `${getIndicatorStatus(zoningComfortScore).label}: ${zoningComfortScore}/100` : 'Unavailable',
+      plainText: Number.isFinite(zoningComfortScore)
+        ? `Environmental zoning comfort scores ${zoningComfortScore}/100 from nearby land-use types.`
+        : 'Environmental zoning comfort is unavailable for this area.',
+      impact: getImpactText(zoningComfortScore, 'Environment'),
       lines: [
         'Nearby land-use types are mapped to comfort levels.',
       ],
     },
     {
       name: 'Air quality',
-      met: Number(environment?.scores?.airQuality) >= 60,
-      summary: `Air quality score ${environment?.scores?.airQuality ?? 'N/A'}/100`,
+      score: airQualityScore,
+      met: airQualityScore >= 60,
+      summary: Number.isFinite(airQualityScore) ? `${getIndicatorStatus(airQualityScore).label}: ${airQualityScore}/100` : 'Unavailable',
+      plainText: Number.isFinite(airQualityScore)
+        ? `Air quality scores ${airQualityScore}/100 using the nearest available air quality signal.`
+        : 'Air quality is unavailable for this area.',
+      impact: getImpactText(airQualityScore, 'Environment'),
       lines: [
-        `Source: ${environment?.rawData?.airQualitySource || 'Air quality dataset'}`,
-        Number(environment?.scores?.airQuality) >= 60
+        airQualityScore >= 60
           ? 'Air quality is generally healthy for daily activity.'
           : 'Air quality may need more caution on sensitive days.',
       ],
+      details: [`Source: ${environment?.rawData?.airQualitySource || 'Air quality dataset'}`],
     },
   ]
 
@@ -249,16 +477,19 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
     accessibility: {
       category: 'accessibility',
       factors: accessibilityFactors,
+      takeaway: summarizeCategory('accessibility', accessibilityFactors),
       scoreExplanation: 'Computed from real POI distance and count data.',
     },
     safety: {
       category: 'safety',
       factors: safetyFactors,
+      takeaway: summarizeCategory('safety', safetyFactors),
       scoreExplanation: 'Computed from crime context and zoning safety model.',
     },
     environment: {
       category: 'environment',
       factors: environmentFactors,
+      takeaway: summarizeCategory('environment', environmentFactors),
       scoreExplanation: 'Computed from green, heat, zoning and air-quality signals.',
     },
   }
@@ -344,9 +575,28 @@ function CompareBar({ value, avg, color }) {
   )
 }
 
+function IndicatorScoreBar({ score, color }) {
+  const value = Number(score)
+  const safeValue = Number.isFinite(value) ? Math.max(0, Math.min(value, 100)) : 0
+
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div style={{ height: 7, borderRadius: 999, background: 'rgba(15,23,42,0.08)', overflow: 'hidden' }}>
+        <div style={{ width: `${safeValue}%`, height: '100%', background: color, borderRadius: 999 }} />
+      </div>
+    </div>
+  )
+}
+
 function IndicatorCard({ factor, color, soft, border }) {
   const [open, setOpen] = useState(false)
-  const met = factor.met
+  const status = getIndicatorStatus(factor.score)
+  const isPositive = status.tone === 'positive'
+  const isCaution = status.tone === 'caution'
+  const cardBorder = isPositive ? border : isCaution ? '#fde68a' : '#e5e7eb'
+  const cardBackground = isPositive ? soft : isCaution ? '#fffbeb' : '#fff'
+  const badgeBackground = isPositive ? color : isCaution ? '#d97706' : '#e5e7eb'
+  const badgeColor = isPositive || isCaution ? '#fff' : '#6b7280'
   return (
     <button
       onClick={() => setOpen(o => !o)}
@@ -355,8 +605,8 @@ function IndicatorCard({ factor, color, soft, border }) {
         all: 'unset',
         display: 'block',
         width: '100%',
-        background: met ? soft : '#fafafa',
-        border: `1.5px solid ${met ? border : '#e5e7eb'}`,
+        background: cardBackground,
+        border: `1.5px solid ${cardBorder}`,
         borderRadius: 14,
         padding: '14px 16px',
         cursor: 'pointer',
@@ -373,35 +623,59 @@ function IndicatorCard({ factor, color, soft, border }) {
         <div style={{
           width: 28, height: 28, borderRadius: 8, flexShrink: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: met ? color : '#e5e7eb',
-          color: met ? '#fff' : '#6b7280',
-          fontSize: 12, fontWeight: 900,
+          background: badgeBackground,
+          color: badgeColor,
+          fontSize: 11, fontWeight: 900,
         }} aria-hidden="true">
-          {met ? '✓' : '✕'}
+          {isPositive ? '+' : isCaution ? '!' : '-'}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ fontWeight: 700, fontSize: 13, color: '#1a2436', lineHeight: 1.35 }}>{factor.name}</p>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+            <p style={{ fontWeight: 800, fontSize: 13, color: '#1a2436', lineHeight: 1.35 }}>{factor.name}</p>
+            <span style={{
+              flexShrink: 0,
+              borderRadius: 999,
+              padding: '2px 8px',
+              background: isPositive ? 'rgba(5,150,105,0.12)' : isCaution ? 'rgba(217,119,6,0.14)' : 'rgba(107,114,128,0.12)',
+              color: isPositive ? '#047857' : isCaution ? '#92400e' : '#4b5563',
+              fontSize: 10,
+              fontWeight: 900,
+            }}>
+              {status.label}
+            </span>
+          </div>
           {factor.summary ? (
-            <p style={{ fontSize: 12, color: '#4b5563', marginTop: 6, lineHeight: 1.6, fontWeight: 600 }}>
+            <p style={{ fontSize: 12, color: '#4b5563', marginTop: 6, lineHeight: 1.5, fontWeight: 700 }}>
               {factor.summary}
             </p>
           ) : null}
-          {open && Array.isArray(factor.lines) && factor.lines.length > 0 ? (
-            <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <IndicatorScoreBar score={factor.score} color={color} />
+          {factor.plainText ? (
+            <p style={{ marginTop: 9, fontSize: 12, color: '#4b5563', lineHeight: 1.6 }}>
+              {factor.plainText}
+            </p>
+          ) : null}
+          {factor.impact ? (
+            <p style={{ marginTop: 8, fontSize: 11, fontWeight: 900, color }}>
+              {factor.impact}
+            </p>
+          ) : null}
+          {open ? (
+            <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(15,23,42,0.08)', display: 'flex', flexDirection: 'column', gap: 5 }}>
               {factor.lines.map((line, idx) => (
-                <p key={idx} style={{ fontSize: 12, color: '#6b7280', lineHeight: 1.55 }}>
+                <p key={`line-${idx}`} style={{ fontSize: 12, color: '#4b5563', lineHeight: 1.55 }}>
                   {line}
                 </p>
               ))}
-              {factor.note ? (
-                <p style={{ fontSize: 11, color: '#8a94a6', lineHeight: 1.5 }}>
-                  {factor.note}
+              {Array.isArray(factor.details) && factor.details.map((line, idx) => (
+                <p key={`detail-${idx}`} style={{ fontSize: 11, color: '#6b7280', lineHeight: 1.5 }}>
+                  {line}
                 </p>
-              ) : null}
+              ))}
             </div>
           ) : null}
         </div>
-        <span style={{ fontSize: 11, fontWeight: 800, color: met ? color : '#6b7280', flexShrink: 0, paddingTop: 2 }} aria-hidden="true">
+        <span style={{ fontSize: 11, fontWeight: 800, color: isPositive || isCaution ? color : '#6b7280', flexShrink: 0, paddingTop: 2 }} aria-hidden="true">
           {open ? '▴' : '▾'}
         </span>
       </div>
@@ -717,6 +991,9 @@ export default function InsightsPage() {
   const band = overallScore != null ? getScoreBand(overallScore) : null
   const activeCfg = CATEGORY_CONFIG[activeTab]
   const activeIndicators = indicators[activeTab]
+  const activeGroups = groupIndicatorFactors(activeIndicators?.factors || [])
+  const situationHighlights = buildSituationHighlights(profile, scores, indicators)
+  const interpretationSummary = buildInterpretationSummary(scores, profileLabel, rangeMinutes)
 
   return (
     <div style={{ background: '#f5f0eb', minHeight: '100%', paddingBottom: 80 }}>
@@ -880,6 +1157,24 @@ export default function InsightsPage() {
           <h2 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 22, fontWeight: 400, color: '#1a2436', marginBottom: 16 }}>
             What&apos;s driving your score
           </h2>
+          {!loading && activeIndicators?.takeaway ? (
+            <div style={{
+              background: '#fff',
+              border: `1.5px solid ${activeCfg.border}`,
+              borderLeft: `5px solid ${activeCfg.color}`,
+              borderRadius: 14,
+              padding: '14px 16px',
+              marginBottom: 14,
+              boxShadow: '0 4px 18px rgba(0,0,0,0.04)',
+            }}>
+              <p style={{ fontSize: 10, fontWeight: 900, letterSpacing: '0.1em', textTransform: 'uppercase', color: activeCfg.color, marginBottom: 4 }}>
+                {activeCfg.label} takeaway
+              </p>
+              <p style={{ fontSize: 13, color: '#374151', lineHeight: 1.65, fontWeight: 650 }}>
+                {activeIndicators.takeaway}
+              </p>
+            </div>
+          ) : null}
 
           <div style={{ display: 'flex', gap: 8, marginBottom: 16 }} role="tablist" aria-label="Score categories">
             {CATEGORIES.map(k => {
@@ -922,15 +1217,27 @@ export default function InsightsPage() {
           <div
             role="tabpanel"
             aria-labelledby={`tab-${activeTab}`}
-            style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10 }}
+            style={{ display: 'flex', flexDirection: 'column', gap: 16 }}
           >
             {loading
               ? <div style={{ gridColumn: '1/-1', padding: '20px 0' }}>
                   <LinearProgress sx={{ borderRadius: 2, height: 5, bgcolor: activeCfg.soft, '& .MuiLinearProgress-bar': { bgcolor: activeCfg.color } }} />
                 </div>
-              : activeIndicators?.factors?.length
-                ? activeIndicators.factors.map((f, i) => (
-                    <IndicatorCard key={i} factor={f} color={activeCfg.color} soft={activeCfg.soft} border={activeCfg.border} />
+              : activeGroups.length
+                ? activeGroups.map((group) => (
+                    <section key={group.title} aria-label={group.title}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                        <p style={{ fontSize: 11, fontWeight: 900, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#4b5563' }}>
+                          {group.title}
+                        </p>
+                        <span style={{ height: 1, flex: 1, background: 'rgba(15,23,42,0.08)' }} />
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(255px, 1fr))', gap: 10, alignItems: 'start' }}>
+                        {group.factors.map((f) => (
+                          <IndicatorCard key={f.name} factor={f} color={activeCfg.color} soft={activeCfg.soft} border={activeCfg.border} />
+                        ))}
+                      </div>
+                    </section>
                   ))
                 : <p style={{ color: '#4b5563', fontSize: 14, padding: '16px 0', gridColumn: '1/-1' }}>No indicators available.</p>
             }
@@ -961,13 +1268,50 @@ export default function InsightsPage() {
                 <p style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 16, color: '#fff' }}>What this means for you</p>
               </div>
             </div>
-            <div style={{ padding: '20px 24px' }}>
-              <p style={{ fontSize: 14, color: '#374151', lineHeight: 1.75 }}>
-                {buildInterpretation(scores, locationName, profileLabel, rangeMinutes)}
-              </p>
-              <div style={{ marginTop: 16, padding: '12px 16px', background: '#f5f0eb', borderRadius: 12, borderLeft: '3px solid #d97706' }} role="note">
-                <p style={{ fontSize: 12, color: '#92400e', fontWeight: 600, lineHeight: 1.6 }}>
-                  Scores are computed from live backend formulas and open-data signals.
+            <div style={{ padding: '22px 24px 18px' }}>
+              {interpretationSummary ? (
+                <>
+                  <h3 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 24, fontWeight: 400, color: '#101828', marginBottom: 6 }}>
+                    {interpretationSummary.headline}
+                  </h3>
+                  <p style={{ fontSize: 14, color: '#374151', lineHeight: 1.65, marginBottom: 12 }}>
+                    {interpretationSummary.verdict}
+                  </p>
+                  <p style={{ fontSize: 13, color: '#475569', lineHeight: 1.6, marginBottom: 10 }}>
+                    {categoryComparisonText(interpretationSummary.rows)}
+                  </p>
+                  <p style={{ fontSize: 13, color: '#475569', lineHeight: 1.6, marginBottom: situationHighlights ? 12 : 0 }}>
+                    {interpretationSummary.closingLine}
+                  </p>
+                </>
+              ) : null}
+              {situationHighlights ? (
+                <div style={{
+                  marginTop: 12,
+                  border: '1.5px solid #bfdbfe',
+                  borderRadius: 12,
+                  background: '#eff6ff',
+                  padding: '12px 14px',
+                }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '4px 10px', marginBottom: 8 }}>
+                    <p style={{ fontSize: 10, fontWeight: 900, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#2563eb' }}>
+                      Selected situation
+                    </p>
+                    <p style={{ fontSize: 13, color: '#1e3a8a', fontWeight: 900 }}>
+                      {situationHighlights.title}
+                    </p>
+                    <p style={{ fontSize: 12, color: '#334155', lineHeight: 1.5, flexBasis: '100%' }}>
+                      {situationHighlights.summary}
+                    </p>
+                  </div>
+                  <p style={{ fontSize: 12, color: '#334155', lineHeight: 1.65 }}>
+                    {situationHighlights.points.join('. ')}.
+                  </p>
+                </div>
+              ) : null}
+              <div style={{ marginTop: 12, padding: '9px 12px', background: '#f5f0eb', borderRadius: 10, borderLeft: '3px solid #d97706' }} role="note">
+                <p style={{ fontSize: 11, color: '#92400e', fontWeight: 650, lineHeight: 1.5 }}>
+                  Scores use live calculations and public datasets. Use them as a comparison guide, not a final decision.
                 </p>
               </div>
             </div>

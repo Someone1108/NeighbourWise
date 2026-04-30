@@ -1051,10 +1051,17 @@ body {
 
 .hero-subtitle {
   font-size: clamp(16px, 1.8vw, 19px);
-  line-height: 1.65;
-  color: rgba(255, 255, 255, 0.8);
-  max-width: 540px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.92);
+  background: rgba(10, 20, 40, 0.32);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  padding: 7px 18px;
+  max-width: 500px;
   margin: 0;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
 /* Hero CTA — strong primary action surfaced on the first screen */

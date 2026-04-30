@@ -96,10 +96,18 @@ export default function HomePage() {
       const seen = new Set()
       return arr.filter((item) => {
         const label = (item.displayName || item.fullAddress || item.name || '').toLowerCase()
+        const placeType = item.placeType || item.type || ''
+        const suburbName = String(item.name || item.displayName || '').trim().toLowerCase()
+        const isSuburb = placeType === 'suburb' || placeType === 'locality'
+        const hasCoverageList = supportedSuburbs.length > 0
+        const isSupportedSuburb =
+          !isSuburb ||
+          !hasCoverageList ||
+          supportedSuburbs.some((name) => name.toLowerCase() === suburbName)
         const key = label
         if (seen.has(key)) return false
         seen.add(key)
-        return words.every((w) => label.includes(w))
+        return isSupportedSuburb && words.every((w) => label.includes(w))
       })
     }
 
@@ -134,7 +142,7 @@ export default function HomePage() {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [address, selectedLocation])
+  }, [address, selectedLocation, supportedSuburbs])
 
   useEffect(() => {
     let cancelled = false
@@ -230,6 +238,20 @@ export default function HomePage() {
 
     if (!selectedLocation) {
       setError('Please select a suburb or address from the results.')
+      return
+    }
+
+    const placeType = selectedLocation.placeType || selectedLocation.type || ''
+    const suburbName = String(selectedLocation.name || selectedLocation.displayName || '').trim()
+    const isSuburb = placeType === 'suburb' || placeType === 'locality'
+    const hasCoverageList = supportedSuburbs.length > 0
+    const isSupportedSuburb =
+      !isSuburb ||
+      !hasCoverageList ||
+      supportedSuburbs.some((name) => name.toLowerCase() === suburbName.toLowerCase())
+
+    if (!isSupportedSuburb) {
+      setError(`${suburbName || 'This suburb'} is not covered yet. Please choose a suburb from the suggestions or use a full address.`)
       return
     }
 
