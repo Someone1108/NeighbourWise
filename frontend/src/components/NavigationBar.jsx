@@ -1,14 +1,55 @@
 import { useEffect, useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
-import { getCompareUpdatedEventName, loadCompareList } from '../utils/storage.js'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import {
+  getCompareUpdatedEventName,
+  loadCompareList,
+  loadContext,
+} from '../utils/storage.js'
 
 export default function NavigationBar() {
   const location = useLocation()
+  const navigate = useNavigate()
   const [compareCount, setCompareCount] = useState(() => loadCompareList().length)
   const [scrolled, setScrolled] = useState(false)
 
   const isHome = location.pathname === '/'
   const isActive = (path) => location.pathname === path
+
+  function hasEnteredAddress() {
+    const ctx = loadContext()
+    const sel = ctx?.selectedLocation
+    if (!sel) return false
+    return Boolean(sel.displayName || sel.fullAddress || sel.name)
+  }
+
+  function scrollHomeToSearch() {
+    // Wait a frame so HomePage has mounted if we just navigated.
+    requestAnimationFrame(() => {
+      const el = document.getElementById('home-search-input')
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        // Slight delay before focusing so the smooth scroll isn't interrupted.
+        setTimeout(() => {
+          try { el.focus({ preventScroll: true }) } catch { el.focus() }
+        }, 350)
+      }
+    })
+  }
+
+  function handleMapClick(e) {
+    e.preventDefault()
+    if (hasEnteredAddress()) {
+      navigate('/map')
+      return
+    }
+    if (isHome) {
+      scrollHomeToSearch()
+    } else {
+      navigate('/')
+      // Give the route transition a tick before scrolling.
+      setTimeout(scrollHomeToSearch, 50)
+    }
+  }
 
   useEffect(() => {
     const eventName = getCompareUpdatedEventName()
@@ -47,6 +88,15 @@ export default function NavigationBar() {
             aria-current={isActive('/') ? 'page' : undefined}
           >
             Home
+          </Link>
+
+          <Link
+            to="/map"
+            onClick={handleMapClick}
+            className={isActive('/map') ? 'active' : ''}
+            aria-current={isActive('/map') ? 'page' : undefined}
+          >
+            Map
           </Link>
 
           <Link

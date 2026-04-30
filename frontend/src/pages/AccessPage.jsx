@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import heroImage from '../assets/BG1.jpg'
 
 const DEMO_PASSWORD = 'iteration1_te07'
 
@@ -21,104 +22,55 @@ export default function AccessPage() {
   }
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background:
-          'linear-gradient(135deg, #dfe5ec 0%, #cfd6df 100%)',
-        padding: '24px',
-      }}
-    >
+    <div className="nwAccessPage">
       <div
-        style={{
-          width: '100%',
-          maxWidth: '460px',
-          background: '#ffffff',
-          borderRadius: '28px',
-          padding: '36px 32px',
-          boxShadow: '0 20px 50px rgba(15, 23, 42, 0.12)',
-          border: '1px solid #e5eaf1',
-        }}
-      >
-        <div style={{ marginBottom: '22px' }}>
-          <h1
-            style={{
-              margin: 0,
-              fontSize: '2.2rem',
-              lineHeight: 1.1,
-              fontWeight: 900,
-              color: '#0f172a',
-            }}
-          >
-            NeighbourWise Access
-          </h1>
+        className="nwAccessBg"
+        aria-hidden="true"
+        style={{ backgroundImage: `url(${heroImage})` }}
+      />
+      <div className="nwAccessOverlay" aria-hidden="true" />
 
-          <p
-            style={{
-              margin: '12px 0 0 0',
-              fontSize: '1.05rem',
-              color: '#64748b',
-            }}
-          >
-            Enter the password to continue to Iteration 1.
-          </p>
-        </div>
+      <div className="nwAccessCard" role="dialog" aria-labelledby="access-title">
+        <span className="nwAccessEyebrow">Melbourne · Liveability Explorer</span>
 
-        <form onSubmit={handleSubmit}>
+        <h1 id="access-title" className="nwAccessTitle">
+          NeighbourWise
+        </h1>
+
+        <p className="nwAccessSubtitle">
+          Enter your access code to continue.
+        </p>
+
+        <form onSubmit={handleSubmit} className="nwAccessForm">
+          <label htmlFor="nw-access-pw" className="nwAccessLabel">
+            Access code
+          </label>
           <input
+            id="nw-access-pw"
             type="password"
             value={password}
             onChange={(e) => {
               setPassword(e.target.value)
               if (error) setError('')
             }}
-            placeholder="Enter password"
-            style={{
-              width: '100%',
-              padding: '16px 18px',
-              fontSize: '1rem',
-              borderRadius: '18px',
-              border: '1px solid #d7dee8',
-              outline: 'none',
-              boxSizing: 'border-box',
-              color: '#0f172a',
-              background: '#fbfcfe',
-            }}
+            placeholder="Enter your access code"
+            className="nwAccessInput"
+            autoFocus
+            autoComplete="current-password"
           />
 
-          {error ? (
-            <div
-              style={{
-                marginTop: '12px',
-                color: '#dc2626',
-                fontSize: '0.95rem',
-                fontWeight: 600,
-              }}
-            >
-              {error}
-            </div>
-          ) : null}
-
-          <button
-            type="submit"
-            style={{
-              marginTop: '18px',
-              width: '100%',
-              border: 'none',
-              borderRadius: '18px',
-              padding: '14px 18px',
-              fontSize: '1rem',
-              fontWeight: 800,
-              color: '#ffffff',
-              background: '#f47c20',
-              cursor: 'pointer',
-              boxShadow: '0 10px 24px rgba(244, 124, 32, 0.22)',
-            }}
+          <div
+            className="nwAccessError"
+            role="alert"
+            aria-live="assertive"
+            aria-atomic="true"
           >
+            {error}
+          </div>
+
+          <button type="submit" className="nwAccessButton">
             Enter Site
+            <span className="nwAccessButtonArrow" aria-hidden="true">→</span>
           </button>
         </form>
       </div>

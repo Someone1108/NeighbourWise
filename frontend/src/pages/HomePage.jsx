@@ -10,11 +10,14 @@ import {
 } from '../services/api.js'
 import { saveContext } from '../utils/storage.js'
 import heroImage from '../assets/bg.png'
+import familyIcon from '../assets/family.png'
+import elderlyIcon from '../assets/elderly.png'
+import petIcon from '../assets/pet.png'
 
 const PROFILES = [
-  { key: 'familyWithChildren', title: 'Family', emoji: '👨‍👩‍👧', desc: 'Schools, parks & safe streets' },
-  { key: 'elderly', title: 'Elderly', emoji: '🧓', desc: 'Healthcare, quiet & accessible' },
-  { key: 'petOwner', title: 'Pet Owner', emoji: '🐾', desc: 'Dog parks & off-leash areas' },
+  { key: 'familyWithChildren', title: 'Family', icon: familyIcon, desc: 'Schools, parks & safe streets' },
+  { key: 'elderly', title: 'Elderly', icon: elderlyIcon, desc: 'Healthcare, quiet & accessible' },
+  { key: 'petOwner', title: 'Pet Owner', icon: petIcon, desc: 'Dog parks & off-leash areas' },
 ]
 
 const VALUE_PROPS = [
@@ -33,6 +36,13 @@ const VALUE_PROPS = [
     title: 'Compare Areas',
     desc: 'View two suburbs side by side to make a more confident decision.',
   },
+]
+
+const HOW_TO_STEPS = [
+  { step: '1', label: 'Search', desc: 'Type a suburb name or street address in Melbourne.' },
+  { step: '2', label: 'Choose your profile', desc: 'Tell us your situation — family, elderly, or pet owner — so scores reflect what matters to you.' },
+  { step: '3', label: 'Explore', desc: 'See the liveability map, detailed scores, and nearby places of interest.' },
+  { step: '4', label: 'Compare', desc: 'Add areas to your compare list to weigh up two suburbs side by side.' },
 ]
 
 export default function HomePage() {
@@ -86,10 +96,18 @@ export default function HomePage() {
       const seen = new Set()
       return arr.filter((item) => {
         const label = (item.displayName || item.fullAddress || item.name || '').toLowerCase()
+        const placeType = item.placeType || item.type || ''
+        const suburbName = String(item.name || item.displayName || '').trim().toLowerCase()
+        const isSuburb = placeType === 'suburb' || placeType === 'locality'
+        const hasCoverageList = supportedSuburbs.length > 0
+        const isSupportedSuburb =
+          !isSuburb ||
+          !hasCoverageList ||
+          supportedSuburbs.some((name) => name.toLowerCase() === suburbName)
         const key = label
         if (seen.has(key)) return false
         seen.add(key)
-        return words.every((w) => label.includes(w))
+        return isSupportedSuburb && words.every((w) => label.includes(w))
       })
     }
 
@@ -124,7 +142,7 @@ export default function HomePage() {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [address, selectedLocation])
+  }, [address, selectedLocation, supportedSuburbs])
 
   useEffect(() => {
     let cancelled = false
@@ -197,7 +215,18 @@ export default function HomePage() {
   }
 
   function toggleProfile(key) {
-    setProfile((prev) => ({ ...prev, [key]: !prev[key] }))
+    // Single-select: clicking an active card unselects it; otherwise only the
+    // clicked profile becomes active and all others are reset.
+    setProfile((prev) => {
+      const isActive = !!prev[key]
+      const reset = {
+        familyWithChildren: false,
+        elderly: false,
+        petOwner: false,
+      }
+      if (isActive) return reset
+      return { ...reset, [key]: true }
+    })
   }
 
   function onSubmit() {
@@ -209,6 +238,20 @@ export default function HomePage() {
 
     if (!selectedLocation) {
       setError('Please select a suburb or address from the results.')
+      return
+    }
+
+    const placeType = selectedLocation.placeType || selectedLocation.type || ''
+    const suburbName = String(selectedLocation.name || selectedLocation.displayName || '').trim()
+    const isSuburb = placeType === 'suburb' || placeType === 'locality'
+    const hasCoverageList = supportedSuburbs.length > 0
+    const isSupportedSuburb =
+      !isSuburb ||
+      !hasCoverageList ||
+      supportedSuburbs.some((name) => name.toLowerCase() === suburbName.toLowerCase())
+
+    if (!isSupportedSuburb) {
+      setError(`${suburbName || 'This suburb'} is not covered yet. Please choose a suburb from the suggestions or use a full address.`)
       return
     }
 
@@ -231,18 +274,43 @@ export default function HomePage() {
           <div className="hero-overlay" aria-hidden="true" />
 
           <div className="hero-content">
-            <span className="hero-eyebrow">Melbourne · Liveability Explorer</span>
+            <span className="hero-eyebrow hero-fade-in">Melbourne · Liveability Explorer</span>
 
-            <h1 className="hero-headline">
+            <h1 className="hero-headline hero-fade-in hero-fade-in-1">
               Melbourne neighbourhoods,
               <br />
               scored for <em>the way you live.</em>
             </h1>
 
-            <p className="hero-subtitle">
+            <p className="hero-subtitle hero-fade-in hero-fade-in-2">
               Data-backed insights across accessibility, safety and environment -
               personalised to your situation.
             </p>
+
+            <div className="hero-cta-row hero-fade-in hero-fade-in-3">
+              <button
+                type="button"
+                className="hero-cta-primary"
+                onClick={() =>
+                  document
+                    .getElementById('home-search-input')
+                    ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                }
+              >
+                Explore Liveability
+                <span className="hero-cta-arrow" aria-hidden="true">→</span>
+              </button>
+
+              <button
+                type="button"
+                className="hero-cta-ghost"
+                onClick={() =>
+                  document.getElementById('value-prop')?.scrollIntoView({ behavior: 'smooth' })
+                }
+              >
+                How it works
+              </button>
+            </div>
           </div>
 
           <button
@@ -252,7 +320,6 @@ export default function HomePage() {
               document.getElementById('value-prop')?.scrollIntoView({ behavior: 'smooth' })
             }
           >
-            <span>Explore</span>
             <div className="hero-scroll-chevron" aria-hidden="true" />
           </button>
         </section>
@@ -272,6 +339,28 @@ export default function HomePage() {
               </div>
             ))}
           </div>
+        </section>
+
+        <section className="howto-section" aria-labelledby="howto-heading">
+          <div className="howto-header">
+            <p className="howto-header-label">How it works</p>
+            <h2 id="howto-heading">Find your fit in four simple steps</h2>
+          </div>
+
+          <ol className="howto-steps">
+            {HOW_TO_STEPS.map(({ step, label, desc }, i) => (
+              <li key={step} className="howto-step">
+                <div className="howto-step-number" aria-hidden="true">{step}</div>
+                <div className="howto-step-body">
+                  <div className="howto-step-label">{label}</div>
+                  <p className="howto-step-desc">{desc}</p>
+                </div>
+                {i < HOW_TO_STEPS.length - 1 && (
+                  <span className="howto-step-arrow" aria-hidden="true">→</span>
+                )}
+              </li>
+            ))}
+          </ol>
         </section>
 
         <section className="coverageSection" aria-labelledby="coverage-heading">
@@ -330,38 +419,29 @@ export default function HomePage() {
               Enter a suburb or address
             </label>
 
-            <div className="search-input-wrap">
-              <input
-                id="home-search-input"
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                placeholder="e.g. Fitzroy or 123 Swanston St"
-                aria-autocomplete="list"
-                aria-expanded={hasResults}
-                aria-controls={hasResults ? 'home-search-results' : undefined}
-                aria-describedby={error ? 'home-search-error' : undefined}
-                autoComplete="off"
-              />
-              <span className="search-icon" aria-hidden="true">⌕</span>
-            </div>
+            <div className="search-field">
+              <div className="search-input-wrap">
+                <input
+                  id="home-search-input"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  placeholder="e.g. Richmond, 3076, or 45 Chapel St"
+                  aria-autocomplete="list"
+                  aria-expanded={hasResults}
+                  aria-controls={hasResults ? 'home-search-results' : undefined}
+                  aria-describedby={error ? 'home-search-error' : undefined}
+                  autoComplete="off"
+                />
+                <span className="search-icon" aria-hidden="true">⌕</span>
+              </div>
 
-            <div
-              id="home-search-error"
-              role="alert"
-              aria-live="assertive"
-              aria-atomic="true"
-              style={{ minHeight: 20 }}
-            >
-              {error && <p className="search-error">{error}</p>}
-            </div>
-
-            {hasResults && (
-              <div
-                id="home-search-results"
-                className="search-dropdown"
-                role="listbox"
-                aria-label="Search results"
-              >
+              {hasResults && (
+                <div
+                  id="home-search-results"
+                  className="search-dropdown"
+                  role="listbox"
+                  aria-label="Search results"
+                >
                 {suburbResults.length > 0 && (
                   <>
                     <div className="search-dropdown-group-label" aria-hidden="true">Suburbs</div>
@@ -402,23 +482,36 @@ export default function HomePage() {
                     ))}
                   </>
                 )}
-              </div>
-            )}
+                </div>
+              )}
+            </div>
+
+            <div
+              id="home-search-error"
+              role="alert"
+              aria-live="assertive"
+              aria-atomic="true"
+              style={{ minHeight: 20 }}
+            >
+              {error && <p className="search-error">{error}</p>}
+            </div>
 
             <p className="profile-label" id="profile-label">Your situation</p>
 
-            <div className="profile-row" role="group" aria-labelledby="profile-label">
-              {PROFILES.map(({ key, title, emoji, desc }) => (
+            <div className="profile-row" role="radiogroup" aria-labelledby="profile-label">
+              {PROFILES.map(({ key, title, icon, desc }) => (
                 <div
                   key={key}
                   className={`profile-card${profile[key] ? ' active' : ''}`}
-                  role="button"
-                  aria-pressed={profile[key]}
+                  role="radio"
+                  aria-checked={profile[key]}
                   tabIndex={0}
                   onClick={() => toggleProfile(key)}
                   onKeyDown={(e) => e.key === 'Enter' && toggleProfile(key)}
                 >
-                  <span className="profile-card-emoji" aria-hidden="true">{emoji}</span>
+                  <span className="profile-card-emoji" aria-hidden="true">
+                    <img className="profile-card-icon-img" src={icon} alt="" />
+                  </span>
                   <span className="profile-card-title">{title}</span>
                   <span className="profile-card-desc">{desc}</span>
                   <div className="profile-check" aria-hidden="true">

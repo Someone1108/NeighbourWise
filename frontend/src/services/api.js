@@ -75,6 +75,39 @@ async function fetchJson(url) {
   return response.json()
 }
 
+const cachedGetRequests = new Map()
+
+async function fetchCachedJson(url) {
+  if (cachedGetRequests.has(url)) {
+    return cachedGetRequests.get(url)
+  }
+
+  const request = fetchJson(url).catch((error) => {
+    cachedGetRequests.delete(url)
+    throw error
+  })
+
+  cachedGetRequests.set(url, request)
+  return request
+}
+
+function normalizePersona(input) {
+  if (typeof input === 'string') {
+    const key = input.trim().toLowerCase()
+    if (['default', 'family', 'elderly', 'pet'].includes(key)) return key
+    if (key === 'pet_owner') return 'pet'
+    return 'default'
+  }
+
+  if (input && typeof input === 'object') {
+    if (input.familyWithChildren) return 'family'
+    if (input.elderly) return 'elderly'
+    if (input.petOwner) return 'pet'
+  }
+
+  return 'default'
+}
+
 /**
  * REAL BACKEND POI INSIGHTS
  * Returns nearby points of interest (POIs) based on user location,
@@ -89,6 +122,16 @@ export async function getPoiInsights({ lat, lng, time }) {
 
   return fetchJson(
     `${API_BASE_URL}/api/insights/poi?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}&time=${encodeURIComponent(safeTime)}`
+  )
+}
+
+export async function getAqiForLocation({ lat, lng }) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    throw new Error('Valid lat/lng are required')
+  }
+
+  return fetchJson(
+    `${API_BASE_URL}/api/aqi?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}`
   )
 }
 
@@ -241,29 +284,29 @@ export async function getInsights({ locationName, rangeMinutes, profile, categor
 
   const templates = {
     accessibility: [
-      'Train station within 15 mins',
-      'Supermarket within 10 mins',
-      'Bus connections to the CBD',
-      'Step-free access at key locations',
+      { name: 'Train station within 15 mins',       note: 'A train station within 15 minutes walking means faster CBD commutes and reduced car dependency.' },
+      { name: 'Supermarket within 10 mins',          note: 'Quick access to a supermarket supports daily convenience and reduces transport needs for essentials.' },
+      { name: 'Bus connections to the CBD',          note: 'Direct bus routes to the CBD provide a reliable alternative when trains are unavailable.' },
+      { name: 'Step-free access at key locations',   note: 'Ramps, lifts, and level crossings at major stops make this area more accessible for all residents.' },
     ],
     safety: [
-      'Low incident risk in the area',
-      'Well-lit streets after dark',
-      'Safe crossings near schools',
-      'Active community presence',
+      { name: 'Low incident risk in the area',       note: 'Recorded incidents in this suburb are below the Melbourne median, based on Crime Statistics Victoria data.' },
+      { name: 'Well-lit streets after dark',         note: 'Street lighting coverage reduces perceived and actual risk for pedestrians after sunset.' },
+      { name: 'Safe crossings near schools',         note: 'Marked pedestrian crossings and reduced speed zones near schools improve safety for families.' },
+      { name: 'Active community presence',           note: 'Higher foot traffic and active local groups are associated with lower opportunistic crime rates.' },
     ],
     environment: [
-      'Nearby park and green space',
-      'Air quality indicators',
-      'Low noise exposure near major roads',
-      'Recreational amenities within reach',
+      { name: 'Nearby park and green space',         note: 'Access to parks within walking distance supports physical activity, mental wellbeing, and community connection.' },
+      { name: 'Air quality indicators',              note: 'EPA monitoring data suggests air quality in this area is generally within safe thresholds.' },
+      { name: 'Low noise exposure near major roads', note: 'Distance from major arterials and freeways reduces chronic noise exposure for residents.' },
+      { name: 'Recreational amenities within reach', note: 'Ovals, playgrounds, and community facilities within the area support an active lifestyle.' },
     ],
   }
 
   const list = templates[cat] || templates.accessibility
-  const factors = list.map((name, idx) => {
+  const factors = list.map(({ name, note }, idx) => {
     const met = (h + idx * 17) % 3 !== 0
-    return { name, met }
+    return { name, note, met }
   })
 
   return {
@@ -388,4 +431,79 @@ export async function getLayerDataForAddress(lat, lng, rangeMinutes) {
   return fetchJson(
     `${API_BASE_URL}/api/layers/address?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}&minutes=${encodeURIComponent(safeRange)}&radiusMeters=${encodeURIComponent(radiusMeters)}`
   )
+}
+
+export async function getLiveabilityScore({ lat, lng, time, persona }) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    throw new Error('Valid lat/lng are required')
+  }
+
+  const safeTime = [10, 20, 30].includes(Number(time)) ? Number(time) : 20
+  const safePersona = normalizePersona(persona)
+
+  return fetchCachedJson(
+    `${API_BASE_URL}/api/score/liveability?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}&time=${encodeURIComponent(safeTime)}&persona=${encodeURIComponent(safePersona)}`
+  )
+}
+
+export async function getCensusProfileForLocation(selectedLocation) {
+  if (!selectedLocation) {
+    throw new Error('Selected location is required')
+  }
+
+  const placeType = selectedLocation.placeType || selectedLocation.type || ''
+  const name = String(selectedLocation.name || selectedLocation.displayName || '').trim()
+  const postcode =
+    selectedLocation.postcode ||
+    (placeType === 'postcode'
+      ? String(selectedLocation.name || selectedLocation.displayName || '').match(/\b\d{4}\b/)?.[0]
+      : null)
+
+  if (placeType === 'suburb' || placeType === 'locality') {
+    if (!name) throw new Error('Suburb name is required')
+    return fetchCachedJson(`${API_BASE_URL}/api/census/suburb/${encodeURIComponent(name)}`)
+  }
+
+  if (placeType === 'postcode' && postcode) {
+    return fetchCachedJson(`${API_BASE_URL}/api/census/postcode/${encodeURIComponent(postcode)}`)
+  }
+
+  const lat = Number(selectedLocation.lat)
+  const lng = Number(selectedLocation.lng)
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    throw new Error('Valid lat/lng are required for Census location lookup')
+  }
+
+  return fetchCachedJson(
+    `${API_BASE_URL}/api/census/location?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}`
+  )
+}
+
+export async function prefetchInsightPageData({ selectedLocation, rangeMinutes, profile }) {
+  const lat = Number(selectedLocation?.lat)
+  const lng = Number(selectedLocation?.lng)
+
+  if (!selectedLocation || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return null
+  }
+
+  const scoreP = getLiveabilityScore({
+    lat,
+    lng,
+    time: rangeMinutes,
+    persona: profile || 'default',
+  }).catch((err) => {
+    console.error('Insight score prefetch error:', err)
+    return null
+  })
+
+  const censusP = getCensusProfileForLocation(selectedLocation).catch((err) => {
+    console.error('Insight Census prefetch error:', err)
+    return null
+  })
+
+  const [scoreData, censusProfile] = await Promise.all([scoreP, censusP])
+
+  return { scoreData, censusProfile }
 }

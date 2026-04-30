@@ -4,6 +4,7 @@ import "leaflet/dist/leaflet.css";
 import { renderToStaticMarkup } from "react-dom/server";
 
 // MUI Icons
+// MUI Icons
 import LocalFloristIcon from "@mui/icons-material/LocalFlorist";
 import LocalHospitalIcon from "@mui/icons-material/LocalHospital";
 import TrainIcon from "@mui/icons-material/Train";
@@ -11,6 +12,7 @@ import SchoolIcon from "@mui/icons-material/School";
 import LocalGroceryStoreIcon from "@mui/icons-material/LocalGroceryStore";
 import DirectionsBusIcon from "@mui/icons-material/DirectionsBus";
 import LocationOnIcon from "@mui/icons-material/LocationOn";
+import PetsIcon from "@mui/icons-material/Pets";
 
 // icon mapping
 const iconMap = {
@@ -19,7 +21,8 @@ const iconMap = {
   train_station: TrainIcon,
   school: SchoolIcon,
   supermarket: LocalGroceryStoreIcon,
-  bus_stop: DirectionsBusIcon
+  bus_stop: DirectionsBusIcon,
+  dog_park: PetsIcon
 };
 
 function poiIconFor(type) {
