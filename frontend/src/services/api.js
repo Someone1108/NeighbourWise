@@ -428,3 +428,37 @@ export async function getLiveabilityScore({ lat, lng, time, persona }) {
     `${API_BASE_URL}/api/score/liveability?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}&time=${encodeURIComponent(safeTime)}&persona=${encodeURIComponent(safePersona)}`
   )
 }
+
+export async function getCensusProfileForLocation(selectedLocation) {
+  if (!selectedLocation) {
+    throw new Error('Selected location is required')
+  }
+
+  const placeType = selectedLocation.placeType || selectedLocation.type || ''
+  const name = String(selectedLocation.name || selectedLocation.displayName || '').trim()
+  const postcode =
+    selectedLocation.postcode ||
+    (placeType === 'postcode'
+      ? String(selectedLocation.name || selectedLocation.displayName || '').match(/\b\d{4}\b/)?.[0]
+      : null)
+
+  if (placeType === 'suburb' || placeType === 'locality') {
+    if (!name) throw new Error('Suburb name is required')
+    return fetchJson(`${API_BASE_URL}/api/census/suburb/${encodeURIComponent(name)}`)
+  }
+
+  if (placeType === 'postcode' && postcode) {
+    return fetchJson(`${API_BASE_URL}/api/census/postcode/${encodeURIComponent(postcode)}`)
+  }
+
+  const lat = Number(selectedLocation.lat)
+  const lng = Number(selectedLocation.lng)
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    throw new Error('Valid lat/lng are required for Census location lookup')
+  }
+
+  return fetchJson(
+    `${API_BASE_URL}/api/census/location?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}`
+  )
+}

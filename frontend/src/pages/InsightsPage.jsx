@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { LinearProgress } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
-import { getLiveabilityScore } from '../services/api.js'
+import { getCensusProfileForLocation, getLiveabilityScore } from '../services/api.js'
 import { loadContext } from '../utils/storage.js'
 
 const CATEGORIES = ['accessibility', 'safety', 'environment']
@@ -409,6 +409,221 @@ function IndicatorCard({ factor, color, soft, border }) {
   )
 }
 
+function formatNumber(value) {
+  if (value === null || value === undefined || value === '') return 'Unavailable'
+  const n = Number(value)
+  if (!Number.isFinite(n)) return 'Unavailable'
+  return Math.round(n).toLocaleString('en-AU')
+}
+
+function formatPercent(value) {
+  if (value === null || value === undefined || value === '') return 'Unavailable'
+  const n = Number(value)
+  if (!Number.isFinite(n)) return 'Unavailable'
+  return `${Math.round(n * 10) / 10}%`
+}
+
+function formatMoney(value, suffix) {
+  if (value === null || value === undefined || value === '') return 'Unavailable'
+  const n = Number(value)
+  if (!Number.isFinite(n)) return 'Unavailable'
+  return `$${Math.round(n).toLocaleString('en-AU')}${suffix}`
+}
+
+function getSituationCensusHighlight(userProfile, censusProfile) {
+  if (!userProfile || !censusProfile) return null
+
+  if (userProfile.familyWithChildren) {
+    const familyHouseholds = formatPercent(censusProfile.familyHouseholdsPct)
+    const children = formatPercent(censusProfile.age0To14Pct)
+    const householdSize =
+      censusProfile.averageHouseholdSize != null
+        ? `${censusProfile.averageHouseholdSize} people`
+        : 'Unavailable'
+
+    if (
+      familyHouseholds === 'Unavailable' &&
+      children === 'Unavailable' &&
+      householdSize === 'Unavailable'
+    ) {
+      return null
+    }
+
+    return {
+      label: 'Relevant for families',
+      text: `For a family household, the useful Census context here is that ${familyHouseholds} of households are family households, children aged 0-14 make up ${children} of residents, and the average household size is ${householdSize}.`,
+    }
+  }
+
+  if (userProfile.elderly) {
+    const olderResidents = formatPercent(censusProfile.age65PlusPct)
+    const assistance = formatPercent(censusProfile.needForAssistancePct)
+    const lonePerson = formatPercent(censusProfile.lonePersonHouseholdsPct)
+    const noCar = formatPercent(censusProfile.noCarHouseholdsPct)
+
+    if (
+      olderResidents === 'Unavailable' &&
+      assistance === 'Unavailable' &&
+      lonePerson === 'Unavailable' &&
+      noCar === 'Unavailable'
+    ) {
+      return null
+    }
+
+    return {
+      label: 'Relevant for older residents',
+      text: `For an older resident, the useful Census context here is that ${olderResidents} of residents are aged 65+, ${assistance} report needing assistance, ${lonePerson} of households are lone-person households, and ${noCar} have no car.`,
+    }
+  }
+
+  if (userProfile.petOwner) {
+    const renters = formatPercent(censusProfile.rentersPct)
+    const ownerOccupied = formatPercent(censusProfile.ownerOccupiedPct)
+    const householdSize =
+      censusProfile.averageHouseholdSize != null
+        ? `${censusProfile.averageHouseholdSize} people`
+        : 'Unavailable'
+
+    if (
+      renters === 'Unavailable' &&
+      ownerOccupied === 'Unavailable' &&
+      householdSize === 'Unavailable'
+    ) {
+      return null
+    }
+
+    return {
+      label: 'Relevant for pet owners',
+      text: `Census does not measure pet ownership directly, but housing context can still help: ${renters} of households rent, ${ownerOccupied} are owner-occupied, and the average household size is ${householdSize}.`,
+    }
+  }
+
+  return null
+}
+
+function CensusContextSection({ data, loading, userProfile }) {
+  const profile = data?.profile || {}
+  const source = data?.source || {}
+  const situationHighlight =
+    !loading && data?.available ? getSituationCensusHighlight(userProfile, profile) : null
+  const stats = [
+    { label: 'Population', value: formatNumber(profile.totalPopulation) },
+    { label: 'Median age', value: profile.medianAge != null ? `${profile.medianAge}` : 'Unavailable' },
+    { label: 'Renters', value: formatPercent(profile.rentersPct) },
+    { label: 'Median rent', value: formatMoney(profile.medianRentWeekly, ' / week') },
+    { label: 'Public transport to work', value: formatPercent(profile.publicTransportToWorkPct) },
+    { label: 'Residents 65+', value: formatPercent(profile.age65PlusPct) },
+  ]
+
+  return (
+    <div style={{ marginBottom: 24 }} role="region" aria-label="Census context">
+      <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#4b5563', marginBottom: 4 }}>Census Context</p>
+      <h2 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 22, fontWeight: 400, color: '#1a2436', marginBottom: 16 }}>
+        Who lives here
+      </h2>
+
+      <div style={{
+        background: '#fff',
+        border: '1.5px solid #e5e7eb',
+        borderRadius: 20,
+        overflow: 'hidden',
+        boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
+      }}>
+        <div style={{
+          padding: '18px 24px',
+          background: 'linear-gradient(90deg, #064e3b, #0f766e)',
+          color: '#fff',
+        }}>
+          <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.65)', marginBottom: 4 }}>
+            2021 Census profile
+          </p>
+          <p style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 18, lineHeight: 1.25 }}>
+            {loading
+              ? 'Loading local Census information...'
+              : data?.available
+                ? `${source.sa2Name || 'Matched neighbourhood'}${source.matchedSuburb ? `, matched from ${source.matchedSuburb}` : ''}`
+                : 'Census information is not available for this location'}
+          </p>
+          {!loading && data?.available && (
+            <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.78)', marginTop: 6, lineHeight: 1.5 }}>
+              Based on the best matching SA2 area{source.overlapAreaPct != null ? ` (${source.overlapAreaPct}% boundary overlap)` : ''}.
+            </p>
+          )}
+        </div>
+
+        <div style={{ padding: '22px 24px' }}>
+          {loading ? (
+            <LinearProgress sx={{ borderRadius: 2, height: 5, bgcolor: '#d1fae5', '& .MuiLinearProgress-bar': { bgcolor: '#0f766e' } }} />
+          ) : data?.available ? (
+            <>
+              {situationHighlight && (
+                <div style={{
+                  background: '#ecfdf5',
+                  border: '1px solid #a7f3d0',
+                  borderLeft: '4px solid #0f766e',
+                  borderRadius: 14,
+                  padding: '14px 16px',
+                  marginBottom: 18,
+                }}>
+                  <p style={{ fontSize: 11, fontWeight: 900, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#047857', marginBottom: 5 }}>
+                    {situationHighlight.label}
+                  </p>
+                  <p style={{ fontSize: 13, color: '#134e4a', lineHeight: 1.65, fontWeight: 600 }}>
+                    {situationHighlight.text}
+                  </p>
+                </div>
+              )}
+
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+                gap: 10,
+                marginBottom: 18,
+              }}>
+                {stats.map((stat) => (
+                  <div key={stat.label} style={{
+                    background: '#f8fafc',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: 12,
+                    padding: '12px 14px',
+                  }}>
+                    <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#64748b', marginBottom: 4 }}>
+                      {stat.label}
+                    </p>
+                    <p style={{ fontSize: 17, fontWeight: 900, color: '#0f172a' }}>{stat.value}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 12 }}>
+                {(data.insights || []).map((item) => (
+                  <div key={item.title} style={{
+                    border: '1px solid #e5e7eb',
+                    borderRadius: 14,
+                    padding: '14px 16px',
+                    background: '#fff',
+                  }}>
+                    <p style={{ fontSize: 13, fontWeight: 800, color: '#0f766e', marginBottom: 6 }}>{item.title}</p>
+                    <p style={{ fontSize: 13, color: '#374151', lineHeight: 1.65 }}>{item.text}</p>
+                  </div>
+                ))}
+              </div>
+
+              <p style={{ marginTop: 14, fontSize: 11, color: '#64748b', lineHeight: 1.55 }}>
+                Census data is from 2021 and suburb/postcode boundaries may not perfectly match the SA2 profile area.
+              </p>
+            </>
+          ) : (
+            <p style={{ fontSize: 14, color: '#4b5563', lineHeight: 1.7 }}>
+              {data?.message || 'No Census profile could be matched for this location yet.'}
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function InsightsPage() {
   const navigate = useNavigate()
   const routerLocation = useLocation()
@@ -425,6 +640,8 @@ export default function InsightsPage() {
   const [scoreWeights, setScoreWeights] = useState(null)
   const [indicators, setIndicators] = useState({})
   const [loading, setLoading] = useState(true)
+  const [censusLoading, setCensusLoading] = useState(true)
+  const [censusData, setCensusData] = useState(null)
   const [activeTab, setActiveTab] = useState('accessibility')
 
   useEffect(() => {
@@ -432,11 +649,16 @@ export default function InsightsPage() {
     const lng = Number(selectedLocation?.lng)
 
     if (!locationName || !Number.isFinite(lat) || !Number.isFinite(lng)) {
-      setLoading(false)
       return
     }
-    setLoading(true)
     let cancelled = false
+
+    Promise.resolve().then(() => {
+      if (!cancelled) {
+        setLoading(true)
+        setCensusLoading(true)
+      }
+    })
 
     const scoreP = getLiveabilityScore({
       lat,
@@ -444,20 +666,33 @@ export default function InsightsPage() {
       time: rangeMinutes,
       persona: profile || 'default',
     })
+    const censusP = getCensusProfileForLocation(selectedLocation).catch((err) => {
+      console.error('Census profile load error:', err)
+      return {
+        available: false,
+        message: 'Census information could not be loaded for this location.',
+      }
+    })
 
-    scoreP
-      .then((scoreData) => {
+    Promise.all([scoreP, censusP])
+      .then(([scoreData, censusProfile]) => {
         if (cancelled) return
         setOverallScore(scoreData.liveabilityScore)
         setScores(scoreData.scores || null)
         setScoreWeights(scoreData.weights || null)
         setIndicators(buildIndicatorMapFromBreakdown(scoreData.breakdown || {}, rangeMinutes))
+        setCensusData(censusProfile)
       })
       .catch(console.error)
-      .finally(() => { if (!cancelled) setLoading(false) })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false)
+          setCensusLoading(false)
+        }
+      })
 
     return () => { cancelled = true }
-  }, [locationName, rangeMinutes, profile, selectedLocation?.lat, selectedLocation?.lng])
+  }, [locationName, rangeMinutes, profile, selectedLocation])
 
   if (!locationName) {
     return (
@@ -709,6 +944,8 @@ export default function InsightsPage() {
             Tap any indicator to read the detail behind it.
           </p>
         </div>
+
+        <CensusContextSection data={censusData} loading={censusLoading} userProfile={profile} />
 
         {/* Interpretation */}
         {!loading && scores && (
