@@ -10,11 +10,14 @@ import {
 } from '../services/api.js'
 import { saveContext } from '../utils/storage.js'
 import heroImage from '../assets/bg.png'
+import familyIcon from '../assets/family.png'
+import elderlyIcon from '../assets/elderly.png'
+import petIcon from '../assets/pet.png'
 
 const PROFILES = [
-  { key: 'familyWithChildren', title: 'Family', emoji: '👨‍👩‍👧', desc: 'Schools, parks & safe streets' },
-  { key: 'elderly', title: 'Elderly', emoji: '🧓', desc: 'Healthcare, quiet & accessible' },
-  { key: 'petOwner', title: 'Pet Owner', emoji: '🐾', desc: 'Dog parks & off-leash areas' },
+  { key: 'familyWithChildren', title: 'Family', icon: familyIcon, desc: 'Schools, parks & safe streets' },
+  { key: 'elderly', title: 'Elderly', icon: elderlyIcon, desc: 'Healthcare, quiet & accessible' },
+  { key: 'petOwner', title: 'Pet Owner', icon: petIcon, desc: 'Dog parks & off-leash areas' },
 ]
 
 const VALUE_PROPS = [
@@ -204,7 +207,18 @@ export default function HomePage() {
   }
 
   function toggleProfile(key) {
-    setProfile((prev) => ({ ...prev, [key]: !prev[key] }))
+    // Single-select: clicking an active card unselects it; otherwise only the
+    // clicked profile becomes active and all others are reset.
+    setProfile((prev) => {
+      const isActive = !!prev[key]
+      const reset = {
+        familyWithChildren: false,
+        elderly: false,
+        petOwner: false,
+      }
+      if (isActive) return reset
+      return { ...reset, [key]: true }
+    })
   }
 
   function onSubmit() {
@@ -389,7 +403,7 @@ export default function HomePage() {
                   id="home-search-input"
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
-                  placeholder="e.g. Fitzroy or 123 Swanston St"
+                  placeholder="e.g. Richmond, 3076, or 45 Chapel St"
                   aria-autocomplete="list"
                   aria-expanded={hasResults}
                   aria-controls={hasResults ? 'home-search-results' : undefined}
@@ -462,18 +476,20 @@ export default function HomePage() {
 
             <p className="profile-label" id="profile-label">Your situation</p>
 
-            <div className="profile-row" role="group" aria-labelledby="profile-label">
-              {PROFILES.map(({ key, title, emoji, desc }) => (
+            <div className="profile-row" role="radiogroup" aria-labelledby="profile-label">
+              {PROFILES.map(({ key, title, icon, desc }) => (
                 <div
                   key={key}
                   className={`profile-card${profile[key] ? ' active' : ''}`}
-                  role="button"
-                  aria-pressed={profile[key]}
+                  role="radio"
+                  aria-checked={profile[key]}
                   tabIndex={0}
                   onClick={() => toggleProfile(key)}
                   onKeyDown={(e) => e.key === 'Enter' && toggleProfile(key)}
                 >
-                  <span className="profile-card-emoji" aria-hidden="true">{emoji}</span>
+                  <span className="profile-card-emoji" aria-hidden="true">
+                    <img className="profile-card-icon-img" src={icon} alt="" />
+                  </span>
                   <span className="profile-card-title">{title}</span>
                   <span className="profile-card-desc">{desc}</span>
                   <div className="profile-check" aria-hidden="true">
