@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { LinearProgress } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
-import { getCensusProfileForLocation, getInsights, getMapContext } from '../services/api.js'
+import { getCensusProfileForLocation, getLiveabilityScore } from '../services/api.js'
 import { loadContext } from '../utils/storage.js'
 
 const CATEGORIES = ['accessibility', 'safety', 'environment']
@@ -57,17 +57,211 @@ function getProfileLabel(profile) {
   return null
 }
 
-function buildInterpretation(scores, locationName) {
-  const sorted = CATEGORIES.map((k) => [k, scores[k]]).sort(([, a], [, b]) => a - b)
-  const [worstKey, worstScore] = sorted[0]
-  const [bestKey, bestScore] = sorted[sorted.length - 1]
-  const bestLabel = CATEGORY_CONFIG[bestKey].label.toLowerCase()
-  const specific = {
-    environment:   `A score of ${worstScore}/100 for environment suggests ${locationName} may have limited green space, elevated urban heat, or air quality concerns.`,
-    accessibility: `A score of ${worstScore}/100 for accessibility indicates that public transport, walkability, or proximity to services may be below average for ${locationName}.`,
-    safety:        `A score of ${worstScore}/100 for safety reflects higher recorded incident rates or limited street infrastructure in ${locationName}.`,
+function buildInterpretation(scores, locationName, profileLabel, rangeMinutes) {
+  const area = locationName || 'this area'
+  const profileText = profileLabel
+    ? `for a ${profileLabel.toLowerCase()} profile`
+    : 'for a general profile'
+  const rangeText = `${rangeMinutes}-minute`
+
+  const rows = CATEGORIES.map((key) => {
+    const value = Number(scores?.[key] ?? 0)
+    const avg = Number(MELBOURNE_AVG[key] ?? 0)
+    const delta = value - avg
+    return { key, value, avg, delta }
+  })
+
+  const byDelta = [...rows].sort((a, b) => a.delta - b.delta)
+  const lowestDelta = byDelta[0]
+  const middleDelta = byDelta[1]
+  const highestDelta = byDelta[2]
+
+  const highestLabel = CATEGORY_CONFIG[highestDelta.key].label
+  const middleLabel = CATEGORY_CONFIG[middleDelta.key].label
+  const lowestLabel = CATEGORY_CONFIG[lowestDelta.key].label
+
+  function deltaText(delta) {
+    if (delta >= 0) return `${delta.toFixed(1)} points above Melbourne average`
+    return `${Math.abs(delta).toFixed(1)} points below Melbourne average`
   }
-  return `${specific[worstKey]} On the other hand, ${locationName} performs well on ${bestLabel} (${bestScore}/100). These scores are currently based on illustrative data and will reflect live datasets in the final product.`
+
+  function absoluteBand(score) {
+    if (score >= 80) return 'strong in absolute level'
+    if (score >= 65) return 'good in absolute level'
+    if (score >= 50) return 'moderate in absolute level'
+    return 'low in absolute level'
+  }
+
+  return `${area} performs relatively best on ${highestLabel} (${highestDelta.value}/100), which is ${deltaText(highestDelta.delta)} and ${absoluteBand(highestDelta.value)}. ${middleLabel} is ${middleDelta.value}/100 (${deltaText(middleDelta.delta)}), showing a middle position versus city baseline. The main improvement area is ${lowestLabel} at ${lowestDelta.value}/100, which is ${deltaText(lowestDelta.delta)}. For your ${rangeText} search ${profileText}, this area is more suitable if your priority is ${highestLabel.toLowerCase()}, while users who care most about ${lowestLabel.toLowerCase()} may want to compare a few nearby alternatives.`
+}
+
+const ACCESSIBILITY_FACTOR_LABELS = {
+  bus_stop: 'Bus stop coverage',
+  train_station: 'Train station access',
+  supermarket: 'Supermarket access',
+  hospital: 'Hospital access',
+  school: 'School access',
+  park: 'Park access',
+  dog_park: 'Dog park access',
+}
+
+const TARGET_COUNT_MAP = {
+  bus_stop: 8,
+  train_station: 1,
+  supermarket: 3,
+  hospital: 2,
+  school: 3,
+  park: 5,
+  dog_park: 3,
+}
+
+const INDICATOR_WEIGHT_CONFIG = {
+  bus_stop: { distance: 0.3, count: 0.7 },
+  train_station: { distance: 0.8, count: 0.2 },
+  supermarket: { distance: 0.5, count: 0.5 },
+  hospital: { distance: 0.7, count: 0.3 },
+  school: { distance: 0.6, count: 0.4 },
+  park: { distance: 0.5, count: 0.5 },
+  dog_park: { distance: 0.5, count: 0.5 },
+}
+
+const TIME_DISTANCE_KM = { 10: 0.8, 20: 1.6, 30: 2.4 }
+
+function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
+  const accessibilityBreakdown = breakdown.accessibility?.breakdown || {}
+  const safety = breakdown.safety || {}
+  const environment = breakdown.environment || {}
+  const maxDistanceKm = TIME_DISTANCE_KM[Number(rangeMinutes)] || 1.6
+
+  const accessibilityFactors = Object.entries(accessibilityBreakdown).map(([type, item]) => {
+    const score = Number(item?.score) || 0
+    const count = Number(item?.count) || 0
+    const nearestDistanceKm = Number(item?.nearestDistanceKm)
+    const target = TARGET_COUNT_MAP[type] || 3
+    const indicatorWeights = INDICATOR_WEIGHT_CONFIG[type] || { distance: 0.5, count: 0.5 }
+    const distanceScore =
+      Number.isFinite(nearestDistanceKm) && nearestDistanceKm <= maxDistanceKm
+        ? Math.max(0, 100 * (1 - nearestDistanceKm / maxDistanceKm))
+        : 0
+    const countScore = 100 * Math.min(count / target, 1)
+    const distanceText = Number.isFinite(nearestDistanceKm)
+      ? nearestDistanceKm < 1
+        ? `${(nearestDistanceKm * 1000).toFixed(0)} m`
+        : `${nearestDistanceKm.toFixed(2)} km`
+      : 'No nearby result'
+
+    const convenienceHint =
+      score >= 80
+        ? 'This is very convenient in daily life.'
+        : score >= 60
+          ? 'This is reasonably convenient for most people.'
+          : 'This may feel less convenient and might need extra travel time.'
+
+    return {
+      name: ACCESSIBILITY_FACTOR_LABELS[type] || type.replaceAll('_', ' '),
+      met: score >= 60,
+      summary: `Score ${score.toFixed(1)}/100`,
+      lines: [
+        `Nearest place: ${distanceText}`,
+        `Found in range: ${count} (target ${target})`,
+        `Formula parts: distance ${distanceScore.toFixed(1)} + count ${countScore.toFixed(1)}`,
+        convenienceHint,
+      ],
+      note: `Distance weight ${indicatorWeights.distance}, count weight ${indicatorWeights.count}.`,
+    }
+  })
+
+  const safetyFactors = [
+    {
+      name: 'Crime context score',
+      met: Number(safety?.scores?.crime) >= 60,
+      summary: `Crime score ${safety?.scores?.crime ?? 'N/A'}/100`,
+      lines: [
+        `Nearby suburbs used: ${safety?.crimeDetails?.suburbCount ?? 0}`,
+        Number(safety?.scores?.crime) >= 60
+          ? 'Lower crime risk in this selected range.'
+          : 'Crime risk is relatively higher in this selected range.',
+      ],
+    },
+    {
+      name: 'Zoning safety score',
+      met: Number(safety?.scores?.zoning) >= 60,
+      summary: `Zoning score ${safety?.scores?.zoning ?? 'N/A'}/100`,
+      lines: [
+        `Zoning features used: ${safety?.zoningDetails?.zoneCount ?? 0}`,
+        'Land-use around you is translated into safety-friendly scores.',
+      ],
+    },
+    {
+      name: 'Combined safety output',
+      met: Number(safety?.safetyScore) >= 60,
+      summary: `Final safety score ${safety?.safetyScore ?? 'N/A'}/100`,
+      lines: [
+        'Final mix: crime 57% + zoning 43%',
+        Number(safety?.safetyScore) >= 60
+          ? 'Overall, this area feels comparatively safer.'
+          : 'Overall, safety conditions are more mixed here.',
+      ],
+    },
+  ]
+
+  const environmentFactors = [
+    {
+      name: 'Green coverage',
+      met: Number(environment?.scores?.green) >= 60,
+      summary: `Green score ${environment?.scores?.green ?? 'N/A'}/100`,
+      lines: [
+        Number(environment?.scores?.green) >= 60
+          ? 'Good amount of vegetation and green cover nearby.'
+          : 'Green cover is more limited in this selected range.',
+      ],
+    },
+    {
+      name: 'Urban heat',
+      met: Number(environment?.scores?.heat) >= 60,
+      summary: `Heat score ${environment?.scores?.heat ?? 'N/A'}/100`,
+      lines: [
+        'Higher score means cooler and more comfortable outdoor conditions.',
+      ],
+    },
+    {
+      name: 'Environmental zoning comfort',
+      met: Number(environment?.scores?.zoning) >= 60,
+      summary: `Zoning comfort score ${environment?.scores?.zoning ?? 'N/A'}/100`,
+      lines: [
+        'Nearby land-use types are mapped to comfort levels.',
+      ],
+    },
+    {
+      name: 'Air quality',
+      met: Number(environment?.scores?.airQuality) >= 60,
+      summary: `Air quality score ${environment?.scores?.airQuality ?? 'N/A'}/100`,
+      lines: [
+        `Source: ${environment?.rawData?.airQualitySource || 'Air quality dataset'}`,
+        Number(environment?.scores?.airQuality) >= 60
+          ? 'Air quality is generally healthy for daily activity.'
+          : 'Air quality may need more caution on sensitive days.',
+      ],
+    },
+  ]
+
+  return {
+    accessibility: {
+      category: 'accessibility',
+      factors: accessibilityFactors,
+      scoreExplanation: 'Computed from real POI distance and count data.',
+    },
+    safety: {
+      category: 'safety',
+      factors: safetyFactors,
+      scoreExplanation: 'Computed from crime context and zoning safety model.',
+    },
+    environment: {
+      category: 'environment',
+      factors: environmentFactors,
+      scoreExplanation: 'Computed from green, heat, zoning and air-quality signals.',
+    },
+  }
 }
 
 function CircularGauge({ score, color, size = 160, strokeWidth = 13, dark = false }) {
@@ -187,9 +381,25 @@ function IndicatorCard({ factor, color, soft, border }) {
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{ fontWeight: 700, fontSize: 13, color: '#1a2436', lineHeight: 1.35 }}>{factor.name}</p>
-          {open && factor.note && (
-            <p style={{ fontSize: 12, color: '#6b7280', marginTop: 6, lineHeight: 1.55 }}>{factor.note}</p>
-          )}
+          {factor.summary ? (
+            <p style={{ fontSize: 12, color: '#4b5563', marginTop: 6, lineHeight: 1.6, fontWeight: 600 }}>
+              {factor.summary}
+            </p>
+          ) : null}
+          {open && Array.isArray(factor.lines) && factor.lines.length > 0 ? (
+            <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {factor.lines.map((line, idx) => (
+                <p key={idx} style={{ fontSize: 12, color: '#6b7280', lineHeight: 1.55 }}>
+                  {line}
+                </p>
+              ))}
+              {factor.note ? (
+                <p style={{ fontSize: 11, color: '#8a94a6', lineHeight: 1.5 }}>
+                  {factor.note}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
         </div>
         <span style={{ fontSize: 11, fontWeight: 800, color: met ? color : '#6b7280', flexShrink: 0, paddingTop: 2 }} aria-hidden="true">
           {open ? '▴' : '▾'}
@@ -427,6 +637,7 @@ export default function InsightsPage() {
 
   const [overallScore, setOverallScore] = useState(null)
   const [scores, setScores] = useState(null)
+  const [scoreWeights, setScoreWeights] = useState(null)
   const [indicators, setIndicators] = useState({})
   const [loading, setLoading] = useState(true)
   const [censusLoading, setCensusLoading] = useState(true)
@@ -434,10 +645,27 @@ export default function InsightsPage() {
   const [activeTab, setActiveTab] = useState('accessibility')
 
   useEffect(() => {
-    if (!locationName) return
+    const lat = Number(selectedLocation?.lat)
+    const lng = Number(selectedLocation?.lng)
+
+    if (!locationName || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return
+    }
     let cancelled = false
 
-    const scoreP = getMapContext({ locationName, rangeMinutes, profile })
+    Promise.resolve().then(() => {
+      if (!cancelled) {
+        setLoading(true)
+        setCensusLoading(true)
+      }
+    })
+
+    const scoreP = getLiveabilityScore({
+      lat,
+      lng,
+      time: rangeMinutes,
+      persona: profile || 'default',
+    })
     const censusP = getCensusProfileForLocation(selectedLocation).catch((err) => {
       console.error('Census profile load error:', err)
       return {
@@ -445,19 +673,15 @@ export default function InsightsPage() {
         message: 'Census information could not be loaded for this location.',
       }
     })
-    const indicatorPs = CATEGORIES.map(cat =>
-      getInsights({ locationName, rangeMinutes, profile, category: cat }).then(res => [cat, res])
-    )
 
-    Promise.all([scoreP, censusP, ...indicatorPs])
-      .then(([mapData, censusProfile, ...pairs]) => {
+    Promise.all([scoreP, censusP])
+      .then(([scoreData, censusProfile]) => {
         if (cancelled) return
-        setOverallScore(mapData.overallScore)
-        setScores(mapData.scores)
+        setOverallScore(scoreData.liveabilityScore)
+        setScores(scoreData.scores || null)
+        setScoreWeights(scoreData.weights || null)
+        setIndicators(buildIndicatorMapFromBreakdown(scoreData.breakdown || {}, rangeMinutes))
         setCensusData(censusProfile)
-        const map = {}
-        pairs.forEach(([cat, res]) => { map[cat] = res })
-        setIndicators(map)
       })
       .catch(console.error)
       .finally(() => {
@@ -711,6 +935,11 @@ export default function InsightsPage() {
                 : <p style={{ color: '#4b5563', fontSize: 14, padding: '16px 0', gridColumn: '1/-1' }}>No indicators available.</p>
             }
           </div>
+          {!loading && activeIndicators?.scoreExplanation ? (
+            <p style={{ marginTop: 10, fontSize: 12, color: '#4b5563', lineHeight: 1.6 }}>
+              {activeIndicators.scoreExplanation}
+            </p>
+          ) : null}
           <p style={{ marginTop: 10, fontSize: 11, color: '#4b5563' }}>
             Tap any indicator to read the detail behind it.
           </p>
@@ -734,11 +963,11 @@ export default function InsightsPage() {
             </div>
             <div style={{ padding: '20px 24px' }}>
               <p style={{ fontSize: 14, color: '#374151', lineHeight: 1.75 }}>
-                {buildInterpretation(scores, locationName)}
+                {buildInterpretation(scores, locationName, profileLabel, rangeMinutes)}
               </p>
               <div style={{ marginTop: 16, padding: '12px 16px', background: '#f5f0eb', borderRadius: 12, borderLeft: '3px solid #d97706' }} role="note">
                 <p style={{ fontSize: 12, color: '#92400e', fontWeight: 600, lineHeight: 1.6 }}>
-                  These scores are currently illustrative and will reflect live datasets in the final product.
+                  Scores are computed from live backend formulas and open-data signals.
                 </p>
               </div>
             </div>
@@ -770,6 +999,15 @@ export default function InsightsPage() {
             <tbody>
               {CATEGORIES.map((k, idx) => {
                 const c = CATEGORY_CONFIG[k]
+                const dynamicWeight =
+                  k === 'accessibility'
+                    ? scoreWeights?.A
+                    : k === 'safety'
+                      ? scoreWeights?.S
+                      : scoreWeights?.E
+                const displayWeight = Number.isFinite(dynamicWeight)
+                  ? Math.round(dynamicWeight * 100)
+                  : c.weight
                 return (
                   <tr key={k}>
                     <td style={{ padding: '14px 16px 14px 0', borderBottom: idx < 2 ? '1px solid #f3f4f6' : 'none' }}>
@@ -783,7 +1021,7 @@ export default function InsightsPage() {
                         display: 'inline-block', background: c.soft, border: `1px solid ${c.border}`,
                         borderRadius: 999, padding: '3px 12px',
                         fontSize: 12, fontWeight: 800, color: c.color,
-                      }} aria-label={`${c.weight} percent`}>{c.weight}%</span>
+                      }} aria-label={`${displayWeight} percent`}>{displayWeight}%</span>
                     </td>
                     <td style={{ padding: '14px 0', borderBottom: idx < 2 ? '1px solid #f3f4f6' : 'none' }}>
                       <span style={{ fontSize: 12, color: '#4b5563' }}>{c.sources}</span>
