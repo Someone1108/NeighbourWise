@@ -406,7 +406,23 @@ export async function getLiveabilityScore({ lat, lng, time, persona }) {
   }
 
   const safeTime = [10, 20, 30].includes(Number(time)) ? Number(time) : 20
-  const safePersona = persona || 'default'
+  function normalizePersona(input) {
+    if (typeof input === 'string') {
+      const key = input.trim().toLowerCase()
+      if (['default', 'family', 'elderly', 'pet'].includes(key)) return key
+      if (key === 'pet_owner') return 'pet'
+      return 'default'
+    }
+
+    if (input && typeof input === 'object') {
+      if (input.familyWithChildren) return 'family'
+      if (input.elderly) return 'elderly'
+      if (input.petOwner) return 'pet'
+    }
+
+    return 'default'
+  }
+  const safePersona = normalizePersona(persona)
 
   return fetchJson(
     `${API_BASE_URL}/api/score/liveability?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}&time=${encodeURIComponent(safeTime)}&persona=${encodeURIComponent(safePersona)}`
