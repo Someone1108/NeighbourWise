@@ -335,6 +335,43 @@ export default function MapPage() {
 
         <aside className="nwMapRight">
           <div className="nwCard nwMapSidebarCard" style={{ textAlign: "left" }}>
+<<<<<<< HEAD
+            <div className="nwScoreHeader" aria-label="Liveability scores">
+              <div className="nwScoreHeaderTop">
+                <div className="nwScoreHeaderInfo">
+                  <div
+                    className="nwScoreHeaderEyebrow"
+                    id="liveability-score-label"
+                  >
+                    {String(locationName || "").toUpperCase()}
+                  </div>
+                  <h2 className="nwScoreHeaderTitle">
+                    Overall<br />Liveability
+                  </h2>
+                  {(() => {
+                    const s = mapData?.overallScore;
+                    let tier = { label: "—", className: "is-na" };
+                    if (Number.isFinite(s)) {
+                      if (s >= 80) tier = { label: "Excellent", className: "is-excellent" };
+                      else if (s >= 65) tier = { label: "Good", className: "is-good" };
+                      else if (s >= 50) tier = { label: "Moderate", className: "is-moderate" };
+                      else tier = { label: "Low", className: "is-low" };
+                    }
+                    return (
+                      <span className={`nwScoreTier ${tier.className}`}>
+                        <span className="nwScoreTierDot" aria-hidden="true" />
+                        {tier.label}
+                      </span>
+                    );
+                  })()}
+                  {getProfileLabel(profile) && (
+                    <div className="nwScoreHeaderProfile">
+                      Scored for: {getProfileLabel(profile)}
+                    </div>
+                  )}
+                </div>
+
+=======
             <div style={{ marginBottom: 4 }} aria-label="Liveability scores">
               <div
                 style={{
@@ -351,16 +388,29 @@ export default function MapPage() {
               </div>
 
               {getProfileLabel(profile) && (
+>>>>>>> origin/develop
                 <div
+                  className="nwScoreDonut"
+                  aria-labelledby="liveability-score-label"
+                  aria-live="polite"
                   style={{
-                    fontSize: 11,
-                    color: "var(--muted-dark)",
-                    fontWeight: 600,
-                    marginBottom: 6
+                    "--nw-score": Number.isFinite(mapData?.overallScore)
+                      ? mapData.overallScore
+                      : 0
                   }}
                 >
-                  Scored for: {getProfileLabel(profile)}
+                  <div className="nwScoreDonutInner">
+                    <div className="nwScoreDonutValue">
+                      {mapData ? mapData.overallScore : "–"}
+                    </div>
+                    <div className="nwScoreDonutOf">/100</div>
+                  </div>
                 </div>
+<<<<<<< HEAD
+              </div>
+
+              <div className="nwScoreHeaderBars">
+=======
               )}
 
               <div
@@ -376,6 +426,7 @@ export default function MapPage() {
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+>>>>>>> origin/develop
                 {CATEGORY_KEYS.map((k) => (
                   <ScoreBar
                     key={k}
