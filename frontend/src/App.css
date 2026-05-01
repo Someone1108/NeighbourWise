@@ -331,14 +331,13 @@ body {
   display: flex;
   gap: 20px;
   align-items: stretch;
+  /* Lock the row height on the parent so both columns stretch to match,
+     keeping the layout inside one viewport without an internal scrollbar. */
+  height: clamp(440px, calc(100vh - 200px), 720px);
 }
 
 .nwMapLeft {
   flex: 1 1 auto;
-  /* Fills the viewport on tall screens, but capped so it never gets absurdly
-     tall on 4K monitors. align-items:stretch on .nwMapLayout means the right
-     sidebar matches this height automatically. */
-  min-height: clamp(460px, calc(100vh - 240px), 900px);
   min-width: 0;
   position: relative;
 }
@@ -360,7 +359,6 @@ body {
   height: 100%;
   padding: 16px 18px;
   background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-  overflow-y: auto;
 }
 
 /* ── Sidebar density tightening so the whole page fits one viewport ── */
@@ -1818,6 +1816,7 @@ body {
 
   .nwMapLayout {
     flex-direction: column;
+    height: auto;
   }
 
   .nwMapRight {

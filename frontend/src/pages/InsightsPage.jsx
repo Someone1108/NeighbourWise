@@ -251,7 +251,7 @@ function getIndicatorStatus(score) {
 function getImpactText(score, categoryLabel) {
   const value = Number(score)
   if (!Number.isFinite(value)) return 'Impact unavailable'
-  if (value >= 80) return `Strongly improves ${categoryLabel.toLowerCase()}`
+  if (value >= 80) return `Improves ${categoryLabel.toLowerCase()}`
   if (value >= 65) return `Supports ${categoryLabel.toLowerCase()}`
   if (value >= 50) return `Slightly reduces ${categoryLabel.toLowerCase()}`
   return `Pulls ${categoryLabel.toLowerCase()} down`
@@ -339,7 +339,7 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
       name: ACCESSIBILITY_FACTOR_LABELS[type] || type.replaceAll('_', ' '),
       score,
       met: score >= 60,
-      summary: `${getIndicatorStatus(score).label}: ${score.toFixed(1)}/100`,
+      summary: `${score.toFixed(1)}/100`,
       plainText: `${ACCESSIBILITY_FACTOR_LABELS[type] || type.replaceAll('_', ' ')} scores ${score.toFixed(1)}/100. The nearest result is ${distanceText}, with ${count} found in the selected range.`,
       impact: getImpactText(score, 'Accessibility'),
       lines: [
@@ -364,7 +364,7 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
       name: 'Crime context score',
       score: crimeScore,
       met: crimeScore >= 60,
-      summary: Number.isFinite(crimeScore) ? `${getIndicatorStatus(crimeScore).label}: ${crimeScore}/100` : 'Unavailable',
+      summary: Number.isFinite(crimeScore) ? `${crimeScore}/100` : 'Unavailable',
       plainText: Number.isFinite(crimeScore)
         ? `Crime context scores ${crimeScore}/100 based on nearby suburb crime patterns.`
         : 'Crime context is unavailable for this area.',
@@ -380,7 +380,7 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
       name: 'Zoning safety score',
       score: zoningSafetyScore,
       met: zoningSafetyScore >= 60,
-      summary: Number.isFinite(zoningSafetyScore) ? `${getIndicatorStatus(zoningSafetyScore).label}: ${zoningSafetyScore}/100` : 'Unavailable',
+      summary: Number.isFinite(zoningSafetyScore) ? `${zoningSafetyScore}/100` : 'Unavailable',
       plainText: Number.isFinite(zoningSafetyScore)
         ? `Zoning safety scores ${zoningSafetyScore}/100 from nearby land-use patterns.`
         : 'Zoning safety is unavailable for this area.',
@@ -394,7 +394,7 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
       name: 'Combined safety output',
       score: finalSafetyScore,
       met: finalSafetyScore >= 60,
-      summary: Number.isFinite(finalSafetyScore) ? `${getIndicatorStatus(finalSafetyScore).label}: ${finalSafetyScore}/100` : 'Unavailable',
+      summary: Number.isFinite(finalSafetyScore) ? `${finalSafetyScore}/100` : 'Unavailable',
       plainText: Number.isFinite(finalSafetyScore)
         ? `The final safety score is ${finalSafetyScore}/100 after combining crime and zoning signals.`
         : 'The final safety score is unavailable for this area.',
@@ -418,7 +418,7 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
       name: 'Green coverage',
       score: greenScore,
       met: greenScore >= 60,
-      summary: Number.isFinite(greenScore) ? `${getIndicatorStatus(greenScore).label}: ${greenScore}/100` : 'Unavailable',
+      summary: Number.isFinite(greenScore) ? `${greenScore}/100` : 'Unavailable',
       plainText: Number.isFinite(greenScore)
         ? `Green coverage scores ${greenScore}/100 based on vegetation and green space nearby.`
         : 'Green coverage is unavailable for this area.',
@@ -433,7 +433,7 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
       name: 'Urban heat',
       score: heatScore,
       met: heatScore >= 60,
-      summary: Number.isFinite(heatScore) ? `${getIndicatorStatus(heatScore).label}: ${heatScore}/100` : 'Unavailable',
+      summary: Number.isFinite(heatScore) ? `${heatScore}/100` : 'Unavailable',
       plainText: Number.isFinite(heatScore)
         ? `Urban heat scores ${heatScore}/100. Higher scores mean cooler and more comfortable outdoor conditions.`
         : 'Urban heat is unavailable for this area.',
@@ -446,7 +446,7 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
       name: 'Environmental zoning comfort',
       score: zoningComfortScore,
       met: zoningComfortScore >= 60,
-      summary: Number.isFinite(zoningComfortScore) ? `${getIndicatorStatus(zoningComfortScore).label}: ${zoningComfortScore}/100` : 'Unavailable',
+      summary: Number.isFinite(zoningComfortScore) ? `${zoningComfortScore}/100` : 'Unavailable',
       plainText: Number.isFinite(zoningComfortScore)
         ? `Environmental zoning comfort scores ${zoningComfortScore}/100 from nearby land-use types.`
         : 'Environmental zoning comfort is unavailable for this area.',
@@ -459,7 +459,7 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
       name: 'Air quality',
       score: airQualityScore,
       met: airQualityScore >= 60,
-      summary: Number.isFinite(airQualityScore) ? `${getIndicatorStatus(airQualityScore).label}: ${airQualityScore}/100` : 'Unavailable',
+      summary: Number.isFinite(airQualityScore) ? `${airQualityScore}/100` : 'Unavailable',
       plainText: Number.isFinite(airQualityScore)
         ? `Air quality scores ${airQualityScore}/100 using the nearest available air quality signal.`
         : 'Air quality is unavailable for this area.',
@@ -562,12 +562,12 @@ function MiniGauge({ score, color, size = 52 }) {
 
 function CompareBar({ value, avg, color }) {
   return (
-    <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <div style={{ position: 'relative', height: 8, borderRadius: 4, background: 'rgba(0,0,0,0.07)' }}>
+    <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ position: 'relative', height: 10, borderRadius: 5, background: 'rgba(0,0,0,0.07)' }}>
         <div style={{ position: 'absolute', top: -3, bottom: -3, width: 2, left: `${avg}%`, background: 'rgba(0,0,0,0.25)', borderRadius: 1, zIndex: 2 }} />
-        <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${value ?? 0}%`, background: color, borderRadius: 4 }} />
+        <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${value ?? 0}%`, background: color, borderRadius: 5 }} />
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, fontWeight: 600, color: '#6b7280' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, fontWeight: 600, color: '#6b7280' }}>
         <span>This area: <span style={{ color, fontWeight: 800 }}>{value ?? '–'}</span></span>
         <span>Melb avg: {avg}</span>
       </div>
@@ -608,7 +608,7 @@ function IndicatorCard({ factor, color, soft, border }) {
         background: cardBackground,
         border: `1.5px solid ${cardBorder}`,
         borderRadius: 14,
-        padding: '14px 16px',
+        padding: '18px 20px',
         cursor: 'pointer',
         boxSizing: 'border-box',
         textAlign: 'left',
@@ -619,63 +619,58 @@ function IndicatorCard({ factor, color, soft, border }) {
       onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.08)'; e.currentTarget.style.transform = 'translateY(-1px)' }}
       onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'none' }}
     >
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
         <div style={{
-          width: 28, height: 28, borderRadius: 8, flexShrink: 0,
+          width: 34, height: 34, borderRadius: 9, flexShrink: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           background: badgeBackground,
           color: badgeColor,
-          fontSize: 11, fontWeight: 900,
+          fontSize: 14, fontWeight: 900,
         }} aria-hidden="true">
           {isPositive ? '+' : isCaution ? '!' : '-'}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
-            <p style={{ fontWeight: 800, fontSize: 13, color: '#1a2436', lineHeight: 1.35 }}>{factor.name}</p>
+            <p style={{ fontWeight: 800, fontSize: 16, color: '#1a2436', lineHeight: 1.35 }}>{factor.name}</p>
             <span style={{
               flexShrink: 0,
               borderRadius: 999,
-              padding: '2px 8px',
+              padding: '3px 10px',
               background: isPositive ? 'rgba(5,150,105,0.12)' : isCaution ? 'rgba(217,119,6,0.14)' : 'rgba(107,114,128,0.12)',
               color: isPositive ? '#047857' : isCaution ? '#92400e' : '#4b5563',
-              fontSize: 10,
+              fontSize: 12,
               fontWeight: 900,
             }}>
               {status.label}
             </span>
           </div>
           {factor.summary ? (
-            <p style={{ fontSize: 12, color: '#4b5563', marginTop: 6, lineHeight: 1.5, fontWeight: 700 }}>
+            <p style={{ fontSize: 14, color: '#4b5563', marginTop: 8, lineHeight: 1.5, fontWeight: 700 }}>
               {factor.summary}
             </p>
           ) : null}
           <IndicatorScoreBar score={factor.score} color={color} />
           {factor.plainText ? (
-            <p style={{ marginTop: 9, fontSize: 12, color: '#4b5563', lineHeight: 1.6 }}>
+            <p style={{ marginTop: 10, fontSize: 14, color: '#4b5563', lineHeight: 1.6 }}>
               {factor.plainText}
             </p>
           ) : null}
-          {factor.impact ? (
-            <p style={{ marginTop: 8, fontSize: 11, fontWeight: 900, color }}>
-              {factor.impact}
-            </p>
-          ) : null}
           {open ? (
-            <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(15,23,42,0.08)', display: 'flex', flexDirection: 'column', gap: 5 }}>
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(15,23,42,0.08)', display: 'flex', flexDirection: 'column', gap: 6 }}>
               {factor.lines.map((line, idx) => (
-                <p key={`line-${idx}`} style={{ fontSize: 12, color: '#4b5563', lineHeight: 1.55 }}>
+                <p key={`line-${idx}`} style={{ fontSize: 14, color: '#4b5563', lineHeight: 1.6 }}>
                   {line}
                 </p>
               ))}
               {Array.isArray(factor.details) && factor.details.map((line, idx) => (
-                <p key={`detail-${idx}`} style={{ fontSize: 11, color: '#6b7280', lineHeight: 1.5 }}>
+                <p key={`detail-${idx}`} style={{ fontSize: 13, color: '#6b7280', lineHeight: 1.55 }}>
                   {line}
                 </p>
               ))}
             </div>
           ) : null}
         </div>
-        <span style={{ fontSize: 11, fontWeight: 800, color: isPositive || isCaution ? color : '#6b7280', flexShrink: 0, paddingTop: 2 }} aria-hidden="true">
+        <span style={{ fontSize: 22, fontWeight: 800, color: isPositive || isCaution ? color : '#6b7280', flexShrink: 0, paddingTop: 0, lineHeight: 1 }} aria-hidden="true">
           {open ? '▴' : '▾'}
         </span>
       </div>
@@ -790,9 +785,9 @@ function CensusContextSection({ data, loading, userProfile }) {
   ]
 
   return (
-    <div style={{ marginBottom: 24 }} role="region" aria-label="Census context">
-      <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#4b5563', marginBottom: 4 }}>Census Context</p>
-      <h2 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 22, fontWeight: 400, color: '#1a2436', marginBottom: 16 }}>
+    <div style={{ marginBottom: 28 }} role="region" aria-label="Census context">
+      <p style={{ fontSize: 13, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#4b5563', marginBottom: 6 }}>Census Context</p>
+      <h2 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 28, fontWeight: 400, color: '#1a2436', marginBottom: 18 }}>
         Who lives here
       </h2>
 
@@ -804,14 +799,14 @@ function CensusContextSection({ data, loading, userProfile }) {
         boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
       }}>
         <div style={{
-          padding: '18px 24px',
+          padding: '20px 26px',
           background: 'linear-gradient(90deg, #064e3b, #0f766e)',
           color: '#fff',
         }}>
-          <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.65)', marginBottom: 4 }}>
+          <p style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.65)', marginBottom: 6 }}>
             2021 Census profile
           </p>
-          <p style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 18, lineHeight: 1.25 }}>
+          <p style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 22, lineHeight: 1.25 }}>
             {loading
               ? 'Loading local Census information...'
               : data?.available
@@ -819,7 +814,7 @@ function CensusContextSection({ data, loading, userProfile }) {
                 : 'Census information is not available for this location'}
           </p>
           {!loading && data?.available && (
-            <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.78)', marginTop: 6, lineHeight: 1.5 }}>
+            <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.78)', marginTop: 8, lineHeight: 1.5 }}>
               Based on the best matching SA2 area{source.overlapAreaPct != null ? ` (${source.overlapAreaPct}% boundary overlap)` : ''}.
             </p>
           )}
@@ -836,13 +831,13 @@ function CensusContextSection({ data, loading, userProfile }) {
                   border: '1px solid #a7f3d0',
                   borderLeft: '4px solid #0f766e',
                   borderRadius: 14,
-                  padding: '14px 16px',
-                  marginBottom: 18,
+                  padding: '16px 18px',
+                  marginBottom: 20,
                 }}>
-                  <p style={{ fontSize: 11, fontWeight: 900, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#047857', marginBottom: 5 }}>
+                  <p style={{ fontSize: 13, fontWeight: 900, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#047857', marginBottom: 6 }}>
                     {situationHighlight.label}
                   </p>
-                  <p style={{ fontSize: 13, color: '#134e4a', lineHeight: 1.65, fontWeight: 600 }}>
+                  <p style={{ fontSize: 15, color: '#134e4a', lineHeight: 1.65, fontWeight: 600 }}>
                     {situationHighlight.text}
                   </p>
                 </div>
@@ -850,45 +845,45 @@ function CensusContextSection({ data, loading, userProfile }) {
 
               <div style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-                gap: 10,
-                marginBottom: 18,
+                gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
+                gap: 12,
+                marginBottom: 20,
               }}>
                 {stats.map((stat) => (
                   <div key={stat.label} style={{
                     background: '#f8fafc',
                     border: '1px solid #e5e7eb',
                     borderRadius: 12,
-                    padding: '12px 14px',
+                    padding: '14px 16px',
                   }}>
-                    <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#64748b', marginBottom: 4 }}>
+                    <p style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#64748b', marginBottom: 6 }}>
                       {stat.label}
                     </p>
-                    <p style={{ fontSize: 17, fontWeight: 900, color: '#0f172a' }}>{stat.value}</p>
+                    <p style={{ fontSize: 20, fontWeight: 900, color: '#0f172a' }}>{stat.value}</p>
                   </div>
                 ))}
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14 }}>
                 {(data.insights || []).map((item) => (
                   <div key={item.title} style={{
                     border: '1px solid #e5e7eb',
                     borderRadius: 14,
-                    padding: '14px 16px',
+                    padding: '16px 18px',
                     background: '#fff',
                   }}>
-                    <p style={{ fontSize: 13, fontWeight: 800, color: '#0f766e', marginBottom: 6 }}>{item.title}</p>
-                    <p style={{ fontSize: 13, color: '#374151', lineHeight: 1.65 }}>{item.text}</p>
+                    <p style={{ fontSize: 15, fontWeight: 800, color: '#0f766e', marginBottom: 8 }}>{item.title}</p>
+                    <p style={{ fontSize: 15, color: '#374151', lineHeight: 1.65 }}>{item.text}</p>
                   </div>
                 ))}
               </div>
 
-              <p style={{ marginTop: 14, fontSize: 11, color: '#64748b', lineHeight: 1.55 }}>
+              <p style={{ marginTop: 16, fontSize: 13, color: '#64748b', lineHeight: 1.55 }}>
                 Census data is from 2021 and suburb/postcode boundaries may not perfectly match the SA2 profile area.
               </p>
             </>
           ) : (
-            <p style={{ fontSize: 14, color: '#4b5563', lineHeight: 1.7 }}>
+            <p style={{ fontSize: 16, color: '#4b5563', lineHeight: 1.7 }}>
               {data?.message || 'No Census profile could be matched for this location yet.'}
             </p>
           )}
@@ -1003,7 +998,7 @@ export default function InsightsPage() {
         background: 'rgba(245,240,235,0.95)', backdropFilter: 'blur(12px)',
         WebkitBackdropFilter: 'blur(12px)',
         borderBottom: '1px solid rgba(0,0,0,0.08)',
-        padding: '10px 32px', display: 'flex', alignItems: 'center', gap: 12,
+        padding: '12px 40px', display: 'flex', alignItems: 'center', gap: 14,
       }}>
         <button
           onClick={() => navigate('/map')}
@@ -1011,32 +1006,32 @@ export default function InsightsPage() {
           onFocus={e => { e.currentTarget.style.outline = '2px solid #2563eb'; e.currentTarget.style.outlineOffset = '2px' }}
           onBlur={e => { e.currentTarget.style.outline = 'none' }}
           style={{
-            width: 32, height: 32, borderRadius: 8, border: '1px solid rgba(0,0,0,0.12)',
+            width: 38, height: 38, borderRadius: 9, border: '1px solid rgba(0,0,0,0.12)',
             background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center',
             justifyContent: 'center', flexShrink: 0, color: '#374151',
           }}
         >
-          <ArrowBackIcon style={{ fontSize: 16 }} />
+          <ArrowBackIcon style={{ fontSize: 20 }} />
         </button>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ fontWeight: 800, fontSize: 14, color: '#1a2436', lineHeight: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{locationName}</p>
-          <p style={{ fontSize: 11, color: '#4b5563', marginTop: 2 }}>
+          <p style={{ fontWeight: 800, fontSize: 16, color: '#1a2436', lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{locationName}</p>
+          <p style={{ fontSize: 13, color: '#4b5563', marginTop: 3 }}>
             Liveability breakdown · {rangeMinutes} min range{profileLabel ? ` · ${profileLabel}` : ''}
           </p>
         </div>
         {band && !loading && (
           <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0,
+            display: 'inline-flex', alignItems: 'center', gap: 7, flexShrink: 0,
             background: band.bg, border: `1px solid ${band.border}`,
-            borderRadius: 999, padding: '4px 12px',
+            borderRadius: 999, padding: '5px 14px',
           }} aria-label={`Overall liveability: ${band.label}`}>
-            <div style={{ width: 7, height: 7, borderRadius: '50%', background: band.color }} aria-hidden="true" />
-            <span style={{ fontSize: 12, fontWeight: 800, color: band.color }}>{band.label}</span>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: band.color }} aria-hidden="true" />
+            <span style={{ fontSize: 14, fontWeight: 800, color: band.color }}>{band.label}</span>
           </div>
         )}
       </nav>
 
-      <div style={{ maxWidth: 860, margin: '0 auto', padding: '28px 24px 0' }}>
+      <div style={{ maxWidth: 1280, margin: '0 auto', padding: '28px 32px 0' }}>
 
         {/* Hero score card */}
         <div style={{
@@ -1052,10 +1047,10 @@ export default function InsightsPage() {
             alignItems: 'center',
           }}>
             <div>
-              <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)', marginBottom: 6 }}>
+              <p style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)', marginBottom: 8 }}>
                 {locationName} · Overall Liveability
               </p>
-              <h1 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 'clamp(22px, 3vw, 34px)', fontWeight: 400, color: '#fff', lineHeight: 1.15, marginBottom: 14 }}>
+              <h1 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 'clamp(28px, 3.6vw, 42px)', fontWeight: 400, color: '#fff', lineHeight: 1.15, marginBottom: 16 }}>
                 {band && !loading
                   ? <>{`A `}<em style={{ color: '#fcd34d', fontStyle: 'italic' }}>{band.label.toLowerCase()}</em>{` place`}<br />{`to call home`}</>
                   : 'Loading your score…'
@@ -1065,27 +1060,27 @@ export default function InsightsPage() {
                 <div style={{
                   display: 'inline-flex', alignItems: 'center', gap: 8,
                   background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.2)',
-                  borderRadius: 999, padding: '6px 14px', marginBottom: 20,
+                  borderRadius: 999, padding: '7px 16px', marginBottom: 22,
                 }}>
-                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: band.color }} aria-hidden="true" />
-                  <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.9)' }}>
+                  <div style={{ width: 9, height: 9, borderRadius: '50%', background: band.color }} aria-hidden="true" />
+                  <span style={{ fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.9)' }}>
                     {band.label}{profileLabel ? ` · Scored for ${profileLabel}` : ''}
                   </span>
                 </div>
               )}
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                 {CATEGORIES.map(k => {
                   const c = CATEGORY_CONFIG[k]
                   return (
                     <div key={k} style={{
                       background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.15)',
-                      borderRadius: 12, padding: '8px 14px',
-                      display: 'flex', alignItems: 'center', gap: 8,
+                      borderRadius: 12, padding: '10px 16px',
+                      display: 'flex', alignItems: 'center', gap: 10,
                     }}>
-                      <span style={{ fontSize: 13 }} aria-hidden="true">{c.icon}</span>
+                      <span style={{ fontSize: 16 }} aria-hidden="true">{c.icon}</span>
                       <div>
-                        <p style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{c.label}</p>
-                        <p style={{ fontSize: 17, fontWeight: 900, color: '#fff', lineHeight: 1 }}
+                        <p style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.55)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{c.label}</p>
+                        <p style={{ fontSize: 22, fontWeight: 900, color: '#fff', lineHeight: 1 }}
                           aria-label={`${c.label}: ${loading ? 'loading' : scores?.[k] ?? 'unavailable'}`}>
                           {loading ? '–' : scores?.[k] ?? '–'}
                         </p>
@@ -1097,12 +1092,12 @@ export default function InsightsPage() {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
               {loading
-                ? <div style={{ width: 160, height: 160, borderRadius: '50%', border: '13px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>…</span>
+                ? <div style={{ width: 210, height: 210, borderRadius: '50%', border: '15px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 15 }}>…</span>
                   </div>
-                : <CircularGauge score={overallScore} color={band?.color ?? '#d97706'} size={160} strokeWidth={13} dark={true} />
+                : <CircularGauge score={overallScore} color={band?.color ?? '#d97706'} size={210} strokeWidth={15} dark={true} />
               }
-              <p style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.4)', textAlign: 'center', letterSpacing: '0.06em' }}>LIVEABILITY SCORE</p>
+              <p style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.4)', textAlign: 'center', letterSpacing: '0.06em' }}>LIVEABILITY SCORE</p>
             </div>
           </div>
         </div>
@@ -1120,29 +1115,29 @@ export default function InsightsPage() {
             return (
               <div key={k} style={{
                 background: '#fff', border: `1.5px solid ${c.border}`,
-                borderRadius: 20, padding: '20px 18px',
+                borderRadius: 20, padding: '24px 22px',
                 boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
                 transition: 'box-shadow 0.2s, transform 0.2s',
               }}
                 onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 8px 32px rgba(0,0,0,0.1)'; e.currentTarget.style.transform = 'translateY(-2px)' }}
                 onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.05)'; e.currentTarget.style.transform = 'none' }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
                   <div>
-                    <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: c.color, marginBottom: 2 }}>{c.label}</p>
-                    <p style={{ fontSize: 11, color: '#4b5563', lineHeight: 1.4, maxWidth: 100 }}>{c.description}</p>
+                    <p style={{ fontSize: 16, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: c.color, marginBottom: 6 }}>{c.label}</p>
+                    <p style={{ fontSize: 14, color: '#4b5563', lineHeight: 1.5, maxWidth: 180 }}>{c.description}</p>
                   </div>
-                  <MiniGauge score={loading ? null : score} color={c.color} size={50} />
+                  <MiniGauge score={loading ? null : score} color={c.color} size={62} />
                 </div>
                 {delta != null && (
-                  <p style={{ fontSize: 10, fontWeight: 700, color: delta >= 0 ? '#059669' : '#dc2626' }}
+                  <p style={{ fontSize: 13, fontWeight: 700, color: delta >= 0 ? '#059669' : '#dc2626' }}
                     aria-label={`${Math.abs(delta)} points ${delta >= 0 ? 'above' : 'below'} Melbourne average`}>
                     {delta >= 0 ? '▲' : '▼'} {Math.abs(delta)} vs Melb avg
                   </p>
                 )}
                 <CompareBar value={loading ? null : score} avg={avg} color={c.color} />
                 {!loading && indicators[k] && (
-                  <p style={{ marginTop: 10, fontSize: 11, color: '#4b5563' }}>
+                  <p style={{ marginTop: 12, fontSize: 13, color: '#4b5563' }}>
                     {indicators[k].factors?.filter(f => f.met).length ?? 0}/{indicators[k].factors?.length ?? 0} indicators met
                   </p>
                 )}
@@ -1152,9 +1147,9 @@ export default function InsightsPage() {
         </div>
 
         {/* Indicator breakdown */}
-        <div style={{ marginBottom: 24 }} role="region" aria-label="Indicator breakdown">
-          <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#4b5563', marginBottom: 4 }}>Indicator Breakdown</p>
-          <h2 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 22, fontWeight: 400, color: '#1a2436', marginBottom: 16 }}>
+        <div style={{ marginBottom: 28 }} role="region" aria-label="Indicator breakdown">
+          <p style={{ fontSize: 13, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#4b5563', marginBottom: 6 }}>Indicator Breakdown</p>
+          <h2 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 28, fontWeight: 400, color: '#1a2436', marginBottom: 18 }}>
             What&apos;s driving your score
           </h2>
           {!loading && activeIndicators?.takeaway ? (
@@ -1163,14 +1158,14 @@ export default function InsightsPage() {
               border: `1.5px solid ${activeCfg.border}`,
               borderLeft: `5px solid ${activeCfg.color}`,
               borderRadius: 14,
-              padding: '14px 16px',
-              marginBottom: 14,
+              padding: '16px 18px',
+              marginBottom: 16,
               boxShadow: '0 4px 18px rgba(0,0,0,0.04)',
             }}>
-              <p style={{ fontSize: 10, fontWeight: 900, letterSpacing: '0.1em', textTransform: 'uppercase', color: activeCfg.color, marginBottom: 4 }}>
+              <p style={{ fontSize: 13, fontWeight: 900, letterSpacing: '0.1em', textTransform: 'uppercase', color: activeCfg.color, marginBottom: 6 }}>
                 {activeCfg.label} takeaway
               </p>
-              <p style={{ fontSize: 13, color: '#374151', lineHeight: 1.65, fontWeight: 650 }}>
+              <p style={{ fontSize: 15, color: '#374151', lineHeight: 1.65, fontWeight: 650 }}>
                 {activeIndicators.takeaway}
               </p>
             </div>
@@ -1191,12 +1186,12 @@ export default function InsightsPage() {
                   onFocus={e => { e.currentTarget.style.outline = '2px solid #2563eb'; e.currentTarget.style.outlineOffset = '2px' }}
                   onBlur={e => { e.currentTarget.style.outline = 'none' }}
                   style={{
-                    display: 'flex', alignItems: 'center', gap: 6,
-                    padding: '8px 16px', borderRadius: 12, cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    padding: '10px 20px', borderRadius: 12, cursor: 'pointer',
                     border: active ? `1.5px solid ${c.border}` : '1.5px solid #e5e7eb',
                     background: active ? c.soft : '#fff',
                     color: active ? c.color : '#6b7280',
-                    fontFamily: 'Figtree, sans-serif', fontWeight: 700, fontSize: 13,
+                    fontFamily: 'Figtree, sans-serif', fontWeight: 700, fontSize: 15,
                     transition: 'all 0.18s',
                   }}
                 >
@@ -1205,7 +1200,7 @@ export default function InsightsPage() {
                   <span style={{
                     background: active ? c.color : '#e5e7eb',
                     color: active ? '#fff' : '#6b7280',
-                    borderRadius: 999, fontSize: 10, fontWeight: 900, padding: '1px 6px',
+                    borderRadius: 999, fontSize: 12, fontWeight: 900, padding: '2px 9px',
                   }} aria-label={`score ${loading ? 'loading' : scores?.[k] ?? 'unavailable'}`}>
                     {loading ? '–' : scores?.[k] ?? '–'}
                   </span>
@@ -1226,28 +1221,28 @@ export default function InsightsPage() {
               : activeGroups.length
                 ? activeGroups.map((group) => (
                     <section key={group.title} aria-label={group.title}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                        <p style={{ fontSize: 11, fontWeight: 900, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#4b5563' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                        <p style={{ fontSize: 14, fontWeight: 900, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#4b5563' }}>
                           {group.title}
                         </p>
                         <span style={{ height: 1, flex: 1, background: 'rgba(15,23,42,0.08)' }} />
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(255px, 1fr))', gap: 10, alignItems: 'start' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                         {group.factors.map((f) => (
                           <IndicatorCard key={f.name} factor={f} color={activeCfg.color} soft={activeCfg.soft} border={activeCfg.border} />
                         ))}
                       </div>
                     </section>
                   ))
-                : <p style={{ color: '#4b5563', fontSize: 14, padding: '16px 0', gridColumn: '1/-1' }}>No indicators available.</p>
+                : <p style={{ color: '#4b5563', fontSize: 16, padding: '16px 0', gridColumn: '1/-1' }}>No indicators available.</p>
             }
           </div>
           {!loading && activeIndicators?.scoreExplanation ? (
-            <p style={{ marginTop: 10, fontSize: 12, color: '#4b5563', lineHeight: 1.6 }}>
+            <p style={{ marginTop: 12, fontSize: 14, color: '#4b5563', lineHeight: 1.6 }}>
               {activeIndicators.scoreExplanation}
             </p>
           ) : null}
-          <p style={{ marginTop: 10, fontSize: 11, color: '#4b5563' }}>
+          <p style={{ marginTop: 10, fontSize: 13, color: '#4b5563' }}>
             Tap any indicator to read the detail behind it.
           </p>
         </div>
@@ -1261,56 +1256,56 @@ export default function InsightsPage() {
             borderRadius: 20, overflow: 'hidden', marginBottom: 20,
             boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
           }}>
-            <div style={{ background: 'linear-gradient(90deg, #1a1a2e, #0f3460)', padding: '16px 24px', display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 18 }} aria-hidden="true">💬</span>
+            <div style={{ background: 'linear-gradient(90deg, #1a1a2e, #0f3460)', padding: '18px 26px', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ fontSize: 22 }} aria-hidden="true">💬</span>
               <div>
-                <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)' }}>Interpretation</p>
-                <p style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 16, color: '#fff' }}>What this means for you</p>
+                <p style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)' }}>Interpretation</p>
+                <p style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 20, color: '#fff' }}>What this means for you</p>
               </div>
             </div>
-            <div style={{ padding: '22px 24px 18px' }}>
+            <div style={{ padding: '24px 26px 20px' }}>
               {interpretationSummary ? (
                 <>
-                  <h3 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 24, fontWeight: 400, color: '#101828', marginBottom: 6 }}>
+                  <h3 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 28, fontWeight: 400, color: '#101828', marginBottom: 10 }}>
                     {interpretationSummary.headline}
                   </h3>
-                  <p style={{ fontSize: 14, color: '#374151', lineHeight: 1.65, marginBottom: 12 }}>
+                  <p style={{ fontSize: 16, color: '#374151', lineHeight: 1.7, marginBottom: 14 }}>
                     {interpretationSummary.verdict}
                   </p>
-                  <p style={{ fontSize: 13, color: '#475569', lineHeight: 1.6, marginBottom: 10 }}>
+                  <p style={{ fontSize: 15, color: '#475569', lineHeight: 1.65, marginBottom: 12 }}>
                     {categoryComparisonText(interpretationSummary.rows)}
                   </p>
-                  <p style={{ fontSize: 13, color: '#475569', lineHeight: 1.6, marginBottom: situationHighlights ? 12 : 0 }}>
+                  <p style={{ fontSize: 15, color: '#475569', lineHeight: 1.65, marginBottom: situationHighlights ? 14 : 0 }}>
                     {interpretationSummary.closingLine}
                   </p>
                 </>
               ) : null}
               {situationHighlights ? (
                 <div style={{
-                  marginTop: 12,
+                  marginTop: 14,
                   border: '1.5px solid #bfdbfe',
                   borderRadius: 12,
                   background: '#eff6ff',
-                  padding: '12px 14px',
+                  padding: '14px 16px',
                 }}>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '4px 10px', marginBottom: 8 }}>
-                    <p style={{ fontSize: 10, fontWeight: 900, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#2563eb' }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '4px 12px', marginBottom: 10 }}>
+                    <p style={{ fontSize: 12, fontWeight: 900, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#2563eb' }}>
                       Selected situation
                     </p>
-                    <p style={{ fontSize: 13, color: '#1e3a8a', fontWeight: 900 }}>
+                    <p style={{ fontSize: 15, color: '#1e3a8a', fontWeight: 900 }}>
                       {situationHighlights.title}
                     </p>
-                    <p style={{ fontSize: 12, color: '#334155', lineHeight: 1.5, flexBasis: '100%' }}>
+                    <p style={{ fontSize: 14, color: '#334155', lineHeight: 1.6, flexBasis: '100%' }}>
                       {situationHighlights.summary}
                     </p>
                   </div>
-                  <p style={{ fontSize: 12, color: '#334155', lineHeight: 1.65 }}>
+                  <p style={{ fontSize: 14, color: '#334155', lineHeight: 1.65 }}>
                     {situationHighlights.points.join('. ')}.
                   </p>
                 </div>
               ) : null}
-              <div style={{ marginTop: 12, padding: '9px 12px', background: '#f5f0eb', borderRadius: 10, borderLeft: '3px solid #d97706' }} role="note">
-                <p style={{ fontSize: 11, color: '#92400e', fontWeight: 650, lineHeight: 1.5 }}>
+              <div style={{ marginTop: 14, padding: '10px 14px', background: '#f5f0eb', borderRadius: 10, borderLeft: '3px solid #d97706' }} role="note">
+                <p style={{ fontSize: 13, color: '#92400e', fontWeight: 650, lineHeight: 1.55 }}>
                   Scores use live calculations and public datasets. Use them as a comparison guide, not a final decision.
                 </p>
               </div>
@@ -1321,11 +1316,11 @@ export default function InsightsPage() {
         {/* Methodology */}
         <div style={{
           background: '#fff', border: '1.5px solid #e5e7eb',
-          borderRadius: 20, padding: '24px',
+          borderRadius: 20, padding: '28px',
           boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
         }}>
-          <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#4b5563', marginBottom: 4 }}>Methodology</p>
-          <h2 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 20, fontWeight: 400, color: '#1a2436', marginBottom: 18 }}>
+          <p style={{ fontSize: 13, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#4b5563', marginBottom: 6 }}>Methodology</p>
+          <h2 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 26, fontWeight: 400, color: '#1a2436', marginBottom: 20 }}>
             How this score is calculated
           </h2>
           <table style={{ width: '100%', borderCollapse: 'collapse' }} aria-label="Score calculation methodology">
@@ -1333,8 +1328,8 @@ export default function InsightsPage() {
               <tr>
                 {['Category', 'Weight', 'Data sources'].map(h => (
                   <th key={h} scope="col" style={{
-                    textAlign: 'left', paddingBottom: 12,
-                    fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#4b5563',
+                    textAlign: 'left', paddingBottom: 14,
+                    fontSize: 13, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#4b5563',
                     borderBottom: '1px solid #e5e7eb',
                   }}>{h}</th>
                 ))}
@@ -1354,21 +1349,21 @@ export default function InsightsPage() {
                   : c.weight
                 return (
                   <tr key={k}>
-                    <td style={{ padding: '14px 16px 14px 0', borderBottom: idx < 2 ? '1px solid #f3f4f6' : 'none' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span aria-hidden="true">{c.icon}</span>
-                        <span style={{ fontWeight: 700, fontSize: 14, color: '#1a2436' }}>{c.label}</span>
+                    <td style={{ padding: '16px 18px 16px 0', borderBottom: idx < 2 ? '1px solid #f3f4f6' : 'none' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span aria-hidden="true" style={{ fontSize: 18 }}>{c.icon}</span>
+                        <span style={{ fontWeight: 700, fontSize: 16, color: '#1a2436' }}>{c.label}</span>
                       </div>
                     </td>
-                    <td style={{ padding: '14px 16px 14px 0', borderBottom: idx < 2 ? '1px solid #f3f4f6' : 'none' }}>
+                    <td style={{ padding: '16px 18px 16px 0', borderBottom: idx < 2 ? '1px solid #f3f4f6' : 'none' }}>
                       <span style={{
                         display: 'inline-block', background: c.soft, border: `1px solid ${c.border}`,
-                        borderRadius: 999, padding: '3px 12px',
-                        fontSize: 12, fontWeight: 800, color: c.color,
+                        borderRadius: 999, padding: '4px 14px',
+                        fontSize: 14, fontWeight: 800, color: c.color,
                       }} aria-label={`${displayWeight} percent`}>{displayWeight}%</span>
                     </td>
-                    <td style={{ padding: '14px 0', borderBottom: idx < 2 ? '1px solid #f3f4f6' : 'none' }}>
-                      <span style={{ fontSize: 12, color: '#4b5563' }}>{c.sources}</span>
+                    <td style={{ padding: '16px 0', borderBottom: idx < 2 ? '1px solid #f3f4f6' : 'none' }}>
+                      <span style={{ fontSize: 14, color: '#4b5563' }}>{c.sources}</span>
                     </td>
                   </tr>
                 )
