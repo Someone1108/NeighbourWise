@@ -593,10 +593,13 @@ function IndicatorCard({ factor, color, soft, border }) {
   const status = getIndicatorStatus(factor.score)
   const isPositive = status.tone === 'positive'
   const isCaution = status.tone === 'caution'
-  const cardBorder = isPositive ? border : isCaution ? '#fde68a' : '#e5e7eb'
-  const cardBackground = isPositive ? soft : isCaution ? '#fffbeb' : '#fff'
-  const badgeBackground = isPositive ? color : isCaution ? '#d97706' : '#e5e7eb'
-  const badgeColor = isPositive || isCaution ? '#fff' : '#6b7280'
+  const isMet = factor.met
+  const cardBorder = isMet ? border : '#e5e7eb'
+  const cardBackground = isMet ? soft : '#fff'
+  const badgeBackground = isMet ? color : '#e5e7eb'
+  const badgeColor = isMet ? '#fff' : '#9ca3af'
+  const numericScore = Number(factor.score)
+  const scoreText = Number.isFinite(numericScore) ? `${numericScore.toFixed(1)}/100` : 'Unavailable'
   return (
     <button
       onClick={() => setOpen(o => !o)}
@@ -608,7 +611,7 @@ function IndicatorCard({ factor, color, soft, border }) {
         background: cardBackground,
         border: `1.5px solid ${cardBorder}`,
         borderRadius: 14,
-        padding: '18px 20px',
+        padding: '16px 18px',
         cursor: 'pointer',
         boxSizing: 'border-box',
         textAlign: 'left',
@@ -619,21 +622,30 @@ function IndicatorCard({ factor, color, soft, border }) {
       onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.08)'; e.currentTarget.style.transform = 'translateY(-1px)' }}
       onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'none' }}
     >
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <div style={{
           width: 34, height: 34, borderRadius: 9, flexShrink: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           background: badgeBackground,
           color: badgeColor,
-          fontSize: 14, fontWeight: 900,
+          fontSize: 16, fontWeight: 900,
         }} aria-hidden="true">
-          {isPositive ? '+' : isCaution ? '!' : '-'}
+          {isMet ? '✓' : '✕'}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
-            <p style={{ fontWeight: 800, fontSize: 16, color: '#1a2436', lineHeight: 1.35 }}>{factor.name}</p>
+          <p style={{ fontWeight: 800, fontSize: 16, color: '#1a2436', lineHeight: 1.3 }}>{factor.name}</p>
+          <p style={{ fontSize: 14, color: '#4b5563', marginTop: 4, lineHeight: 1.4 }}>
+            Score {scoreText}
+          </p>
+        </div>
+        <span style={{ fontSize: 22, fontWeight: 800, color: isMet ? color : '#9ca3af', flexShrink: 0, lineHeight: 1 }} aria-hidden="true">
+          {open ? '▴' : '▾'}
+        </span>
+      </div>
+      {open ? (
+        <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid rgba(15,23,42,0.08)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
             <span style={{
-              flexShrink: 0,
               borderRadius: 999,
               padding: '3px 10px',
               background: isPositive ? 'rgba(5,150,105,0.12)' : isCaution ? 'rgba(217,119,6,0.14)' : 'rgba(107,114,128,0.12)',
@@ -644,36 +656,24 @@ function IndicatorCard({ factor, color, soft, border }) {
               {status.label}
             </span>
           </div>
-          {factor.summary ? (
-            <p style={{ fontSize: 14, color: '#4b5563', marginTop: 8, lineHeight: 1.5, fontWeight: 700 }}>
-              {factor.summary}
-            </p>
-          ) : null}
           <IndicatorScoreBar score={factor.score} color={color} />
           {factor.plainText ? (
-            <p style={{ marginTop: 10, fontSize: 14, color: '#4b5563', lineHeight: 1.6 }}>
+            <p style={{ fontSize: 14, color: '#4b5563', lineHeight: 1.6 }}>
               {factor.plainText}
             </p>
           ) : null}
-          {open ? (
-            <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(15,23,42,0.08)', display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {factor.lines.map((line, idx) => (
-                <p key={`line-${idx}`} style={{ fontSize: 14, color: '#4b5563', lineHeight: 1.6 }}>
-                  {line}
-                </p>
-              ))}
-              {Array.isArray(factor.details) && factor.details.map((line, idx) => (
-                <p key={`detail-${idx}`} style={{ fontSize: 13, color: '#6b7280', lineHeight: 1.55 }}>
-                  {line}
-                </p>
-              ))}
-            </div>
-          ) : null}
+          {Array.isArray(factor.lines) && factor.lines.map((line, idx) => (
+            <p key={`line-${idx}`} style={{ fontSize: 14, color: '#4b5563', lineHeight: 1.6 }}>
+              {line}
+            </p>
+          ))}
+          {Array.isArray(factor.details) && factor.details.map((line, idx) => (
+            <p key={`detail-${idx}`} style={{ fontSize: 13, color: '#6b7280', lineHeight: 1.55 }}>
+              {line}
+            </p>
+          ))}
         </div>
-        <span style={{ fontSize: 22, fontWeight: 800, color: isPositive || isCaution ? color : '#6b7280', flexShrink: 0, paddingTop: 0, lineHeight: 1 }} aria-hidden="true">
-          {open ? '▴' : '▾'}
-        </span>
-      </div>
+      ) : null}
     </button>
   )
 }
@@ -1227,7 +1227,7 @@ export default function InsightsPage() {
                         </p>
                         <span style={{ height: 1, flex: 1, background: 'rgba(15,23,42,0.08)' }} />
                       </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12, alignItems: 'start' }}>
                         {group.factors.map((f) => (
                           <IndicatorCard key={f.name} factor={f} color={activeCfg.color} soft={activeCfg.soft} border={activeCfg.border} />
                         ))}
