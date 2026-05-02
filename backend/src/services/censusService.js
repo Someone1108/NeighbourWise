@@ -32,6 +32,12 @@ function formatCurrency(value, suffix = '') {
   return `$${Math.round(n).toLocaleString('en-AU')}${suffix}`;
 }
 
+function weeklyToMonthly(value) {
+  const n = toNumber(value);
+  if (n === null) return null;
+  return (n * 365) / 7 / 12;
+}
+
 function normalizePlaceName(value) {
   return String(value || '')
     .replace(/\s*\([^)]*\)/g, ' ')
@@ -75,6 +81,7 @@ function pickProfile(row) {
     totalHouseholds: toNumber(row.total_households),
     medianHouseholdIncomeWeekly: toNumber(row.median_household_income_weekly),
     medianRentWeekly: toNumber(row.median_rent_weekly),
+    medianRentMonthly: round(weeklyToMonthly(row.median_rent_weekly), 0),
     medianMortgageMonthly: toNumber(row.median_mortgage_monthly),
     rentToIncomeRatio: round(row.rent_to_income_ratio, 3),
     age0To14Pct: round(row.age_0_14_pct, 1),
@@ -103,6 +110,7 @@ function pickProfile(row) {
 function buildInsights(row, locationLabel) {
   const area = locationLabel || row.sa2_name_2021 || 'this area';
   const rent = formatCurrency(row.median_rent_weekly, ' per week');
+  const monthlyRent = formatCurrency(weeklyToMonthly(row.median_rent_weekly), ' per month');
   const income = formatCurrency(row.median_household_income_weekly, ' per week');
   const mortgage = formatCurrency(row.median_mortgage_monthly, ' per month');
   const familyHouseholds = formatSafePct(row.family_households_pct) ?? 'an unknown share of';
@@ -115,7 +123,7 @@ function buildInsights(row, locationLabel) {
     },
     {
       title: 'Rental and ownership context',
-      text: `${formatPct(row.renters_pct) ?? 'An unknown share'} of households rent, while ${formatPct(row.owner_occupied_pct) ?? 'an unknown share'} are owner-occupied. The median rent is ${rent ?? 'not available'} and the median household income is ${income ?? 'not available'}.`,
+      text: `${formatPct(row.renters_pct) ?? 'An unknown share'} of households rent, while ${formatPct(row.owner_occupied_pct) ?? 'an unknown share'} are owner-occupied. Median rent is ${monthlyRent ?? 'not available'} (${rent ?? 'weekly rent not available'}), and median household income is ${income ?? 'not available'}.`,
     },
     {
       title: 'Older resident context',
@@ -131,7 +139,7 @@ function buildInsights(row, locationLabel) {
     },
     {
       title: 'Housing costs',
-      text: `The median monthly mortgage repayment is ${mortgage ?? 'not available'}. The rent-to-income ratio is ${round(row.rent_to_income_ratio, 2) ?? 'not available'}, which helps describe rental pressure but should be read alongside current market data.`,
+      text: `On the same monthly scale, median rent is ${monthlyRent ?? 'not available'} and the median mortgage repayment is ${mortgage ?? 'not available'}. The rent-to-income ratio is ${round(row.rent_to_income_ratio, 2) ?? 'not available'}, which helps describe rental pressure but should be read alongside current market data.`,
     },
   ];
 }

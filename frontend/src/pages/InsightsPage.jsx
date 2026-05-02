@@ -788,6 +788,13 @@ function formatMoney(value, suffix) {
   return `$${Math.round(n).toLocaleString('en-AU')}${suffix}`
 }
 
+function weeklyToMonthly(value) {
+  if (value === null || value === undefined || value === '') return null
+  const n = Number(value)
+  if (!Number.isFinite(n)) return null
+  return (n * 365) / 7 / 12
+}
+
 function getIndicatorMetric(indicators, category, namePart) {
   const factor = findIndicator(indicators, category, namePart)
   if (!factor) return null
@@ -1011,6 +1018,70 @@ function getSituationCensusHighlight(userProfile, censusProfile) {
   return null
 }
 
+function getInsightPriority(item, userProfile) {
+  const title = String(item?.title || '').toLowerCase()
+
+  if (userProfile?.familyWithChildren) {
+    if (title.includes('household')) return 0
+    if (title.includes('housing')) return 1
+    if (title.includes('rental') || title.includes('ownership')) return 2
+    return null
+  }
+
+  if (userProfile?.elderly) {
+    if (title.includes('older')) return 0
+    if (title.includes('transport')) return 1
+    if (title.includes('household')) return 2
+    if (title.includes('housing')) return 3
+    return null
+  }
+
+  if (userProfile?.petOwner) {
+    if (title.includes('housing')) return 0
+    if (title.includes('rental') || title.includes('ownership')) return 1
+    return null
+  }
+
+  return 0
+}
+
+function getStatPriority(stat, userProfile) {
+  if (userProfile?.familyWithChildren) {
+    const priority = {
+      population: 0,
+      medianAge: 1,
+      medianRent: 2,
+      medianMortgage: 3,
+      renters: 4,
+    }
+    return priority[stat.key] ?? null
+  }
+
+  if (userProfile?.elderly) {
+    const priority = {
+      residents65: 0,
+      medianAge: 1,
+      publicTransport: 2,
+      medianRent: 3,
+      medianMortgage: 4,
+      population: 5,
+    }
+    return priority[stat.key] ?? null
+  }
+
+  if (userProfile?.petOwner) {
+    const priority = {
+      renters: 0,
+      medianRent: 1,
+      medianMortgage: 2,
+      population: 3,
+    }
+    return priority[stat.key] ?? null
+  }
+
+  return 0
+}
+
 function CensusContextSection({ data, loading, userProfile, indicators }) {
   const profile = data?.profile || {}
   const source = data?.source || {}
@@ -1019,44 +1090,21 @@ function CensusContextSection({ data, loading, userProfile, indicators }) {
   const situationEnrichment =
     !loading && data?.available ? buildSituationEnrichment(userProfile, profile, indicators) : null
   const stats = [
-    { label: 'Population', value: formatNumber(profile.totalPopulation) },
-    { label: 'Median age', value: profile.medianAge != null ? `${profile.medianAge}` : 'Unavailable' },
-    { label: 'Renters', value: formatPercent(profile.rentersPct) },
-    { label: 'Median rent', value: formatMoney(profile.medianRentWeekly, ' / week') },
-    { label: 'Public transport to work', value: formatPercent(profile.publicTransportToWorkPct) },
-    { label: 'Residents 65+', value: formatPercent(profile.age65PlusPct) },
-  ]
-  const orderedInsights = [...(data?.insights || [])].sort((a, b) => {
-    const priority = (item) => {
-      const title = String(item?.title || '').toLowerCase()
-
-      if (userProfile?.familyWithChildren) {
-        if (title.includes('household')) return 0
-        if (title.includes('housing')) return 1
-        if (title.includes('rental') || title.includes('ownership')) return 2
-        if (title.includes('transport')) return 5
-        return 4
-      }
-
-      if (userProfile?.elderly) {
-        if (title.includes('older')) return 0
-        if (title.includes('transport')) return 1
-        if (title.includes('household')) return 2
-        if (title.includes('housing') || title.includes('rental')) return 4
-        return 5
-      }
-
-      if (userProfile?.petOwner) {
-        if (title.includes('housing') || title.includes('rental') || title.includes('ownership')) return 0
-        if (title.includes('household')) return 1
-        if (title.includes('transport')) return 4
-        return 5
-      }
-
-      return 4
-    }
-    return priority(a) - priority(b)
-  })
+    { key: 'population', label: 'Population', value: formatNumber(profile.totalPopulation) },
+    { key: 'medianAge', label: 'Median age', value: profile.medianAge != null ? `${profile.medianAge}` : 'Unavailable' },
+    { key: 'renters', label: 'Renters', value: formatPercent(profile.rentersPct) },
+    { key: 'medianRent', label: 'Median rent', value: formatMoney(profile.medianRentMonthly ?? weeklyToMonthly(profile.medianRentWeekly), ' / month') },
+    { key: 'medianMortgage', label: 'Median mortgage', value: formatMoney(profile.medianMortgageMonthly, ' / month') },
+    { key: 'publicTransport', label: 'Public transport to work', value: formatPercent(profile.publicTransportToWorkPct) },
+    { key: 'residents65', label: 'Residents 65+', value: formatPercent(profile.age65PlusPct) },
+  ].map((stat, index) => ({ ...stat, index, priority: getStatPriority(stat, userProfile) }))
+    .filter((stat) => !userProfile || stat.priority !== null)
+    .sort((a, b) => (a.priority - b.priority) || (a.index - b.index))
+  const orderedInsights = [...(data?.insights || [])]
+    .map((item, index) => ({ item, index, priority: getInsightPriority(item, userProfile) }))
+    .filter((entry) => !userProfile || entry.priority !== null)
+    .sort((a, b) => (a.priority - b.priority) || (a.index - b.index))
+    .map((entry) => entry.item)
 
   return (
     <div style={{ marginBottom: 24 }} role="region" aria-label="Census context">
