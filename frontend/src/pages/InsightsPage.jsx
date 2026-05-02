@@ -79,24 +79,48 @@ function buildInterpretationSummary(scores, profileLabel, rangeMinutes) {
   const middle = byScore[1]
   const scoreSpread = strongest.value - weakest.value
   const profileText = profileLabel ? ` for a ${profileLabel.toLowerCase()} profile` : ''
-  const focusLabel = strongest.label.toLowerCase()
   const tradeoffLabel = weakest.label.toLowerCase()
+  const profileNoun = profileLabel ? `${profileLabel.toLowerCase()} household` : 'household'
+  const experienceCopy = {
+    accessibility: {
+      headline: 'Daily essentials should feel easier here',
+      strength: 'getting around and reaching everyday services should be one of the easier parts of living here',
+      caution: 'daily trips may need a little more planning',
+    },
+    safety: {
+      headline: 'The area looks steady for day-to-day living',
+      strength: 'the local safety context looks comparatively reassuring',
+      caution: 'it is worth checking the safety context street by street',
+    },
+    environment: {
+      headline: 'Outdoor comfort is one of the better signals here',
+      strength: 'green space, heat and air-quality signals look more supportive than the other categories',
+      caution: 'outdoor comfort may be the main thing to inspect more closely',
+    },
+  }
+  const strongestCopy = experienceCopy[strongest.key] || experienceCopy.accessibility
+  const weakestCopy = experienceCopy[weakest.key] || experienceCopy.accessibility
 
-  const headline = `Best fit: ${focusLabel}-focused living`
+  const headline =
+    profileLabel === 'Family'
+      ? strongest.key === 'accessibility'
+        ? 'A practical fit for family routines'
+        : strongestCopy.headline
+      : strongestCopy.headline
   const verdict =
     middle && strongest.key !== weakest.key
-      ? `This area's strongest signal is ${strongest.label}, scoring ${Math.round(strongest.value)}/100. ${middle.label} is close behind at ${Math.round(middle.value)}/100, while ${weakest.label} is the main trade-off at ${Math.round(weakest.value)}/100.`
-      : `This area's strongest signal is ${strongest.label}, scoring ${Math.round(strongest.value)}/100.`
+      ? `For a ${profileNoun}, ${strongestCopy.strength}. ${middle.label.toLowerCase()} also looks workable, while ${weakestCopy.caution}.`
+      : `For a ${profileNoun}, ${strongestCopy.strength}.`
 
   const context =
     scoreSpread <= 8
-      ? 'The category scores are fairly close, so this is a balanced area rather than one with a single standout strength.'
-      : `${strongest.label} stands out most clearly, while ${weakest.label.toLowerCase()} is the area to check more carefully.`
+      ? 'The signals are fairly balanced, so this does not look like a suburb with one obvious strength and one obvious weakness.'
+      : `${strongest.label} is doing most of the heavy lifting here, while ${weakest.label.toLowerCase()} is the area to inspect before making a decision.`
 
   const nextAction =
     strongest.key === weakest.key
       ? `Use this score as a comparison guide for your ${rangeMinutes}-minute search${profileText}.`
-      : `If ${tradeoffLabel} is a top priority, it may be worth comparing a few nearby alternatives before deciding.`
+      : `If ${tradeoffLabel} matters a lot to you, compare a nearby suburb before treating this as the best option.`
 
   return {
     headline,
@@ -148,17 +172,30 @@ function buildSituationHighlights(profile, scores, indicators) {
   if (profile.familyWithChildren) {
     const school = findIndicator(indicators, 'accessibility', 'school')
     const park = findIndicator(indicators, 'accessibility', 'park')
+    const schoolScore = Number(school?.score)
+    const parkScore = Number(park?.score)
+    const accessPhrase =
+      Number.isFinite(schoolScore) && Number.isFinite(parkScore)
+        ? schoolScore >= 65 && parkScore >= 65
+          ? 'school and park access both look supportive for everyday family routines'
+          : schoolScore >= 65
+            ? 'school access looks supportive, while park access is worth checking in more detail'
+            : parkScore >= 65
+              ? 'park access looks supportive, while school access is worth checking in more detail'
+              : 'school and park access may need extra checking for everyday routines'
+        : 'school and park access are useful to check for everyday family routines'
+    const safetyPhrase = Number.isFinite(safety)
+      ? safety >= 65
+        ? 'The safety signal also looks reassuring enough to keep this area in consideration.'
+        : 'The safety signal is the part to look at more carefully before deciding.'
+      : 'Safety context is unavailable for this area.'
+
     return {
       title: 'For a family household',
       summary: 'For a family household, the key checks are school access, parks and safety.',
       points: [
-        compactIndicatorPhrase(school, 'School access'),
-        compactIndicatorPhrase(park, 'Park access'),
-        Number.isFinite(safety)
-          ? safety >= 65
-            ? 'the safety signal is generally reassuring'
-            : 'the safety signal is worth checking more carefully'
-          : 'safety context is unavailable',
+        accessPhrase,
+        safetyPhrase,
       ],
     }
   }
@@ -697,11 +734,76 @@ function formatPercent(value) {
   return `${Math.round(n * 10) / 10}%`
 }
 
+function formatSafePercent(value) {
+  if (value === null || value === undefined || value === '') return 'Unavailable'
+  const n = Number(value)
+  if (!Number.isFinite(n) || n < 0 || n > 100) return 'Unavailable'
+  return `${Math.round(n * 10) / 10}%`
+}
+
 function formatMoney(value, suffix) {
   if (value === null || value === undefined || value === '') return 'Unavailable'
   const n = Number(value)
   if (!Number.isFinite(n)) return 'Unavailable'
   return `$${Math.round(n).toLocaleString('en-AU')}${suffix}`
+}
+
+function getIndicatorMetric(indicators, namePart) {
+  const factor = findIndicator(indicators, 'accessibility', namePart)
+  if (!factor) return null
+
+  const status = getIndicatorStatus(factor.score)
+  const nearest = factor.details?.find((line) => line.startsWith('Nearest place:'))?.replace('Nearest place:', '').trim()
+  const availability = factor.details?.find((line) => line.startsWith('Availability:'))?.replace('Availability:', '').trim()
+
+  return {
+    label: factor.name,
+    value: status.label,
+    detail: [nearest && `Nearest: ${nearest}`, availability].filter(Boolean).join(' | '),
+    score: Number.isFinite(Number(factor.score)) ? `${Math.round(Number(factor.score))}/100` : 'Unavailable',
+  }
+}
+
+function buildFamilyEnrichment(profile, indicators) {
+  const stats = [
+    { label: 'Children 0-14', value: formatSafePercent(profile.age0To14Pct) },
+    { label: 'Family households', value: formatSafePercent(profile.familyHouseholdsPct) },
+    { label: 'One-parent families', value: formatSafePercent(profile.oneParentFamilyPct) },
+    {
+      label: 'Average household size',
+      value: profile.averageHouseholdSize != null ? `${profile.averageHouseholdSize} people` : 'Unavailable',
+    },
+  ].filter((item) => item.value !== 'Unavailable')
+
+  const nearby = [
+    getIndicatorMetric(indicators, 'school'),
+    getIndicatorMetric(indicators, 'park'),
+  ].filter(Boolean)
+
+  if (!stats.length && !nearby.length) return null
+
+  const children = formatSafePercent(profile.age0To14Pct)
+  const families = formatSafePercent(profile.familyHouseholdsPct)
+  const oneParent = formatSafePercent(profile.oneParentFamilyPct)
+  const summaryParts = []
+
+  if (children !== 'Unavailable') {
+    summaryParts.push(`${children} of residents are aged 0-14`)
+  }
+  if (families !== 'Unavailable') {
+    summaryParts.push(`${families} of households are family households`)
+  }
+  if (oneParent !== 'Unavailable') {
+    summaryParts.push(`${oneParent} are one-parent families`)
+  }
+
+  return {
+    stats,
+    nearby,
+    summary: summaryParts.length
+      ? `${summaryParts.join(', ')}.`
+      : 'Family-related Census indicators are shown below where available.',
+  }
 }
 
 function getSituationCensusHighlight(userProfile, censusProfile) {
@@ -775,11 +877,15 @@ function getSituationCensusHighlight(userProfile, censusProfile) {
   return null
 }
 
-function CensusContextSection({ data, loading, userProfile }) {
+function CensusContextSection({ data, loading, userProfile, indicators }) {
   const profile = data?.profile || {}
   const source = data?.source || {}
   const situationHighlight =
     !loading && data?.available ? getSituationCensusHighlight(userProfile, profile) : null
+  const familyEnrichment =
+    !loading && data?.available && userProfile?.familyWithChildren
+      ? buildFamilyEnrichment(profile, indicators)
+      : null
   const stats = [
     { label: 'Population', value: formatNumber(profile.totalPopulation) },
     { label: 'Median age', value: profile.medianAge != null ? `${profile.medianAge}` : 'Unavailable' },
@@ -845,6 +951,69 @@ function CensusContextSection({ data, loading, userProfile }) {
                   <p style={{ fontSize: 13, color: '#134e4a', lineHeight: 1.65, fontWeight: 600 }}>
                     {situationHighlight.text}
                   </p>
+                </div>
+              )}
+
+              {familyEnrichment && (
+                <div style={{
+                  background: '#fff7ed',
+                  border: '1px solid #fed7aa',
+                  borderLeft: '4px solid #ea580c',
+                  borderRadius: 14,
+                  padding: '16px',
+                  marginBottom: 18,
+                }}>
+                  <p style={{ fontSize: 11, fontWeight: 900, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#c2410c', marginBottom: 5 }}>
+                    Family and children context
+                  </p>
+                  <p style={{ fontSize: 13, color: '#7c2d12', lineHeight: 1.65, fontWeight: 650, marginBottom: 12 }}>
+                    {familyEnrichment.summary}
+                  </p>
+                  {familyEnrichment.stats.length > 0 && (
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))',
+                      gap: 10,
+                      marginBottom: familyEnrichment.nearby.length ? 12 : 0,
+                    }}>
+                      {familyEnrichment.stats.map((item) => (
+                        <div key={item.label} style={{
+                          background: '#fff',
+                          border: '1px solid #fed7aa',
+                          borderRadius: 12,
+                          padding: '10px 12px',
+                        }}>
+                          <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.07em', textTransform: 'uppercase', color: '#9a3412', marginBottom: 4 }}>
+                            {item.label}
+                          </p>
+                          <p style={{ fontSize: 16, fontWeight: 900, color: '#431407' }}>
+                            {item.value}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {familyEnrichment.nearby.length > 0 && (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 10 }}>
+                      {familyEnrichment.nearby.map((item) => (
+                        <div key={item.label} style={{
+                          background: '#fff',
+                          border: '1px solid #fed7aa',
+                          borderRadius: 12,
+                          padding: '11px 12px',
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
+                            <p style={{ fontSize: 12, fontWeight: 900, color: '#7c2d12' }}>{item.label}</p>
+                            <p style={{ fontSize: 11, fontWeight: 900, color: '#c2410c' }}>{item.score}</p>
+                          </div>
+                          <p style={{ fontSize: 12, color: '#7c2d12', lineHeight: 1.5, fontWeight: 700 }}>{item.value}</p>
+                          {item.detail && (
+                            <p style={{ fontSize: 11, color: '#9a3412', lineHeight: 1.45, marginTop: 4 }}>{item.detail}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1252,7 +1421,7 @@ export default function InsightsPage() {
           </p>
         </div>
 
-        <CensusContextSection data={censusData} loading={censusLoading} userProfile={profile} />
+        <CensusContextSection data={censusData} loading={censusLoading} userProfile={profile} indicators={indicators} />
 
         {/* Interpretation */}
         {!loading && scores && (

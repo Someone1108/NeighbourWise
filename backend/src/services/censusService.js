@@ -20,6 +20,12 @@ function formatPct(value) {
   return n === null ? null : `${n}%`;
 }
 
+function formatSafePct(value) {
+  const n = round(value, 1);
+  if (n === null || n < 0 || n > 100) return null;
+  return `${n}%`;
+}
+
 function formatCurrency(value, suffix = '') {
   const n = toNumber(value);
   if (n === null) return null;
@@ -99,11 +105,13 @@ function buildInsights(row, locationLabel) {
   const rent = formatCurrency(row.median_rent_weekly, ' per week');
   const income = formatCurrency(row.median_household_income_weekly, ' per week');
   const mortgage = formatCurrency(row.median_mortgage_monthly, ' per month');
+  const familyHouseholds = formatSafePct(row.family_households_pct) ?? 'an unknown share of';
+  const children = formatSafePct(row.age_0_14_pct) ?? 'an unknown share of';
 
   return [
     {
       title: 'Household profile',
-      text: `${area} has a median age of ${row.median_age ?? 'unknown'} and an average household size of ${round(row.average_household_size, 1) ?? 'unknown'} people. About ${formatPct(row.family_households_pct) ?? 'an unknown share of'} households are family households, with ${formatPct(row.couple_family_with_children_pct) ?? 'an unknown share'} recorded as couples with children.`,
+      text: `${area} has a median age of ${row.median_age ?? 'unknown'} and an average household size of ${round(row.average_household_size, 1) ?? 'unknown'} people. About ${familyHouseholds} households are family households, and ${children} residents are aged 0-14.`,
     },
     {
       title: 'Rental and ownership context',
