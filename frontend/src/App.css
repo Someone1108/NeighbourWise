@@ -331,9 +331,11 @@ body {
   display: flex;
   gap: 20px;
   align-items: stretch;
-  /* Lock the row height on the parent so both columns stretch to match,
-     keeping the layout inside one viewport without an internal scrollbar. */
-  height: clamp(440px, calc(100vh - 200px), 720px);
+  /* Use min-height (not height) so the row can grow if the sidebar content
+     needs more space than the viewport-derived value (e.g. a short browser
+     window). Both columns stretch together via align-items: stretch, so the
+     map matches the sidebar's natural height. */
+  min-height: clamp(440px, calc(100vh - 200px), 720px);
 }
 
 .nwMapLeft {
@@ -903,6 +905,7 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
   width: 28px;
   height: 28px;
   border-radius: 8px;
@@ -979,30 +982,62 @@ body {
 }
 
 .nwCompareCellScore {
+  font-size: 15px;
   font-weight: 900;
   color: #10213d;
+  margin-bottom: 4px;
 }
 
 .nwCompareTable {
   width: 100%;
-  border-collapse: collapse;
+  /* Use separate borders so border-radius on the table renders cleanly and
+     every cell border is exactly 1px (collapse + overflow:hidden + radius
+     was clipping outer borders unevenly). */
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
   margin-top: 12px;
   background: white;
+  border: 1px solid var(--border-light);
   border-radius: 16px;
   overflow: hidden;
 }
 
 .nwCompareTable th,
 .nwCompareTable td {
-  border: 1px solid var(--border-light);
-  padding: 10px 12px;
+  /* Only draw bottom + right borders per cell, the table itself supplies
+     the outer top/left borders. The last column drops its right border, the
+     last row drops its bottom border (rules below). */
+  border-bottom: 1px solid var(--border-light);
+  border-right: 1px solid var(--border-light);
+  padding: 12px 14px;
   text-align: left;
   color: var(--text-dark);
+  vertical-align: middle;
+}
+
+.nwCompareTable th:last-child,
+.nwCompareTable td:last-child {
+  border-right: none;
+}
+
+.nwCompareTable tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.nwCompareTable th {
+  background: var(--card-soft);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted-dark);
 }
 
 .nwCompareRowTitle {
-  font-weight: 900;
+  font-weight: 700;
   color: var(--text-dark);
+  white-space: nowrap;
 }
 
 .nwCompareRecommendation {
@@ -1873,6 +1908,7 @@ body {
 
   .nwMapLayout {
     flex-direction: column;
+    min-height: 0;
     height: auto;
   }
 

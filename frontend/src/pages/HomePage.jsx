@@ -274,8 +274,6 @@ export default function HomePage() {
           <div className="hero-overlay" aria-hidden="true" />
 
           <div className="hero-content">
-            <span className="hero-eyebrow hero-fade-in">Melbourne · Liveability Explorer</span>
-
             <h1 className="hero-headline hero-fade-in hero-fade-in-1">
               Melbourne neighbourhoods,
               <br />

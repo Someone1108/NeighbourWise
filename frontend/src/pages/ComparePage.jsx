@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Button from '../components/buttons/Button.jsx'
 import {
-  getMapContext,
+  getLiveabilityScore,
   searchAddresses,
   searchLocalities,
 } from '../services/api.js'
@@ -180,53 +180,70 @@ export default function ComparePage() {
       return
     }
 
+    const firstLat = Number(firstArea.lat ?? firstArea.selectedLocation?.lat)
+    const firstLng = Number(firstArea.lng ?? firstArea.selectedLocation?.lng)
+    const secondLat = Number(activeSecondArea.lat ?? activeSecondArea.selectedLocation?.lat)
+    const secondLng = Number(activeSecondArea.lng ?? activeSecondArea.selectedLocation?.lng)
+
+    if (!Number.isFinite(firstLat) || !Number.isFinite(firstLng)) {
+      setError('Missing coordinates for the first area. Please re-add it from the map.')
+      setLoading(false)
+      return
+    }
+
+    if (!Number.isFinite(secondLat) || !Number.isFinite(secondLng)) {
+      setError('Missing coordinates for the second area. Please select a different location.')
+      setLoading(false)
+      return
+    }
+
     let cancelled = false
     setLoading(true)
     setError('')
     setHint('')
 
-    const firstPayload = {
-      locationName: firstArea.locationName,
-      rangeMinutes: safeRangeMinutes(firstArea.rangeMinutes),
-      profile: firstArea.profile || {},
-    }
+    const firstTime = safeRangeMinutes(firstArea.rangeMinutes)
+    const secondTime = safeRangeMinutes(activeSecondArea.rangeMinutes ?? firstArea.rangeMinutes)
 
-    const secondPayload = {
-      locationName: getLocationLabel(activeSecondArea),
-      rangeMinutes: safeRangeMinutes(activeSecondArea.rangeMinutes),
-      profile: activeSecondArea.profile || {},
-    }
-
-    Promise.all([getMapContext(firstPayload), getMapContext(secondPayload)])
+    Promise.all([
+      getLiveabilityScore({
+        lat: firstLat,
+        lng: firstLng,
+        time: firstTime,
+        persona: firstArea.profile || 'default',
+      }),
+      getLiveabilityScore({
+        lat: secondLat,
+        lng: secondLng,
+        time: secondTime,
+        persona: activeSecondArea.profile || firstArea.profile || 'default',
+      }),
+    ])
       .then(([r1, r2]) => {
         if (cancelled) return
 
         const scores = {
-          accessibility: [r1.scores.accessibility, r2.scores.accessibility],
-          safety: [r1.scores.safety, r2.scores.safety],
-          environment: [r1.scores.environment, r2.scores.environment],
+          accessibility: [
+            Math.round(r1.scores?.accessibility ?? 0),
+            Math.round(r2.scores?.accessibility ?? 0),
+          ],
+          safety: [
+            Math.round(r1.scores?.safety ?? 0),
+            Math.round(r2.scores?.safety ?? 0),
+          ],
+          environment: [
+            Math.round(r1.scores?.environment ?? 0),
+            Math.round(r2.scores?.environment ?? 0),
+          ],
         }
 
-        const overall1 = Math.round(
-          (scores.accessibility[0] + scores.safety[0] + scores.environment[0]) / 3
-        )
-        const overall2 = Math.round(
-          (scores.accessibility[1] + scores.safety[1] + scores.environment[1]) / 3
-        )
+        const overall1 = Math.round(r1.liveabilityScore ?? 0)
+        const overall2 = Math.round(r2.liveabilityScore ?? 0)
 
         const deltas = [
-          {
-            key: 'accessibility',
-            delta: scores.accessibility[0] - scores.accessibility[1],
-          },
-          {
-            key: 'safety',
-            delta: scores.safety[0] - scores.safety[1],
-          },
-          {
-            key: 'environment',
-            delta: scores.environment[0] - scores.environment[1],
-          },
+          { key: 'accessibility', delta: scores.accessibility[0] - scores.accessibility[1] },
+          { key: 'safety', delta: scores.safety[0] - scores.safety[1] },
+          { key: 'environment', delta: scores.environment[0] - scores.environment[1] },
         ]
 
         deltas.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
@@ -243,8 +260,8 @@ export default function ComparePage() {
         setData({
           area1: firstArea.locationName,
           area2: getLocationLabel(activeSecondArea),
-          range1: safeRangeMinutes(firstArea.rangeMinutes),
-          range2: safeRangeMinutes(activeSecondArea.rangeMinutes),
+          range1: firstTime,
+          range2: secondTime,
           overall1,
           overall2,
           scores,
@@ -518,9 +535,9 @@ export default function ComparePage() {
             <table className="nwCompareTable" aria-label="Comparison table">
               <thead>
                 <tr>
-                  <th style={{ width: 140 }}>Category</th>
-                  <th title={data.area1}>{shortLabel(data.area1, 22)}</th>
-                  <th title={data.area2}>{shortLabel(data.area2, 22)}</th>
+                  <th style={{ width: '28%' }}>Category</th>
+                  <th style={{ width: '36%' }} title={data.area1}>{shortLabel(data.area1, 22)}</th>
+                  <th style={{ width: '36%' }} title={data.area2}>{shortLabel(data.area2, 22)}</th>
                 </tr>
               </thead>
               <tbody>
