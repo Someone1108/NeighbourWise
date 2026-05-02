@@ -7,6 +7,19 @@ import { loadContext } from '../utils/storage.js'
 
 const CATEGORIES = ['accessibility', 'safety', 'environment']
 
+const STATIC_SCORE_BENCHMARK = {
+  label: 'Supported locality avg',
+  description:
+    'Calculated once from 274 supported Melbourne locality points using the same 20-minute default scoring model.',
+  sampleSize: 274,
+  scores: {
+    accessibility: 51,
+    safety: 70,
+    environment: 74,
+    liveability: 64,
+  },
+}
+
 const CATEGORY_CONFIG = {
   accessibility: {
     label: 'Accessibility',
@@ -40,8 +53,6 @@ const CATEGORY_CONFIG = {
   },
 }
 
-const MELBOURNE_AVG = { accessibility: 58, safety: 62, environment: 71 }
-
 function getScoreBand(score) {
   if (score >= 80) return { label: 'Excellent', color: '#059669', bg: '#ecfdf5', border: '#a7f3d0' }
   if (score >= 65) return { label: 'Good',      color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe' }
@@ -57,10 +68,10 @@ function getProfileLabel(profile) {
   return null
 }
 
-function buildInterpretationSummary(scores, profileLabel, rangeMinutes) {
+function buildInterpretationSummary(scores, profileLabel, rangeMinutes, benchmarkScores) {
   const rows = CATEGORIES.map((key) => {
     const value = Number(scores?.[key])
-    const avg = Number(MELBOURNE_AVG[key] ?? 0)
+    const avg = Number(benchmarkScores?.[key])
     const delta = Number.isFinite(value) ? value - avg : null
     return {
       key,
@@ -130,15 +141,15 @@ function buildInterpretationSummary(scores, profileLabel, rangeMinutes) {
   }
 }
 
-function categoryComparisonText(rows = []) {
+function categoryComparisonText(rows = [], benchmarkLabel = 'benchmark') {
   if (!rows.length) return ''
 
   const parts = rows.map((row) => {
     const delta = Number(row.delta)
-    if (!Number.isFinite(delta)) return `${row.label} has no city average to compare against`
-    if (Math.abs(delta) <= 2) return `${row.label} is close to the Melbourne average`
-    if (delta > 0) return `${row.label} is above the Melbourne average`
-    return `${row.label} is below the Melbourne average`
+    if (!Number.isFinite(delta)) return `${row.label} does not have a benchmark to compare against`
+    if (Math.abs(delta) <= 2) return `${row.label} is close to the ${benchmarkLabel}`
+    if (delta > 0) return `${row.label} is above the ${benchmarkLabel}`
+    return `${row.label} is below the ${benchmarkLabel}`
   })
 
   return parts.join('. ') + '.'
@@ -801,16 +812,19 @@ function MiniGauge({ score, color, size = 52 }) {
   )
 }
 
-function CompareBar({ value, avg, color }) {
+function CompareBar({ value, avg, color, label = 'Avg' }) {
+  const hasAvg = Number.isFinite(Number(avg))
   return (
     <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
       <div style={{ position: 'relative', height: 8, borderRadius: 4, background: 'rgba(0,0,0,0.07)' }}>
-        <div style={{ position: 'absolute', top: -3, bottom: -3, width: 2, left: `${avg}%`, background: 'rgba(0,0,0,0.25)', borderRadius: 1, zIndex: 2 }} />
+        {hasAvg && (
+          <div style={{ position: 'absolute', top: -3, bottom: -3, width: 2, left: `${avg}%`, background: 'rgba(0,0,0,0.25)', borderRadius: 1, zIndex: 2 }} />
+        )}
         <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${value ?? 0}%`, background: color, borderRadius: 4 }} />
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, fontWeight: 600, color: '#6b7280' }}>
         <span>This area: <span style={{ color, fontWeight: 800 }}>{value ?? '–'}</span></span>
-        <span>Melb avg: {avg}</span>
+        <span>{label}: {hasAvg ? avg : 'loading'}</span>
       </div>
     </div>
   )
@@ -1537,7 +1551,10 @@ export default function InsightsPage() {
   const activeIndicators = indicators[activeTab]
   const activeGroups = groupIndicatorFactors(activeIndicators?.factors || [], profile)
   const situationHighlights = buildSituationHighlights(profile, scores, indicators)
-  const interpretationSummary = buildInterpretationSummary(scores, profileLabel, rangeMinutes)
+  const benchmarkScores = STATIC_SCORE_BENCHMARK.scores
+  const benchmarkShortLabel = STATIC_SCORE_BENCHMARK.label
+  const benchmarkTextLabel = 'supported locality average'
+  const interpretationSummary = buildInterpretationSummary(scores, profileLabel, rangeMinutes, benchmarkScores)
 
   return (
     <div style={{ background: '#f5f0eb', minHeight: '100%', paddingBottom: 80 }}>
@@ -1659,8 +1676,8 @@ export default function InsightsPage() {
           {CATEGORIES.map(k => {
             const c = CATEGORY_CONFIG[k]
             const score = scores?.[k]
-            const avg = MELBOURNE_AVG[k]
-            const delta = score != null ? score - avg : null
+            const avg = benchmarkScores?.[k]
+            const delta = score != null && Number.isFinite(Number(avg)) ? score - avg : null
             return (
               <div key={k} style={{
                 background: '#fff', border: `1.5px solid ${c.border}`,
@@ -1680,11 +1697,11 @@ export default function InsightsPage() {
                 </div>
                 {delta != null && (
                   <p style={{ fontSize: 10, fontWeight: 700, color: delta >= 0 ? '#059669' : '#dc2626' }}
-                    aria-label={`${Math.abs(delta)} points ${delta >= 0 ? 'above' : 'below'} Melbourne average`}>
-                    {delta >= 0 ? '▲' : '▼'} {Math.abs(delta)} vs Melb avg
+                    aria-label={`${Math.abs(delta)} points ${delta >= 0 ? 'above' : 'below'} supported locality average`}>
+                    {delta >= 0 ? '▲' : '▼'} {Math.abs(delta)} vs supported avg
                   </p>
                 )}
-                <CompareBar value={loading ? null : score} avg={avg} color={c.color} />
+                <CompareBar value={loading ? null : score} avg={avg} color={c.color} label={benchmarkShortLabel} />
                 {!loading && indicators[k] && (
                   <p style={{ marginTop: 10, fontSize: 11, color: '#4b5563' }}>
                     {indicators[k].factors?.filter(f => f.met).length ?? 0}/{indicators[k].factors?.length ?? 0} indicators met
@@ -1822,7 +1839,7 @@ export default function InsightsPage() {
                     {interpretationSummary.verdict}
                   </p>
                   <p style={{ fontSize: 13, color: '#475569', lineHeight: 1.6, marginBottom: 10 }}>
-                    {categoryComparisonText(interpretationSummary.rows)}
+                    {categoryComparisonText(interpretationSummary.rows, benchmarkTextLabel)}
                   </p>
                   <p style={{ fontSize: 13, color: '#475569', lineHeight: 1.6, marginBottom: situationHighlights ? 12 : 0 }}>
                     {interpretationSummary.closingLine}
@@ -1867,6 +1884,7 @@ export default function InsightsPage() {
           background: '#fff', border: '1.5px solid #e5e7eb',
           borderRadius: 20, padding: '24px',
           boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
+          marginBottom: 16,
         }}>
           <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#4b5563', marginBottom: 4 }}>Methodology</p>
           <h2 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 20, fontWeight: 400, color: '#1a2436', marginBottom: 18 }}>
@@ -1919,6 +1937,21 @@ export default function InsightsPage() {
               })}
             </tbody>
           </table>
+        </div>
+
+        <div style={{
+          background: '#fff',
+          border: '1.5px solid #e5e7eb',
+          borderRadius: 16,
+          padding: '16px 18px',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.035)',
+        }} role="note" aria-label="Benchmark explanation">
+          <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#4b5563', marginBottom: 5 }}>
+            Benchmark
+          </p>
+          <p style={{ fontSize: 12, color: '#4b5563', lineHeight: 1.65 }}>
+            {STATIC_SCORE_BENCHMARK.description} The benchmark values are accessibility {STATIC_SCORE_BENCHMARK.scores.accessibility}, safety {STATIC_SCORE_BENCHMARK.scores.safety}, environment {STATIC_SCORE_BENCHMARK.scores.environment}, and overall liveability {STATIC_SCORE_BENCHMARK.scores.liveability}. They are used only as a comparison guide.
+          </p>
         </div>
 
       </div>
