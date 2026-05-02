@@ -319,12 +319,52 @@ function summarizeCategory(category, factors = []) {
   return `${label} has mixed signals. ${best.name} performs best, but ${weakest.name.toLowerCase()} needs attention.`
 }
 
-function groupIndicatorFactors(factors = []) {
+function getPersonaIndicatorPriority(factor, profile) {
+  const name = String(factor?.name || '').toLowerCase()
+
+  if (profile?.familyWithChildren) {
+    if (name.includes('school')) return 0
+    if (name.includes('park') && !name.includes('dog')) return 1
+    if (name.includes('supermarket')) return 2
+    if (name.includes('hospital')) return 3
+    if (name.includes('bus') || name.includes('train')) return 8
+    return 50
+  }
+
+  if (profile?.elderly) {
+    if (name.includes('hospital')) return 0
+    if (name.includes('bus')) return 1
+    if (name.includes('train')) return 2
+    if (name.includes('supermarket')) return 3
+    if (name.includes('park') && !name.includes('dog')) return 4
+    return 50
+  }
+
+  if (profile?.petOwner) {
+    if (name.includes('dog park')) return 0
+    if (name.includes('park')) return 1
+    if (name.includes('green')) return 2
+    if (name.includes('bus') || name.includes('train')) return 7
+    return 50
+  }
+
+  return 50
+}
+
+function orderFactorsForPersona(factors = [], profile) {
+  return [...factors].sort((a, b) => {
+    const priorityDelta = getPersonaIndicatorPriority(a, profile) - getPersonaIndicatorPriority(b, profile)
+    if (priorityDelta !== 0) return priorityDelta
+    return Number(b.score || 0) - Number(a.score || 0)
+  })
+}
+
+function groupIndicatorFactors(factors = [], profile) {
   const strengths = []
   const needsAttention = []
   const supporting = []
 
-  factors.forEach((factor) => {
+  orderFactorsForPersona(factors, profile).forEach((factor) => {
     const score = Number(factor.score)
     if (Number.isFinite(score) && score >= 75) {
       strengths.push(factor)
@@ -748,8 +788,8 @@ function formatMoney(value, suffix) {
   return `$${Math.round(n).toLocaleString('en-AU')}${suffix}`
 }
 
-function getIndicatorMetric(indicators, namePart) {
-  const factor = findIndicator(indicators, 'accessibility', namePart)
+function getIndicatorMetric(indicators, category, namePart) {
+  const factor = findIndicator(indicators, category, namePart)
   if (!factor) return null
 
   const status = getIndicatorStatus(factor.score)
@@ -764,6 +804,22 @@ function getIndicatorMetric(indicators, namePart) {
   }
 }
 
+function buildSituationEnrichment(userProfile, profile, indicators) {
+  if (userProfile?.elderly) {
+    return buildElderlyEnrichment(profile, indicators)
+  }
+
+  if (userProfile?.petOwner) {
+    return buildPetEnrichment(profile, indicators)
+  }
+
+  if (userProfile?.familyWithChildren) {
+    return buildFamilyEnrichment(profile, indicators)
+  }
+
+  return null
+}
+
 function buildFamilyEnrichment(profile, indicators) {
   const stats = [
     { label: 'Children 0-14', value: formatSafePercent(profile.age0To14Pct) },
@@ -776,8 +832,8 @@ function buildFamilyEnrichment(profile, indicators) {
   ].filter((item) => item.value !== 'Unavailable')
 
   const nearby = [
-    getIndicatorMetric(indicators, 'school'),
-    getIndicatorMetric(indicators, 'park'),
+    getIndicatorMetric(indicators, 'accessibility', 'school'),
+    getIndicatorMetric(indicators, 'accessibility', 'park'),
   ].filter(Boolean)
 
   if (!stats.length && !nearby.length) return null
@@ -798,11 +854,89 @@ function buildFamilyEnrichment(profile, indicators) {
   }
 
   return {
+    label: 'Family and children context',
+    tone: {
+      background: '#fff7ed',
+      border: '#fed7aa',
+      accent: '#ea580c',
+      label: '#c2410c',
+      text: '#7c2d12',
+      strong: '#431407',
+    },
     stats,
     nearby,
     summary: summaryParts.length
       ? `${summaryParts.join(', ')}.`
       : 'Family-related Census indicators are shown below where available.',
+  }
+}
+
+function buildElderlyEnrichment(profile, indicators) {
+  const stats = [
+    { label: 'Residents 65+', value: formatSafePercent(profile.age65PlusPct) },
+    { label: 'Need assistance', value: formatSafePercent(profile.needForAssistancePct) },
+    { label: 'Lone-person households', value: formatSafePercent(profile.lonePersonHouseholdsPct) },
+    { label: 'No-car households', value: formatSafePercent(profile.noCarHouseholdsPct) },
+  ].filter((item) => item.value !== 'Unavailable')
+
+  const nearby = [
+    getIndicatorMetric(indicators, 'accessibility', 'hospital'),
+    getIndicatorMetric(indicators, 'accessibility', 'bus'),
+    getIndicatorMetric(indicators, 'accessibility', 'train'),
+  ].filter(Boolean)
+
+  if (!stats.length && !nearby.length) return null
+
+  const olderResidents = formatSafePercent(profile.age65PlusPct)
+  const assistance = formatSafePercent(profile.needForAssistancePct)
+  const noCar = formatSafePercent(profile.noCarHouseholdsPct)
+  const summaryParts = []
+
+  if (olderResidents !== 'Unavailable') {
+    summaryParts.push(`${olderResidents} of residents are aged 65+`)
+  }
+  if (assistance !== 'Unavailable') {
+    summaryParts.push(`${assistance} report needing assistance`)
+  }
+  if (noCar !== 'Unavailable') {
+    summaryParts.push(`${noCar} of households have no car`)
+  }
+
+  return {
+    label: 'Older resident context',
+    tone: {
+      background: '#eff6ff',
+      border: '#bfdbfe',
+      accent: '#2563eb',
+      label: '#1d4ed8',
+      text: '#1e3a8a',
+      strong: '#172554',
+    },
+    stats,
+    nearby,
+    summary: summaryParts.length
+      ? `${summaryParts.join(', ')}.`
+      : 'Older-resident Census indicators are shown below where available.',
+  }
+}
+
+function buildPetEnrichment(profile, indicators) {
+  const dogPark = getIndicatorMetric(indicators, 'accessibility', 'dog park')
+  if (!dogPark) return null
+
+  return {
+    label: 'Pet owner context',
+    tone: {
+      background: '#f0fdf4',
+      border: '#bbf7d0',
+      accent: '#16a34a',
+      label: '#15803d',
+      text: '#166534',
+      strong: '#14532d',
+    },
+    stats: [],
+    nearby: [dogPark],
+    summary: 'Dog park access is the clearest pet-specific signal available for this area.',
   }
 }
 
@@ -882,10 +1016,8 @@ function CensusContextSection({ data, loading, userProfile, indicators }) {
   const source = data?.source || {}
   const situationHighlight =
     !loading && data?.available ? getSituationCensusHighlight(userProfile, profile) : null
-  const familyEnrichment =
-    !loading && data?.available && userProfile?.familyWithChildren
-      ? buildFamilyEnrichment(profile, indicators)
-      : null
+  const situationEnrichment =
+    !loading && data?.available ? buildSituationEnrichment(userProfile, profile, indicators) : null
   const stats = [
     { label: 'Population', value: formatNumber(profile.totalPopulation) },
     { label: 'Median age', value: profile.medianAge != null ? `${profile.medianAge}` : 'Unavailable' },
@@ -894,6 +1026,37 @@ function CensusContextSection({ data, loading, userProfile, indicators }) {
     { label: 'Public transport to work', value: formatPercent(profile.publicTransportToWorkPct) },
     { label: 'Residents 65+', value: formatPercent(profile.age65PlusPct) },
   ]
+  const orderedInsights = [...(data?.insights || [])].sort((a, b) => {
+    const priority = (item) => {
+      const title = String(item?.title || '').toLowerCase()
+
+      if (userProfile?.familyWithChildren) {
+        if (title.includes('household')) return 0
+        if (title.includes('housing')) return 1
+        if (title.includes('rental') || title.includes('ownership')) return 2
+        if (title.includes('transport')) return 5
+        return 4
+      }
+
+      if (userProfile?.elderly) {
+        if (title.includes('older')) return 0
+        if (title.includes('transport')) return 1
+        if (title.includes('household')) return 2
+        if (title.includes('housing') || title.includes('rental')) return 4
+        return 5
+      }
+
+      if (userProfile?.petOwner) {
+        if (title.includes('housing') || title.includes('rental') || title.includes('ownership')) return 0
+        if (title.includes('household')) return 1
+        if (title.includes('transport')) return 4
+        return 5
+      }
+
+      return 4
+    }
+    return priority(a) - priority(b)
+  })
 
   return (
     <div style={{ marginBottom: 24 }} role="region" aria-label="Census context">
@@ -954,61 +1117,61 @@ function CensusContextSection({ data, loading, userProfile, indicators }) {
                 </div>
               )}
 
-              {familyEnrichment && (
+              {situationEnrichment && (
                 <div style={{
-                  background: '#fff7ed',
-                  border: '1px solid #fed7aa',
-                  borderLeft: '4px solid #ea580c',
+                  background: situationEnrichment.tone.background,
+                  border: `1px solid ${situationEnrichment.tone.border}`,
+                  borderLeft: `4px solid ${situationEnrichment.tone.accent}`,
                   borderRadius: 14,
                   padding: '16px',
                   marginBottom: 18,
                 }}>
-                  <p style={{ fontSize: 11, fontWeight: 900, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#c2410c', marginBottom: 5 }}>
-                    Family and children context
+                  <p style={{ fontSize: 11, fontWeight: 900, letterSpacing: '0.08em', textTransform: 'uppercase', color: situationEnrichment.tone.label, marginBottom: 5 }}>
+                    {situationEnrichment.label}
                   </p>
-                  <p style={{ fontSize: 13, color: '#7c2d12', lineHeight: 1.65, fontWeight: 650, marginBottom: 12 }}>
-                    {familyEnrichment.summary}
+                  <p style={{ fontSize: 13, color: situationEnrichment.tone.text, lineHeight: 1.65, fontWeight: 650, marginBottom: 12 }}>
+                    {situationEnrichment.summary}
                   </p>
-                  {familyEnrichment.stats.length > 0 && (
+                  {situationEnrichment.stats.length > 0 && (
                     <div style={{
                       display: 'grid',
                       gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))',
                       gap: 10,
-                      marginBottom: familyEnrichment.nearby.length ? 12 : 0,
+                      marginBottom: situationEnrichment.nearby.length ? 12 : 0,
                     }}>
-                      {familyEnrichment.stats.map((item) => (
+                      {situationEnrichment.stats.map((item) => (
                         <div key={item.label} style={{
                           background: '#fff',
-                          border: '1px solid #fed7aa',
+                          border: `1px solid ${situationEnrichment.tone.border}`,
                           borderRadius: 12,
                           padding: '10px 12px',
                         }}>
-                          <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.07em', textTransform: 'uppercase', color: '#9a3412', marginBottom: 4 }}>
+                          <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.07em', textTransform: 'uppercase', color: situationEnrichment.tone.text, marginBottom: 4 }}>
                             {item.label}
                           </p>
-                          <p style={{ fontSize: 16, fontWeight: 900, color: '#431407' }}>
+                          <p style={{ fontSize: 16, fontWeight: 900, color: situationEnrichment.tone.strong }}>
                             {item.value}
                           </p>
                         </div>
                       ))}
                     </div>
                   )}
-                  {familyEnrichment.nearby.length > 0 && (
+                  {situationEnrichment.nearby.length > 0 && (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 10 }}>
-                      {familyEnrichment.nearby.map((item) => (
+                      {situationEnrichment.nearby.map((item) => (
                         <div key={item.label} style={{
                           background: '#fff',
-                          border: '1px solid #fed7aa',
+                          border: `1px solid ${situationEnrichment.tone.border}`,
                           borderRadius: 12,
                           padding: '11px 12px',
                         }}>
                           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
-                            <p style={{ fontSize: 12, fontWeight: 900, color: '#7c2d12' }}>{item.label}</p>
-                            <p style={{ fontSize: 11, fontWeight: 900, color: '#c2410c' }}>{item.score}</p>
+                            <p style={{ fontSize: 12, fontWeight: 900, color: situationEnrichment.tone.text }}>{item.label}</p>
+                            <p style={{ fontSize: 11, fontWeight: 900, color: situationEnrichment.tone.label }}>{item.score}</p>
                           </div>
-                          <p style={{ fontSize: 12, color: '#7c2d12', lineHeight: 1.5, fontWeight: 700 }}>{item.value}</p>
+                          <p style={{ fontSize: 12, color: situationEnrichment.tone.text, lineHeight: 1.5, fontWeight: 700 }}>{item.value}</p>
                           {item.detail && (
-                            <p style={{ fontSize: 11, color: '#9a3412', lineHeight: 1.45, marginTop: 4 }}>{item.detail}</p>
+                            <p style={{ fontSize: 11, color: situationEnrichment.tone.text, lineHeight: 1.45, marginTop: 4 }}>{item.detail}</p>
                           )}
                         </div>
                       ))}
@@ -1039,7 +1202,7 @@ function CensusContextSection({ data, loading, userProfile, indicators }) {
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 12 }}>
-                {(data.insights || []).map((item) => (
+                {orderedInsights.map((item) => (
                   <div key={item.title} style={{
                     border: '1px solid #e5e7eb',
                     borderRadius: 14,
@@ -1160,7 +1323,7 @@ export default function InsightsPage() {
   const band = overallScore != null ? getScoreBand(overallScore) : null
   const activeCfg = CATEGORY_CONFIG[activeTab]
   const activeIndicators = indicators[activeTab]
-  const activeGroups = groupIndicatorFactors(activeIndicators?.factors || [])
+  const activeGroups = groupIndicatorFactors(activeIndicators?.factors || [], profile)
   const situationHighlights = buildSituationHighlights(profile, scores, indicators)
   const interpretationSummary = buildInterpretationSummary(scores, profileLabel, rangeMinutes)
 
