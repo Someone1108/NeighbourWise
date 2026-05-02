@@ -422,6 +422,60 @@ body {
   text-align: center;
 }
 
+.nwMapFloatingBar .nwMapDetailsCta {
+  position: relative;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #f59648 0%, #f47c20 52%, #e06818 100%);
+  color: #ffffff;
+  box-shadow:
+    0 10px 24px rgba(244, 124, 32, 0.38),
+    0 0 0 0 rgba(244, 124, 32, 0.48);
+  animation: heroPulse 2.6s ease-in-out 0.4s infinite;
+}
+
+.nwMapFloatingBar .nwMapDetailsCta::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 0%,
+    transparent 35%,
+    rgba(255, 255, 255, 0.32) 48%,
+    transparent 62%,
+    transparent 100%
+  );
+  transform: translateX(-120%);
+  animation: nwMapCtaSheen 3.2s ease-in-out 1s infinite;
+  pointer-events: none;
+}
+
+.nwMapFloatingBar .nwMapDetailsCta:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.05);
+  box-shadow: 0 16px 34px rgba(244, 124, 32, 0.48);
+  animation: none;
+}
+
+.nwMapFloatingBar .nwMapDetailsCta:hover::after {
+  animation: none;
+}
+
+@keyframes nwMapCtaSheen {
+  0%,
+  45% {
+    transform: translateX(-120%);
+  }
+  75%,
+  100% {
+    transform: translateX(120%);
+  }
+}
+
 .nwMapActionsHint {
   margin-top: 12px;
   font-size: 12px;
@@ -438,6 +492,9 @@ body {
   .nwMapFloatingBar .nwBtn {
     padding: 8px 10px;
     font-size: 12px;
+  }
+  .nwMapFloatingBar .nwMapDetailsCta {
+    gap: 6px;
   }
 }
 

@@ -321,6 +321,7 @@ export default function MapPage() {
             {SHOW_VIEW_DETAILS && (
               <Button
                 variant="primary"
+                className="nwMapDetailsCta"
                 onClick={() => {
                   saveContext({ selectedLocation, profile, rangeMinutes });
                   navigate("/insights", {
@@ -328,7 +329,7 @@ export default function MapPage() {
                   });
                 }}
               >
-                View Details
+                See Detailed Insights
               </Button>
             )}
 
