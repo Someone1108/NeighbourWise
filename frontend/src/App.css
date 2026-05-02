@@ -843,15 +843,15 @@ body {
 }
 
 .nwCompareCategoryIcon {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
   width: 28px;
   height: 28px;
   border-radius: 8px;
   margin-right: 10px;
   font-size: 14px;
-  vertical-align: middle;
 }
 
 .nwCompareLabel {
@@ -922,13 +922,16 @@ body {
 }
 
 .nwCompareCellScore {
+  font-size: 15px;
   font-weight: 900;
   color: #10213d;
+  margin-bottom: 4px;
 }
 
 .nwCompareTable {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
   margin-top: 12px;
   background: white;
   border-radius: 16px;
@@ -938,14 +941,26 @@ body {
 .nwCompareTable th,
 .nwCompareTable td {
   border: 1px solid var(--border-light);
-  padding: 10px 12px;
+  padding: 10px 14px;
   text-align: left;
   color: var(--text-dark);
+  vertical-align: middle;
+}
+
+.nwCompareTable th {
+  background: var(--card-soft);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted-dark);
 }
 
 .nwCompareRowTitle {
-  font-weight: 900;
+  font-weight: 700;
   color: var(--text-dark);
+  display: flex;
+  align-items: center;
 }
 
 .nwCompareRecommendation {
