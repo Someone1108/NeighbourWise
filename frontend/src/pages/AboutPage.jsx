@@ -25,16 +25,32 @@ const SCORE_CATEGORIES = [
 export default function AboutPage() {
   return (
     <div className="nwPage nwAboutPage">
-      {/* ── HERO ── */}
-      <section className="nwAboutHero">
-        <span className="nwAboutEyebrow">About NeighbourWise</span>
-        <h1 className="nwAboutTitle">
-          Find a Melbourne neighbourhood that fits <em>your life.</em>
-        </h1>
-        <p className="nwAboutLead">
-          NeighbourWise helps you find a Melbourne neighbourhood that fits your life — with scores,
-          maps, and side-by-side comparisons based on real location data.
-        </p>
+      {/* ── BANNER ── */}
+      <section className="nwAboutBanner">
+        <div className="nwAboutBannerGlow" aria-hidden="true" />
+        <div className="nwAboutBannerInner">
+          <span className="nwAboutBannerEyebrow">
+            <span className="nwAboutBannerEyebrowDot" aria-hidden="true" />
+            Monash University · Smart City Project · 2026
+          </span>
+
+          <h1 className="nwAboutBannerTitle">
+            About <em>NeighbourWise</em>
+          </h1>
+
+          <p className="nwAboutBannerLead">
+            NeighbourWise helps you find a Melbourne neighbourhood that fits your life — with
+            composite liveability scores, interactive maps, and side-by-side suburb comparisons
+            built on real open data.
+          </p>
+
+          <ul className="nwAboutBannerStats" aria-label="At a glance">
+            <li className="nwAboutBannerStat">127+ suburbs</li>
+            <li className="nwAboutBannerStat">3 scoring categories</li>
+            <li className="nwAboutBannerStat">6 open data sources</li>
+            <li className="nwAboutBannerStat">Personalised profiles</li>
+          </ul>
+        </div>
       </section>
 
       {/* ── ABOUT THE PLATFORM ── (color block) */}
@@ -105,17 +121,6 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* ── ABOUT THE TEAM ── */}
-      <section className="nwAboutSection nwAboutTeam">
-        <div className="nwAboutSectionHead">
-          <p className="nwAboutSectionEyebrow">The team</p>
-          <h2 className="nwAboutSectionTitle">Built by Monash University students.</h2>
-          <p className="nwAboutSectionLead">
-            We are a team of students from Monash University, working on a smart city project to improve
-            urban living decisions through data.
-          </p>
-        </div>
-      </section>
     </div>
   )
 }

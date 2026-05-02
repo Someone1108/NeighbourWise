@@ -7,10 +7,10 @@ import {
   getMapContext,
   getLocalityPolygon,
   getPoiInsights,
-  getAqiForLocation,
   getLayerDataForSuburb,
   getLayerDataForAddress,
-  getLiveabilityScore
+  getLiveabilityScore,
+  prefetchInsightPageData
 } from "../services/api.js";
 import {
   addToCompareList,
@@ -64,7 +64,6 @@ export default function MapPage() {
   const [layerData, setLayerData] = useState(null);
 
   const [scoreData, setScoreData] = useState(null);
-  const [aqiData, setAqiData] = useState(null);
 
   const context = useMemo(() => {
     const stateCtx = location.state;
@@ -84,6 +83,13 @@ export default function MapPage() {
     locationKind === "address" ||
     locationKind === "street" ||
     locationKind === "postcode";
+
+  const scoreValue = Number(
+    scoreData?.liveabilityScore ?? mapData?.overallScore
+  );
+  const overallScore = Number.isFinite(scoreValue) ? scoreValue : null;
+  const overallScoreDisplay =
+    overallScore === null ? "–" : Math.round(overallScore);
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
@@ -145,26 +151,14 @@ export default function MapPage() {
       persona: profile || "default"
     });
 
-    const aqiPromise = getAqiForLocation({
-      lat: Number(selectedLocation.lat),
-      lng: Number(selectedLocation.lng)
-    }).catch((err) => {
-      console.error("AQI load error:", err);
-      return {
-        available: false,
-        reason: "AQI data is unavailable"
-      };
-    });
-
     Promise.all([
       mapContextPromise,
       polygonPromise,
       poiPromise,
       layerPromise,
-      scorePromise,
-      aqiPromise
+      scorePromise
     ])
-      .then(([data, polygon, poiResponse, layers, scores, aqiResponse]) => {
+      .then(([data, polygon, poiResponse, layers, scores]) => {
         if (cancelled) return;
 
         setMapData(data);
@@ -172,7 +166,6 @@ export default function MapPage() {
         setPoiData(poiResponse?.results || []);
         setLayerData(layers);
         setScoreData(scores);
-        setAqiData(aqiResponse || null);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -192,6 +185,30 @@ export default function MapPage() {
       cancelled = true;
     };
   }, [context, selectedLocation, profile, rangeMinutes, isSuburb, isAddress]);
+
+  useEffect(() => {
+    if (loading || error || !selectedLocation || !profile) return;
+
+    let cancelled = false;
+    const runPrefetch = () => {
+      if (cancelled) return;
+      prefetchInsightPageData({ selectedLocation, profile, rangeMinutes });
+    };
+
+    const idleId =
+      typeof window.requestIdleCallback === "function"
+        ? window.requestIdleCallback(runPrefetch, { timeout: 1500 })
+        : window.setTimeout(runPrefetch, 500);
+
+    return () => {
+      cancelled = true;
+      if (typeof window.cancelIdleCallback === "function") {
+        window.cancelIdleCallback(idleId);
+      } else {
+        window.clearTimeout(idleId);
+      }
+    };
+  }, [loading, error, selectedLocation, profile, rangeMinutes]);
 
   if (error) {
     return (
@@ -335,47 +352,59 @@ export default function MapPage() {
 
         <aside className="nwMapRight">
           <div className="nwCard nwMapSidebarCard" style={{ textAlign: "left" }}>
-            <div style={{ marginBottom: 4 }} aria-label="Liveability scores">
-              <div
-                style={{
-                  fontSize: 11,
-                  fontWeight: 800,
-                  letterSpacing: "0.1em",
-                  textTransform: "uppercase",
-                  color: "var(--accent-2)",
-                  marginBottom: 2
-                }}
-                id="liveability-score-label"
-              >
-                Liveability Score
-              </div>
+            <div className="nwScoreHeader" aria-label="Liveability scores">
+              <div className="nwScoreHeaderTop">
+                <div className="nwScoreHeaderInfo">
+                  <div
+                    className="nwScoreHeaderEyebrow"
+                    id="liveability-score-label"
+                  >
+                    {String(locationName || "").toUpperCase()}
+                  </div>
+                  <h2 className="nwScoreHeaderTitle">
+                    Overall Liveability
+                  </h2>
+                  {(() => {
+                    const s = overallScore;
+                    let tier = { label: "—", className: "is-na" };
+                    if (Number.isFinite(s)) {
+                      if (s >= 80) tier = { label: "Excellent", className: "is-excellent" };
+                      else if (s >= 65) tier = { label: "Good", className: "is-good" };
+                      else if (s >= 50) tier = { label: "Moderate", className: "is-moderate" };
+                      else tier = { label: "Low", className: "is-low" };
+                    }
+                    return (
+                      <span className={`nwScoreTier ${tier.className}`}>
+                        <span className="nwScoreTierDot" aria-hidden="true" />
+                        {tier.label}
+                      </span>
+                    );
+                  })()}
+                  {getProfileLabel(profile) && (
+                    <div className="nwScoreHeaderProfile">
+                      Scored for: {getProfileLabel(profile)}
+                    </div>
+                  )}
+                </div>
 
-              {getProfileLabel(profile) && (
                 <div
+                  className="nwScoreDonut"
+                  aria-labelledby="liveability-score-label"
+                  aria-live="polite"
                   style={{
-                    fontSize: 11,
-                    color: "var(--muted-dark)",
-                    fontWeight: 600,
-                    marginBottom: 6
+                    "--nw-score": overallScore ?? 0
                   }}
                 >
-                  Scored for: {getProfileLabel(profile)}
+                  <div className="nwScoreDonutInner">
+                    <div className="nwScoreDonutValue">
+                      {overallScoreDisplay}
+                    </div>
+                    <div className="nwScoreDonutOf">/100</div>
+                  </div>
                 </div>
-              )}
-
-              <div
-                className="nwOverallScore"
-                style={{ marginBottom: 6 }}
-                aria-labelledby="liveability-score-label"
-                aria-live="polite"
-              >
-                {scoreData
-                  ? Number(scoreData.liveabilityScore).toFixed(2)
-                  : "–"}{" "}
-                / 100
               </div>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <div className="nwScoreHeaderBars">
                 {CATEGORY_KEYS.map((k) => (
                   <ScoreBar
                     key={k}
@@ -384,56 +413,6 @@ export default function MapPage() {
                     outOf={100}
                   />
                 ))}
-              </div>
-
-              <div
-                style={{
-                  marginTop: 12,
-                  padding: "10px 12px",
-                  border: "1px solid var(--border-light)",
-                  borderRadius: 8,
-                  background: "rgba(42,157,143,0.06)"
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    gap: 10,
-                    alignItems: "baseline"
-                  }}
-                >
-                  <span
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 800,
-                      color: "var(--muted-dark)",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.06em"
-                    }}
-                  >
-                    Air Quality
-                  </span>
-                  <strong style={{ color: "var(--accent-2)" }}>
-                    {aqiData?.available && Number.isFinite(aqiData.score)
-                      ? `${aqiData.score} / 100`
-                      : "Unavailable"}
-                  </strong>
-                </div>
-
-                <div
-                  style={{
-                    marginTop: 5,
-                    fontSize: 12,
-                    lineHeight: 1.45,
-                    color: "var(--muted-dark)"
-                  }}
-                >
-                  {aqiData?.available && aqiData.site
-                    ? `EPA AirWatch station: ${aqiData.site.name} (${aqiData.site.distanceKm} km away)`
-                    : aqiData?.reason ||
-                      "EPA AirWatch data will appear here once configured."}
-                </div>
               </div>
             </div>
 

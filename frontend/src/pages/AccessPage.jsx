@@ -22,10 +22,12 @@ export default function AccessPage() {
   }
 
   return (
-    <div
-      className="nwAccessPage"
-      style={{ backgroundImage: `url(${heroImage})` }}
-    >
+    <div className="nwAccessPage">
+      <div
+        className="nwAccessBg"
+        aria-hidden="true"
+        style={{ backgroundImage: `url(${heroImage})` }}
+      />
       <div className="nwAccessOverlay" aria-hidden="true" />
 
       <div className="nwAccessCard" role="dialog" aria-labelledby="access-title">

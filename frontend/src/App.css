@@ -331,20 +331,20 @@ body {
   display: flex;
   gap: 20px;
   align-items: stretch;
+  /* Lock the row height on the parent so both columns stretch to match,
+     keeping the layout inside one viewport without an internal scrollbar. */
+  height: clamp(440px, calc(100vh - 200px), 720px);
 }
 
 .nwMapLeft {
-  flex: 1 1 65%;
-  /* Fills the viewport on tall screens, but capped so it never gets absurdly
-     tall on 4K monitors. align-items:stretch on .nwMapLayout means the right
-     sidebar matches this height automatically. */
-  min-height: clamp(460px, calc(100vh - 240px), 900px);
+  flex: 1 1 auto;
+  min-width: 0;
   position: relative;
 }
 
 .nwMapRight {
-  flex: 0 0 380px;
-  width: 380px;
+  flex: 0 0 440px;
+  width: 440px;
 }
 
 /* Polished MapPage layout: keep right sidebar visually aligned with map. */
@@ -359,7 +359,6 @@ body {
   height: 100%;
   padding: 16px 18px;
   background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-  overflow-y: auto;
 }
 
 /* ── Sidebar density tightening so the whole page fits one viewport ── */
@@ -784,29 +783,63 @@ body {
      be allowed to escape the panel on the y-axis. */
 }
 
-/* Layered background: a 5px coloured stripe at the top + a soft tinted
-   gradient fill across the card body. Both layers are clipped by the
-   card's border-radius, so nothing overflows the rounded corners. */
+/* Solid colour cards with white text — area1 = teal, area2 = orange.
+   A subtle gradient sheen keeps the cards from looking flat. */
 .nwComparePanel--area1 {
-  background:
-    linear-gradient(90deg, var(--accent-2) 0%, #4cc4b3 100%) top / 100% 5px no-repeat,
-    linear-gradient(135deg, rgba(42, 157, 143, 0.16) 0%, rgba(76, 196, 179, 0.06) 45%, #ffffff 100%);
-  border-color: rgba(42, 157, 143, 0.28);
+  background: linear-gradient(135deg, var(--accent-2) 0%, #4cc4b3 100%);
+  border-color: var(--accent-2);
+  color: #ffffff;
+  box-shadow: 0 14px 36px rgba(42, 157, 143, 0.22);
+}
+
+.nwComparePanel--area1 .nwCompareLabel,
+.nwComparePanel--area1 .nwCompareAreaTitle,
+.nwComparePanel--area1 .nwCompareAreaMeta,
+.nwComparePanel--area1 .nwCompareEmptyText {
+  color: #ffffff;
 }
 
 .nwComparePanel--area1 .nwCompareLabel {
-  color: var(--accent-2);
+  opacity: 0.9;
 }
 
 .nwComparePanel--area2 {
-  background:
-    linear-gradient(90deg, var(--accent) 0%, #f59648 100%) top / 100% 5px no-repeat,
-    linear-gradient(135deg, rgba(244, 124, 32, 0.16) 0%, rgba(245, 150, 72, 0.06) 45%, #ffffff 100%);
-  border-color: rgba(244, 124, 32, 0.28);
+  background: linear-gradient(135deg, var(--accent) 0%, #f59648 100%);
+  border-color: var(--accent);
+  color: #ffffff;
+  box-shadow: 0 14px 36px rgba(244, 124, 32, 0.22);
+}
+
+.nwComparePanel--area2 .nwCompareLabel,
+.nwComparePanel--area2 .nwCompareAreaTitle,
+.nwComparePanel--area2 .nwCompareAreaMeta {
+  color: #ffffff;
 }
 
 .nwComparePanel--area2 .nwCompareLabel {
-  color: var(--accent);
+  opacity: 0.9;
+}
+
+/* Saved-from-map / area-selected chip should sit nicely on coloured cards */
+.nwComparePanel--area1 .nwChip,
+.nwComparePanel--area2 .nwChip {
+  background: rgba(255, 255, 255, 0.22);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+/* Search input + label inside Area 2 panel — keep readable on orange */
+.nwComparePanel--area2 .nwSearchBlock label {
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+
+.nwComparePanel--area2 .nwSearchInput {
+  background: #ffffff;
+  color: var(--text-dark);
+}
+
+.nwComparePanel--area2 .nwSearchStatus {
+  color: rgba(255, 255, 255, 0.92);
 }
 
 .nwCompareCategoryIcon {
@@ -1016,10 +1049,17 @@ body {
 
 .hero-subtitle {
   font-size: clamp(16px, 1.8vw, 19px);
-  line-height: 1.65;
-  color: rgba(255, 255, 255, 0.8);
-  max-width: 540px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.92);
+  background: rgba(10, 20, 40, 0.32);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  padding: 7px 18px;
+  max-width: 500px;
   margin: 0;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
 /* Hero CTA — strong primary action surfaced on the first screen */
@@ -1602,6 +1642,26 @@ body {
 .profile-card-emoji {
   font-size: 28px;
   line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.profile-card-icon-img {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  display: block;
+  filter: drop-shadow(0 2px 6px rgba(15, 23, 42, 0.08));
+  transition: transform 0.2s ease;
+}
+
+.profile-card:hover .profile-card-icon-img {
+  transform: scale(1.05);
+}
+
+.profile-card.active .profile-card-icon-img {
+  transform: scale(1.08);
 }
 
 .profile-card-title {
@@ -1756,6 +1816,7 @@ body {
 
   .nwMapLayout {
     flex-direction: column;
+    height: auto;
   }
 
   .nwMapRight {
@@ -2539,10 +2600,31 @@ body {
   justify-content: center;
   padding: 32px 24px;
   background-color: #0b1933;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.nwAccessBg {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-  isolation: isolate;
+  transform-origin: center center;
+  will-change: transform;
+  animation: nwAccessZoom 24s ease-in-out infinite alternate;
+}
+
+@keyframes nwAccessZoom {
+  from { transform: scale(1); }
+  to   { transform: scale(1.18); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nwAccessBg {
+    animation: none;
+  }
 }
 
 .nwAccessOverlay {
@@ -2718,5 +2800,360 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .nwAccessCard {
     animation: none;
+  }
+}
+/* ============================================================
+   MapPage — Score header (donut + tier pill, dark navy gradient)
+   ============================================================ */
+
+.nwScoreHeader {
+  border-radius: 18px;
+  padding: 18px 18px 16px;
+  background:
+    radial-gradient(120% 140% at 0% 0%, rgba(42, 157, 143, 0.32) 0%, rgba(42, 157, 143, 0) 55%),
+    linear-gradient(160deg, #10213d 0%, #14304f 60%, #0e2540 100%);
+  color: #f4f7fb;
+  box-shadow: 0 14px 32px rgba(15, 30, 60, 0.18);
+  margin: -2px -2px 14px;
+}
+
+/* Force white-ish text inside the dark header (must outspecify .nwCard rules). */
+.nwCard .nwScoreHeader,
+.nwCard .nwScoreHeader h2,
+.nwCard .nwScoreHeader p,
+.nwCard .nwScoreHeader div,
+.nwCard .nwScoreHeader span {
+  color: #f4f7fb;
+}
+
+.nwCard .nwScoreHeader .nwScoreHeaderTitle {
+  color: #ffffff;
+}
+
+.nwCard .nwScoreHeader .nwScoreHeaderEyebrow {
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.nwCard .nwScoreHeader .nwScoreHeaderProfile {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.nwCard .nwScoreHeader .nwScoreDonutInner {
+  color: #ffffff;
+}
+
+.nwCard .nwScoreHeader .nwScoreDonutValue {
+  color: #ffffff;
+}
+
+.nwCard .nwScoreHeader .nwScoreDonutOf {
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.nwCard .nwScoreHeader .nwScoreBarLabel {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.nwCard .nwScoreHeader .nwScoreBarValue {
+  color: #ffffff;
+}
+
+.nwScoreHeaderTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.nwScoreHeaderInfo {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.nwScoreHeaderEyebrow {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.65);
+  margin-bottom: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nwScoreHeaderTitle {
+  font-family: var(--heading);
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.05;
+  color: #ffffff;
+  margin: 0 0 12px;
+  letter-spacing: -0.5px;
+}
+
+.nwScoreHeaderProfile {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 600;
+  margin-top: 8px;
+}
+
+.nwScoreTier {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #f4f7fb;
+}
+
+.nwScoreTierDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  display: inline-block;
+}
+
+.nwScoreTier.is-excellent { color: #4cc4b3; }
+.nwScoreTier.is-good      { color: #6dd6c4; }
+.nwScoreTier.is-moderate  { color: #f4b860; }
+.nwScoreTier.is-low       { color: #f47c20; }
+.nwScoreTier.is-na        { color: rgba(255, 255, 255, 0.6); }
+
+/* Donut score ring driven by --nw-score (0-100) */
+.nwScoreDonut {
+  --nw-score: 0;
+  --nw-ring-color: var(--accent);
+  flex: 0 0 auto;
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  background:
+    conic-gradient(
+      var(--nw-ring-color) calc(var(--nw-score) * 1%),
+      rgba(255, 255, 255, 0.12) 0
+    );
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.nwScoreDonutInner {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  background: rgba(8, 18, 36, 0.85);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: #ffffff;
+}
+
+.nwScoreDonutValue {
+  font-size: 26px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.5px;
+}
+
+.nwScoreDonutOf {
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.65);
+  margin-top: 2px;
+}
+
+.nwScoreHeaderBars {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Override score bars inside the dark header so they stay readable. */
+.nwScoreHeaderBars .nwScoreBar {
+  background: transparent;
+  border: none;
+  padding: 0;
+  border-radius: 0;
+}
+
+.nwScoreHeaderBars .nwScoreBarLabel {
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 12px;
+}
+
+.nwScoreHeaderBars .nwScoreBarValue {
+  color: #ffffff;
+  font-size: 13px;
+}
+
+.nwScoreHeaderBars .nwProgressOuter {
+  background: rgba(255, 255, 255, 0.14);
+  height: 6px;
+  margin-top: 6px;
+}
+
+.nwScoreHeaderBars .nwProgressInner {
+  background: linear-gradient(90deg, var(--accent-2) 0%, #4cc4b3 100%);
+}
+
+@media (max-width: 1024px) {
+  .nwMapRight {
+    flex: 0 0 100%;
+    width: 100%;
+  }
+}
+
+/* Per-category bar colors inside the dark score header */
+.nwScoreHeaderBars .nwScoreBar[aria-label="accessibility score"] .nwProgressInner {
+  background: linear-gradient(90deg, #3b82f6 0%, #60a5fa 100%);
+}
+
+.nwScoreHeaderBars .nwScoreBar[aria-label="safety score"] .nwProgressInner {
+  background: linear-gradient(90deg, #10b981 0%, #4cc4b3 100%);
+}
+
+.nwScoreHeaderBars .nwScoreBar[aria-label="environment score"] .nwProgressInner {
+  background: linear-gradient(90deg, var(--accent) 0%, #f59648 100%);
+}
+
+/* ============================================================
+   AboutPage — Hero banner with sell points
+   ============================================================ */
+
+.nwAboutBanner {
+  position: relative;
+  /* Bleed full-width to the page edges and sit flush with the next section. */
+  margin: -12px -40px 0;
+  padding: 96px 40px 88px;
+  border-radius: 0;
+  background:
+    radial-gradient(120% 90% at 110% -20%, rgba(244, 124, 32, 0.18) 0%, rgba(244, 124, 32, 0) 55%),
+    radial-gradient(80% 80% at -10% 110%, rgba(42, 157, 143, 0.20) 0%, rgba(42, 157, 143, 0) 55%),
+    linear-gradient(160deg, #0f1f3b 0%, #142a4d 55%, #0c1a35 100%);
+  color: #f4f7fb;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* Remove the page-background strip between the banner and the next section. */
+.nwAboutBanner + .nwAboutBlock {
+  margin-top: 0;
+}
+
+.nwAboutBannerGlow {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(60% 50% at 70% 40%, rgba(255, 209, 102, 0.10) 0%, transparent 70%),
+    radial-gradient(40% 40% at 20% 80%, rgba(76, 196, 179, 0.18) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.nwAboutBannerInner {
+  max-width: 880px;
+  margin: 0 auto;
+  position: relative;
+  text-align: center;
+}
+
+.nwAboutBannerInner .nwAboutBannerLead {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.nwAboutBannerInner .nwAboutBannerStats {
+  justify-content: center;
+}
+
+.nwAboutBannerEyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #f4b860;
+  background: rgba(244, 124, 32, 0.14);
+  border: 1px solid rgba(244, 124, 32, 0.32);
+  padding: 8px 16px;
+  border-radius: 999px;
+  margin-bottom: 28px;
+}
+
+.nwAboutBannerEyebrowDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f4b860;
+  box-shadow: 0 0 0 4px rgba(244, 184, 96, 0.18);
+}
+
+.nwAboutBannerTitle {
+  font-family: var(--heading);
+  font-size: clamp(40px, 6.2vw, 76px);
+  line-height: 1.05;
+  font-weight: 600;
+  color: #ffffff;
+  margin: 0 0 22px;
+  letter-spacing: -0.5px;
+}
+
+.nwAboutBannerTitle em {
+  font-style: italic;
+  background: linear-gradient(90deg, #ffd166 0%, #f4b860 60%, #f59648 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+.nwAboutBannerLead {
+  font-size: clamp(16px, 1.5vw, 19px);
+  line-height: 1.7;
+  color: rgba(244, 247, 251, 0.78);
+  max-width: 720px;
+  margin: 0 0 28px;
+}
+
+.nwAboutBannerStats {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.nwAboutBannerStat {
+  font-size: 14px;
+  font-weight: 700;
+  color: #f4f7fb;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  padding: 10px 18px;
+  border-radius: 999px;
+  backdrop-filter: blur(4px);
+}
+
+@media (max-width: 720px) {
+  .nwAboutBanner {
+    margin: -12px -16px 0;
+    padding: 64px 22px 56px;
+    border-radius: 0;
   }
 }
