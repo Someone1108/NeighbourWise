@@ -294,6 +294,66 @@ function getImpactText(score, categoryLabel) {
   return `Pulls ${categoryLabel.toLowerCase()} down`
 }
 
+function describeScore(score, strongText, goodText, moderateText, lowText) {
+  const value = Number(score)
+  if (!Number.isFinite(value)) return 'This signal is unavailable for the selected area.'
+  if (value >= 80) return strongText
+  if (value >= 65) return goodText
+  if (value >= 50) return moderateText
+  return lowText
+}
+
+function joinList(items = [], limit = 3) {
+  const clean = items.map((item) => String(item || '').trim()).filter(Boolean)
+  if (!clean.length) return ''
+  const shown = clean.slice(0, limit)
+  const suffix = clean.length > limit ? ` and ${clean.length - limit} more` : ''
+  return `${shown.join(', ')}${suffix}`
+}
+
+function formatDecimal(value, digits = 1) {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return 'Unavailable'
+  return n.toFixed(digits)
+}
+
+function describeVegetationRange(minValue, maxValue) {
+  const min = Number(minValue)
+  const max = Number(maxValue)
+  if (!Number.isFinite(min) || !Number.isFinite(max)) {
+    return 'The spread of greenery across nearby streets is unavailable.'
+  }
+  if (max - min >= 50) {
+    return 'Greenery is uneven across the area: some nearby pockets are very green, while others have very little cover.'
+  }
+  if (min >= 25) {
+    return 'Greenery appears fairly consistent across the selected area.'
+  }
+  return 'Some nearby streets may feel less shaded even if the area has greenery overall.'
+}
+
+function describeHeatRange(minValue, maxValue) {
+  const min = Number(minValue)
+  const max = Number(maxValue)
+  if (!Number.isFinite(min) || !Number.isFinite(max)) {
+    return 'The spread of heat exposure across nearby streets is unavailable.'
+  }
+  if (max >= 8) {
+    return 'Parts of this area are likely to feel noticeably hotter on warm days.'
+  }
+  if (max - min >= 4) {
+    return 'Heat comfort may vary across the area, so some streets may feel cooler than others.'
+  }
+  return 'Heat exposure looks fairly consistent across the selected area.'
+}
+
+function describeFeatureConfidence(count, label) {
+  const value = Number(count)
+  if (!Number.isFinite(value) || value <= 0) return `${label} detail is limited for this area.`
+  if (value >= 100) return `This is based on many nearby ${label.toLowerCase()} records, so the signal is reasonably well supported.`
+  return `This is based on ${value} nearby ${label.toLowerCase()} records, so read it as a local estimate.`
+}
+
 function summarizeCategory(category, factors = []) {
   const label = CATEGORY_CONFIG[category]?.label || 'This category'
   const scored = factors
@@ -321,6 +381,10 @@ function summarizeCategory(category, factors = []) {
 
 function getPersonaIndicatorPriority(factor, profile) {
   const name = String(factor?.name || '').toLowerCase()
+
+  if (name.includes('crime context')) return 0
+  if (name.includes('zoning safety')) return 1
+  if (name.includes('combined safety')) return 2
 
   if (profile?.familyWithChildren) {
     if (name.includes('school')) return 0
@@ -435,6 +499,17 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
   const crimeScore = Number(safety?.scores?.crime)
   const zoningSafetyScore = Number(safety?.scores?.zoning)
   const finalSafetyScore = Number(safety?.safetyScore)
+  const rawCrimeAverage = Number(safety?.crimeDetails?.averageInRadius)
+  const nearbySuburbCount = Number(safety?.crimeDetails?.suburbCount)
+  const nearbySuburbs = joinList(safety?.crimeDetails?.suburbNames || [])
+  const zoneCount = Number(safety?.zoningDetails?.zoneCount)
+  const zoneMix = (safety?.zoningDetails?.zoneMix || [])
+    .map((zone) => `${zone.label} (${zone.count})`)
+    .join(', ')
+  const crimeWeight = Math.round(Number(safety?.weights?.crime ?? 0.57) * 100)
+  const zoningWeight = Math.round(Number(safety?.weights?.zoning ?? 0.43) * 100)
+  const missingCrime = safety?.missingData?.crime
+  const missingZoning = safety?.missingData?.zoning
 
   const safetyFactors = [
     {
@@ -443,15 +518,28 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
       met: crimeScore >= 60,
       summary: Number.isFinite(crimeScore) ? `${getIndicatorStatus(crimeScore).label}: ${crimeScore}/100` : 'Unavailable',
       plainText: Number.isFinite(crimeScore)
-        ? `Crime context scores ${crimeScore}/100 based on nearby suburb crime patterns.`
+        ? `Crime context scores ${crimeScore}/100 using recorded-crime patterns from suburbs intersecting the selected travel range.`
         : 'Crime context is unavailable for this area.',
       impact: getImpactText(crimeScore, 'Safety'),
       lines: [
-        crimeScore >= 60
-          ? 'Lower crime risk in this selected range.'
-          : 'Crime risk is relatively higher in this selected range.',
+        describeScore(
+          crimeScore,
+          'Recorded-crime context looks strong compared with the areas in the dataset.',
+          'Recorded-crime context looks broadly favourable for this selected range.',
+          'Recorded-crime context is mixed, so this area may need more street-level checking.',
+          'Recorded-crime context is the main safety concern in this selected range.',
+        ),
+        Number.isFinite(rawCrimeAverage)
+          ? `Raw nearby crime context average: ${rawCrimeAverage}/100 before the urban-area adjustment used by the model.`
+          : 'Raw nearby crime context average is unavailable.',
+        nearbySuburbs
+          ? `Suburbs contributing to this signal include ${nearbySuburbs}.`
+          : 'No contributing suburb names were returned for this signal.',
       ],
-      details: [`Nearby suburbs used: ${safety?.crimeDetails?.suburbCount ?? 0}`],
+      details: [
+        `Nearby suburbs used: ${Number.isFinite(nearbySuburbCount) ? nearbySuburbCount : 0}`,
+        missingCrime ? 'Crime data was missing, so zoning was used as the fallback.' : 'Crime data available.',
+      ],
     },
     {
       name: 'Zoning safety score',
@@ -459,13 +547,26 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
       met: zoningSafetyScore >= 60,
       summary: Number.isFinite(zoningSafetyScore) ? `${getIndicatorStatus(zoningSafetyScore).label}: ${zoningSafetyScore}/100` : 'Unavailable',
       plainText: Number.isFinite(zoningSafetyScore)
-        ? `Zoning safety scores ${zoningSafetyScore}/100 from nearby land-use patterns.`
+        ? `Zoning safety scores ${zoningSafetyScore}/100 from land-use zones inside the selected range. Commercial, mixed-use and active public areas can support safety because they often bring more foot traffic, lighting, passive surveillance and CCTV coverage.`
         : 'Zoning safety is unavailable for this area.',
       impact: getImpactText(zoningSafetyScore, 'Safety'),
       lines: [
-        'Land-use around you is translated into safety-friendly scores.',
+        describeScore(
+          zoningSafetyScore,
+          'The surrounding land-use mix is strongly safety-supportive.',
+          'The surrounding land-use mix is generally safety-supportive.',
+          'The surrounding land-use mix is varied, so the local street context matters.',
+          'The surrounding land-use mix may reduce perceived or practical safety.',
+        ),
+        zoneMix
+          ? `Most common zoning types found: ${zoneMix}.`
+          : 'No detailed zoning mix was returned for this area.',
+        'Industrial-heavy or low-activity zones can reduce this signal because there may be fewer people around at different times of day.',
       ],
-      details: [`Zoning features used: ${safety?.zoningDetails?.zoneCount ?? 0}`],
+      details: [
+        `Zoning features used: ${Number.isFinite(zoneCount) ? zoneCount : 0}`,
+        missingZoning ? 'Zoning data was missing, so crime context was used as the fallback.' : 'Zoning data available.',
+      ],
     },
     {
       name: 'Combined safety output',
@@ -473,15 +574,20 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
       met: finalSafetyScore >= 60,
       summary: Number.isFinite(finalSafetyScore) ? `${getIndicatorStatus(finalSafetyScore).label}: ${finalSafetyScore}/100` : 'Unavailable',
       plainText: Number.isFinite(finalSafetyScore)
-        ? `The final safety score is ${finalSafetyScore}/100 after combining crime and zoning signals.`
+        ? `The final safety score is ${finalSafetyScore}/100 after combining recorded-crime context with the surrounding land-use pattern.`
         : 'The final safety score is unavailable for this area.',
       impact: getImpactText(finalSafetyScore, 'Safety'),
       lines: [
-        finalSafetyScore >= 60
-          ? 'Overall, this area feels comparatively safer.'
-          : 'Overall, safety conditions are more mixed here.',
+        describeScore(
+          finalSafetyScore,
+          'Overall, the available safety signals are strong for this selected range.',
+          'Overall, the available safety signals are reasonably reassuring.',
+          'Overall, safety is mixed: some signals are supportive, but others deserve a closer look.',
+          'Overall, safety is the category to investigate most carefully before deciding.',
+        ),
+        `The model gives more weight to crime context (${crimeWeight}%) than zoning (${zoningWeight}%) because recorded incidents are the more direct safety signal.`,
       ],
-      details: ['Final mix: crime 57%, zoning 43%'],
+      details: [`Final mix: crime ${crimeWeight}%, zoning ${zoningWeight}%`],
     },
   ]
 
@@ -489,6 +595,15 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
   const heatScore = Number(environment?.scores?.heat)
   const zoningComfortScore = Number(environment?.scores?.zoning)
   const airQualityScore = Number(environment?.scores?.airQuality)
+  const envRaw = environment?.rawData || {}
+  const envWeights = environment?.weights || {}
+  const envZoneMix = (envRaw.zoneMix || [])
+    .map((zone) => `${zone.label} (${zone.count})`)
+    .join(', ')
+  const greenWeight = Math.round(Number(envWeights.green ?? 0.35) * 100)
+  const heatWeight = Math.round(Number(envWeights.heat ?? 0.30) * 100)
+  const zoningEnvWeight = Math.round(Number(envWeights.zoning ?? 0.15) * 100)
+  const airWeight = Math.round(Number(envWeights.airQuality ?? 0.20) * 100)
 
   const environmentFactors = [
     {
@@ -497,13 +612,24 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
       met: greenScore >= 60,
       summary: Number.isFinite(greenScore) ? `${getIndicatorStatus(greenScore).label}: ${greenScore}/100` : 'Unavailable',
       plainText: Number.isFinite(greenScore)
-        ? `Green coverage scores ${greenScore}/100 based on vegetation and green space nearby.`
+        ? `Green coverage scores ${greenScore}/100 using vegetation-cover features inside the selected range. Higher vegetation cover generally means more shade, cooler streets and more comfortable outdoor movement.`
         : 'Green coverage is unavailable for this area.',
       impact: getImpactText(greenScore, 'Environment'),
       lines: [
-        greenScore >= 60
-          ? 'Good amount of vegetation and green cover nearby.'
-          : 'Green cover is more limited in this selected range.',
+        describeScore(
+          greenScore,
+          'Vegetation cover looks strong for the selected range.',
+          'Vegetation cover looks reasonably supportive.',
+          'Vegetation cover is present but not a standout strength.',
+          'Vegetation cover is limited, so shade and greenery may be harder to find.',
+        ),
+        `On average, about ${formatDecimal(envRaw.avgGreen)}% of the measured nearby land has vegetation cover.`,
+        describeVegetationRange(envRaw.minGreen, envRaw.maxGreen),
+      ],
+      details: [
+        describeFeatureConfidence(envRaw.vegetationCount, 'vegetation'),
+        `This contributes ${greenWeight}% of the environment score.`,
+        environment?.missingData?.green ? 'Green data was missing, so a neutral fallback was used.' : 'Green data available.',
       ],
     },
     {
@@ -512,11 +638,24 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
       met: heatScore >= 60,
       summary: Number.isFinite(heatScore) ? `${getIndicatorStatus(heatScore).label}: ${heatScore}/100` : 'Unavailable',
       plainText: Number.isFinite(heatScore)
-        ? `Urban heat scores ${heatScore}/100. Higher scores mean cooler and more comfortable outdoor conditions.`
+        ? `Urban heat scores ${heatScore}/100 using urban heat island measurements inside the selected range. Higher scores mean the area is cooler relative to hotter built-up places.`
         : 'Urban heat is unavailable for this area.',
       impact: getImpactText(heatScore, 'Environment'),
       lines: [
-        'Higher score means cooler and more comfortable outdoor conditions.',
+        describeScore(
+          heatScore,
+          'Heat exposure looks low, which supports outdoor comfort.',
+          'Heat exposure looks manageable for everyday outdoor activity.',
+          'Heat exposure is mixed and may vary by street or time of day.',
+          'Heat exposure looks high, so hot days may feel less comfortable here.',
+        ),
+        `The average heat reading is ${formatDecimal(envRaw.avgHeat)}, where higher values mean stronger heat-island effect.`,
+        describeHeatRange(envRaw.minHeat, envRaw.maxHeat),
+      ],
+      details: [
+        describeFeatureConfidence(envRaw.heatCount, 'heat'),
+        `This contributes ${heatWeight}% of the environment score.`,
+        environment?.missingData?.heat ? 'Heat data was missing, so a neutral fallback was used.' : 'Heat data available.',
       ],
     },
     {
@@ -525,11 +664,25 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
       met: zoningComfortScore >= 60,
       summary: Number.isFinite(zoningComfortScore) ? `${getIndicatorStatus(zoningComfortScore).label}: ${zoningComfortScore}/100` : 'Unavailable',
       plainText: Number.isFinite(zoningComfortScore)
-        ? `Environmental zoning comfort scores ${zoningComfortScore}/100 from nearby land-use types.`
+        ? `Environmental zoning comfort scores ${zoningComfortScore}/100 from nearby land-use types. Parks and residential zones usually support comfort, while industrial or heavily commercial zones can reduce it.`
         : 'Environmental zoning comfort is unavailable for this area.',
       impact: getImpactText(zoningComfortScore, 'Environment'),
       lines: [
-        'Nearby land-use types are mapped to comfort levels.',
+        describeScore(
+          zoningComfortScore,
+          'The land-use mix looks strongly supportive for environmental comfort.',
+          'The land-use mix is generally supportive for environmental comfort.',
+          'The land-use mix is varied, so comfort may change across the area.',
+          'The land-use mix may reduce environmental comfort in this selected range.',
+        ),
+        envZoneMix
+          ? `The most common nearby land uses are ${envZoneMix}, which helps explain whether the area is mostly park, residential, commercial or industrial in character.`
+          : 'No detailed zoning mix was returned for this area.',
+      ],
+      details: [
+        describeFeatureConfidence(envRaw.zoningCount, 'zoning'),
+        `This contributes ${zoningEnvWeight}% of the environment score.`,
+        environment?.missingData?.zoning ? 'Zoning data was missing, so a neutral fallback was used.' : 'Zoning data available.',
       ],
     },
     {
@@ -538,15 +691,26 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
       met: airQualityScore >= 60,
       summary: Number.isFinite(airQualityScore) ? `${getIndicatorStatus(airQualityScore).label}: ${airQualityScore}/100` : 'Unavailable',
       plainText: Number.isFinite(airQualityScore)
-        ? `Air quality scores ${airQualityScore}/100 using the nearest available air quality signal.`
+        ? `Air quality scores ${airQualityScore}/100 using the nearest available EPA air-quality signal. This helps capture current breathing comfort, which vegetation and heat data cannot fully explain.`
         : 'Air quality is unavailable for this area.',
       impact: getImpactText(airQualityScore, 'Environment'),
       lines: [
-        airQualityScore >= 60
-          ? 'Air quality is generally healthy for daily activity.'
-          : 'Air quality may need more caution on sensitive days.',
+        describeScore(
+          airQualityScore,
+          'Air quality looks strong for daily outdoor activity.',
+          'Air quality looks generally suitable for daily activity.',
+          'Air quality is mixed, so sensitive users may want to check live conditions.',
+          'Air quality may need more caution, especially for sensitive users.',
+        ),
+        envRaw.airQualitySite
+          ? `The nearest air-quality reading comes from ${envRaw.airQualitySite}, so it is a nearby signal rather than a sensor on this exact street.`
+          : 'Nearest air quality site was not returned.',
       ],
-      details: [`Source: ${environment?.rawData?.airQualitySource || 'Air quality dataset'}`],
+      details: [
+        `Source: ${envRaw.airQualitySource || 'Air quality dataset'}`,
+        `This contributes ${airWeight}% of the environment score.`,
+        environment?.missingData?.airQuality ? 'Air-quality data was missing, so a neutral fallback was used.' : 'Air-quality data available.',
+      ],
     },
   ]
 
@@ -561,13 +725,13 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
       category: 'safety',
       factors: safetyFactors,
       takeaway: summarizeCategory('safety', safetyFactors),
-      scoreExplanation: 'Computed from crime context and zoning safety model.',
+      scoreExplanation: `Safety combines nearby recorded-crime context with land-use zoning in the selected ${rangeMinutes}-minute range. Zoning adds context because active commercial, mixed-use and public areas may have more lighting, foot traffic, passive surveillance and CCTV coverage; crime still has the larger influence because recorded incidents are the more direct safety signal.`,
     },
     environment: {
       category: 'environment',
       factors: environmentFactors,
       takeaway: summarizeCategory('environment', environmentFactors),
-      scoreExplanation: 'Computed from green, heat, zoning and air-quality signals.',
+      scoreExplanation: `Environment combines vegetation cover (${greenWeight}%), urban heat (${heatWeight}%), air quality (${airWeight}%) and zoning comfort (${zoningEnvWeight}%) in the selected ${rangeMinutes}-minute range.`,
     },
   }
 }
