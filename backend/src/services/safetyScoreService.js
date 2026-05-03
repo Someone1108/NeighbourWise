@@ -61,6 +61,7 @@ async function getCrimeScoreWithinRadius({ lat, lng, radiusMeters }) {
 
     crime_join AS (
       SELECT
+        n.suburb_name,
         c.crime_context_score
       FROM nearby_suburbs n
       JOIN public.crime_suburb_summary c
@@ -73,7 +74,8 @@ async function getCrimeScoreWithinRadius({ lat, lng, radiusMeters }) {
 
     SELECT
       AVG(crime_context_score) AS avg_crime_score,
-      COUNT(*) AS suburb_count
+      COUNT(*) AS suburb_count,
+      ARRAY_AGG(DISTINCT suburb_name ORDER BY suburb_name) AS suburb_names
     FROM crime_join;
   `;
 
@@ -99,7 +101,8 @@ async function getCrimeScoreWithinRadius({ lat, lng, radiusMeters }) {
       ? Number(avgCrime.toFixed(2))
       : null,
 
-    suburbCount: Number(row.suburb_count || 0)
+    suburbCount: Number(row.suburb_count || 0),
+    suburbNames: row.suburb_names || []
   };
 }
 
@@ -137,28 +140,37 @@ async function getZoningScoreWithinRadius({ lat, lng, radiusMeters }) {
   if (zones.length === 0) {
     return {
       zoningScore: null,
-      zoneCount: 0
+      zoneCount: 0,
+      zoneMix: []
     };
   }
 
   let weightedTotal = 0;
   let weightTotal = 0;
+  const zoneCounts = new Map();
 
   zones.forEach((zone) => {
     const distance = Number(zone.distance_m);
     const weight = Math.max(0.01, 1 - distance / radiusMeters);
 
     const score = getZoningSafetyScore(zone.zone_code, zone.zone_desc);
+    const label = zone.zone_desc || zone.zone_code || 'Unknown zoning';
 
     weightedTotal += score * weight;
     weightTotal += weight;
+    zoneCounts.set(label, (zoneCounts.get(label) || 0) + 1);
   });
 
   const zoningScore = weightedTotal / weightTotal;
+  const zoneMix = [...zoneCounts.entries()]
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 3);
 
   return {
     zoningScore: Number(zoningScore.toFixed(2)),
-    zoneCount: zones.length
+    zoneCount: zones.length,
+    zoneMix
   };
 }
 
@@ -206,11 +218,13 @@ async function getSafetyScore({ lat, lng, time = 20, persona = 'default' }) {
 
     crimeDetails: {
       averageInRadius: crimeResult.crimeAvgScore,
-      suburbCount: crimeResult.suburbCount
+      suburbCount: crimeResult.suburbCount,
+      suburbNames: crimeResult.suburbNames
     },
 
     zoningDetails: {
-      zoneCount: zoningResult.zoneCount
+      zoneCount: zoningResult.zoneCount,
+      zoneMix: zoningResult.zoneMix
     },
 
     missingData: {

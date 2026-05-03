@@ -7,6 +7,19 @@ import { loadContext } from '../utils/storage.js'
 
 const CATEGORIES = ['accessibility', 'safety', 'environment']
 
+const STATIC_SCORE_BENCHMARK = {
+  label: 'Supported locality avg',
+  description:
+    'Calculated once from 274 supported Melbourne locality points using the same 20-minute default scoring model.',
+  sampleSize: 274,
+  scores: {
+    accessibility: 51,
+    safety: 70,
+    environment: 74,
+    liveability: 64,
+  },
+}
+
 const CATEGORY_CONFIG = {
   accessibility: {
     label: 'Accessibility',
@@ -40,8 +53,6 @@ const CATEGORY_CONFIG = {
   },
 }
 
-const MELBOURNE_AVG = { accessibility: 58, safety: 62, environment: 71 }
-
 function getScoreBand(score) {
   if (score >= 80) return { label: 'Excellent', color: '#059669', bg: '#ecfdf5', border: '#a7f3d0' }
   if (score >= 65) return { label: 'Good',      color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe' }
@@ -57,10 +68,10 @@ function getProfileLabel(profile) {
   return null
 }
 
-function buildInterpretationSummary(scores, profileLabel, rangeMinutes) {
+function buildInterpretationSummary(scores, profileLabel, rangeMinutes, benchmarkScores) {
   const rows = CATEGORIES.map((key) => {
     const value = Number(scores?.[key])
-    const avg = Number(MELBOURNE_AVG[key] ?? 0)
+    const avg = Number(benchmarkScores?.[key])
     const delta = Number.isFinite(value) ? value - avg : null
     return {
       key,
@@ -79,24 +90,48 @@ function buildInterpretationSummary(scores, profileLabel, rangeMinutes) {
   const middle = byScore[1]
   const scoreSpread = strongest.value - weakest.value
   const profileText = profileLabel ? ` for a ${profileLabel.toLowerCase()} profile` : ''
-  const focusLabel = strongest.label.toLowerCase()
   const tradeoffLabel = weakest.label.toLowerCase()
+  const profileNoun = profileLabel ? `${profileLabel.toLowerCase()} household` : 'household'
+  const experienceCopy = {
+    accessibility: {
+      headline: 'Daily essentials should feel easier here',
+      strength: 'getting around and reaching everyday services should be one of the easier parts of living here',
+      caution: 'daily trips may need a little more planning',
+    },
+    safety: {
+      headline: 'The area looks steady for day-to-day living',
+      strength: 'the local safety context looks comparatively reassuring',
+      caution: 'it is worth checking the safety context street by street',
+    },
+    environment: {
+      headline: 'Outdoor comfort is one of the better signals here',
+      strength: 'green space, heat and air-quality signals look more supportive than the other categories',
+      caution: 'outdoor comfort may be the main thing to inspect more closely',
+    },
+  }
+  const strongestCopy = experienceCopy[strongest.key] || experienceCopy.accessibility
+  const weakestCopy = experienceCopy[weakest.key] || experienceCopy.accessibility
 
-  const headline = `Best fit: ${focusLabel}-focused living`
+  const headline =
+    profileLabel === 'Family'
+      ? strongest.key === 'accessibility'
+        ? 'A practical fit for family routines'
+        : strongestCopy.headline
+      : strongestCopy.headline
   const verdict =
     middle && strongest.key !== weakest.key
-      ? `This area's strongest signal is ${strongest.label}, scoring ${Math.round(strongest.value)}/100. ${middle.label} is close behind at ${Math.round(middle.value)}/100, while ${weakest.label} is the main trade-off at ${Math.round(weakest.value)}/100.`
-      : `This area's strongest signal is ${strongest.label}, scoring ${Math.round(strongest.value)}/100.`
+      ? `For a ${profileNoun}, ${strongestCopy.strength}. ${middle.label.toLowerCase()} also looks workable, while ${weakestCopy.caution}.`
+      : `For a ${profileNoun}, ${strongestCopy.strength}.`
 
   const context =
     scoreSpread <= 8
-      ? 'The category scores are fairly close, so this is a balanced area rather than one with a single standout strength.'
-      : `${strongest.label} stands out most clearly, while ${weakest.label.toLowerCase()} is the area to check more carefully.`
+      ? 'The signals are fairly balanced, so this does not look like a suburb with one obvious strength and one obvious weakness.'
+      : `${strongest.label} is doing most of the heavy lifting here, while ${weakest.label.toLowerCase()} is the area to inspect before making a decision.`
 
   const nextAction =
     strongest.key === weakest.key
       ? `Use this score as a comparison guide for your ${rangeMinutes}-minute search${profileText}.`
-      : `If ${tradeoffLabel} is a top priority, it may be worth comparing a few nearby alternatives before deciding.`
+      : `If ${tradeoffLabel} matters a lot to you, compare a nearby suburb before treating this as the best option.`
 
   return {
     headline,
@@ -106,15 +141,15 @@ function buildInterpretationSummary(scores, profileLabel, rangeMinutes) {
   }
 }
 
-function categoryComparisonText(rows = []) {
+function categoryComparisonText(rows = [], benchmarkLabel = 'benchmark') {
   if (!rows.length) return ''
 
   const parts = rows.map((row) => {
     const delta = Number(row.delta)
-    if (!Number.isFinite(delta)) return `${row.label} has no city average to compare against`
-    if (Math.abs(delta) <= 2) return `${row.label} is close to the Melbourne average`
-    if (delta > 0) return `${row.label} is above the Melbourne average`
-    return `${row.label} is below the Melbourne average`
+    if (!Number.isFinite(delta)) return `${row.label} does not have a benchmark to compare against`
+    if (Math.abs(delta) <= 2) return `${row.label} is close to the ${benchmarkLabel}`
+    if (delta > 0) return `${row.label} is above the ${benchmarkLabel}`
+    return `${row.label} is below the ${benchmarkLabel}`
   })
 
   return parts.join('. ') + '.'
@@ -148,17 +183,30 @@ function buildSituationHighlights(profile, scores, indicators) {
   if (profile.familyWithChildren) {
     const school = findIndicator(indicators, 'accessibility', 'school')
     const park = findIndicator(indicators, 'accessibility', 'park')
+    const schoolScore = Number(school?.score)
+    const parkScore = Number(park?.score)
+    const accessPhrase =
+      Number.isFinite(schoolScore) && Number.isFinite(parkScore)
+        ? schoolScore >= 65 && parkScore >= 65
+          ? 'school and park access both look supportive for everyday family routines'
+          : schoolScore >= 65
+            ? 'school access looks supportive, while park access is worth checking in more detail'
+            : parkScore >= 65
+              ? 'park access looks supportive, while school access is worth checking in more detail'
+              : 'school and park access may need extra checking for everyday routines'
+        : 'school and park access are useful to check for everyday family routines'
+    const safetyPhrase = Number.isFinite(safety)
+      ? safety >= 65
+        ? 'The safety signal also looks reassuring enough to keep this area in consideration.'
+        : 'The safety signal is the part to look at more carefully before deciding.'
+      : 'Safety context is unavailable for this area.'
+
     return {
       title: 'For a family household',
       summary: 'For a family household, the key checks are school access, parks and safety.',
       points: [
-        compactIndicatorPhrase(school, 'School access'),
-        compactIndicatorPhrase(park, 'Park access'),
-        Number.isFinite(safety)
-          ? safety >= 65
-            ? 'the safety signal is generally reassuring'
-            : 'the safety signal is worth checking more carefully'
-          : 'safety context is unavailable',
+        accessPhrase,
+        safetyPhrase,
       ],
     }
   }
@@ -257,6 +305,66 @@ function getImpactText(score, categoryLabel) {
   return `Pulls ${categoryLabel.toLowerCase()} down`
 }
 
+function describeScore(score, strongText, goodText, moderateText, lowText) {
+  const value = Number(score)
+  if (!Number.isFinite(value)) return 'This signal is unavailable for the selected area.'
+  if (value >= 80) return strongText
+  if (value >= 65) return goodText
+  if (value >= 50) return moderateText
+  return lowText
+}
+
+function joinList(items = [], limit = 3) {
+  const clean = items.map((item) => String(item || '').trim()).filter(Boolean)
+  if (!clean.length) return ''
+  const shown = clean.slice(0, limit)
+  const suffix = clean.length > limit ? ` and ${clean.length - limit} more` : ''
+  return `${shown.join(', ')}${suffix}`
+}
+
+function formatDecimal(value, digits = 1) {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return 'Unavailable'
+  return n.toFixed(digits)
+}
+
+function describeVegetationRange(minValue, maxValue) {
+  const min = Number(minValue)
+  const max = Number(maxValue)
+  if (!Number.isFinite(min) || !Number.isFinite(max)) {
+    return 'The spread of greenery across nearby streets is unavailable.'
+  }
+  if (max - min >= 50) {
+    return 'Greenery is uneven across the area: some nearby pockets are very green, while others have very little cover.'
+  }
+  if (min >= 25) {
+    return 'Greenery appears fairly consistent across the selected area.'
+  }
+  return 'Some nearby streets may feel less shaded even if the area has greenery overall.'
+}
+
+function describeHeatRange(minValue, maxValue) {
+  const min = Number(minValue)
+  const max = Number(maxValue)
+  if (!Number.isFinite(min) || !Number.isFinite(max)) {
+    return 'The spread of heat exposure across nearby streets is unavailable.'
+  }
+  if (max >= 8) {
+    return 'Parts of this area are likely to feel noticeably hotter on warm days.'
+  }
+  if (max - min >= 4) {
+    return 'Heat comfort may vary across the area, so some streets may feel cooler than others.'
+  }
+  return 'Heat exposure looks fairly consistent across the selected area.'
+}
+
+function describeFeatureConfidence(count, label) {
+  const value = Number(count)
+  if (!Number.isFinite(value) || value <= 0) return `${label} detail is limited for this area.`
+  if (value >= 100) return `This is based on many nearby ${label.toLowerCase()} records, so the signal is reasonably well supported.`
+  return `This is based on ${value} nearby ${label.toLowerCase()} records, so read it as a local estimate.`
+}
+
 function summarizeCategory(category, factors = []) {
   const label = CATEGORY_CONFIG[category]?.label || 'This category'
   const scored = factors
@@ -282,12 +390,56 @@ function summarizeCategory(category, factors = []) {
   return `${label} has mixed signals. ${best.name} performs best, but ${weakest.name.toLowerCase()} needs attention.`
 }
 
-function groupIndicatorFactors(factors = []) {
+function getPersonaIndicatorPriority(factor, profile) {
+  const name = String(factor?.name || '').toLowerCase()
+
+  if (name.includes('crime context')) return 0
+  if (name.includes('zoning safety')) return 1
+  if (name.includes('combined safety')) return 2
+
+  if (profile?.familyWithChildren) {
+    if (name.includes('school')) return 0
+    if (name.includes('park') && !name.includes('dog')) return 1
+    if (name.includes('supermarket')) return 2
+    if (name.includes('hospital')) return 3
+    if (name.includes('bus') || name.includes('train')) return 8
+    return 50
+  }
+
+  if (profile?.elderly) {
+    if (name.includes('hospital')) return 0
+    if (name.includes('bus')) return 1
+    if (name.includes('train')) return 2
+    if (name.includes('supermarket')) return 3
+    if (name.includes('park') && !name.includes('dog')) return 4
+    return 50
+  }
+
+  if (profile?.petOwner) {
+    if (name.includes('dog park')) return 0
+    if (name.includes('park')) return 1
+    if (name.includes('green')) return 2
+    if (name.includes('bus') || name.includes('train')) return 7
+    return 50
+  }
+
+  return 50
+}
+
+function orderFactorsForPersona(factors = [], profile) {
+  return [...factors].sort((a, b) => {
+    const priorityDelta = getPersonaIndicatorPriority(a, profile) - getPersonaIndicatorPriority(b, profile)
+    if (priorityDelta !== 0) return priorityDelta
+    return Number(b.score || 0) - Number(a.score || 0)
+  })
+}
+
+function groupIndicatorFactors(factors = [], profile) {
   const strengths = []
   const needsAttention = []
   const supporting = []
 
-  factors.forEach((factor) => {
+  orderFactorsForPersona(factors, profile).forEach((factor) => {
     const score = Number(factor.score)
     if (Number.isFinite(score) && score >= 75) {
       strengths.push(factor)
@@ -358,6 +510,17 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
   const crimeScore = Number(safety?.scores?.crime)
   const zoningSafetyScore = Number(safety?.scores?.zoning)
   const finalSafetyScore = Number(safety?.safetyScore)
+  const rawCrimeAverage = Number(safety?.crimeDetails?.averageInRadius)
+  const nearbySuburbCount = Number(safety?.crimeDetails?.suburbCount)
+  const nearbySuburbs = joinList(safety?.crimeDetails?.suburbNames || [])
+  const zoneCount = Number(safety?.zoningDetails?.zoneCount)
+  const zoneMix = (safety?.zoningDetails?.zoneMix || [])
+    .map((zone) => `${zone.label} (${zone.count})`)
+    .join(', ')
+  const crimeWeight = Math.round(Number(safety?.weights?.crime ?? 0.57) * 100)
+  const zoningWeight = Math.round(Number(safety?.weights?.zoning ?? 0.43) * 100)
+  const missingCrime = safety?.missingData?.crime
+  const missingZoning = safety?.missingData?.zoning
 
   const safetyFactors = [
     {
@@ -366,15 +529,28 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
       met: crimeScore >= 60,
       summary: Number.isFinite(crimeScore) ? `${crimeScore}/100` : 'Unavailable',
       plainText: Number.isFinite(crimeScore)
-        ? `Crime context scores ${crimeScore}/100 based on nearby suburb crime patterns.`
+        ? `Crime context scores ${crimeScore}/100 using recorded-crime patterns from suburbs intersecting the selected travel range.`
         : 'Crime context is unavailable for this area.',
       impact: getImpactText(crimeScore, 'Safety'),
       lines: [
-        crimeScore >= 60
-          ? 'Lower crime risk in this selected range.'
-          : 'Crime risk is relatively higher in this selected range.',
+        describeScore(
+          crimeScore,
+          'Recorded-crime context looks strong compared with the areas in the dataset.',
+          'Recorded-crime context looks broadly favourable for this selected range.',
+          'Recorded-crime context is mixed, so this area may need more street-level checking.',
+          'Recorded-crime context is the main safety concern in this selected range.',
+        ),
+        Number.isFinite(rawCrimeAverage)
+          ? `Raw nearby crime context average: ${rawCrimeAverage}/100 before the urban-area adjustment used by the model.`
+          : 'Raw nearby crime context average is unavailable.',
+        nearbySuburbs
+          ? `Suburbs contributing to this signal include ${nearbySuburbs}.`
+          : 'No contributing suburb names were returned for this signal.',
       ],
-      details: [`Nearby suburbs used: ${safety?.crimeDetails?.suburbCount ?? 0}`],
+      details: [
+        `Nearby suburbs used: ${Number.isFinite(nearbySuburbCount) ? nearbySuburbCount : 0}`,
+        missingCrime ? 'Crime data was missing, so zoning was used as the fallback.' : 'Crime data available.',
+      ],
     },
     {
       name: 'Zoning safety score',
@@ -382,13 +558,26 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
       met: zoningSafetyScore >= 60,
       summary: Number.isFinite(zoningSafetyScore) ? `${zoningSafetyScore}/100` : 'Unavailable',
       plainText: Number.isFinite(zoningSafetyScore)
-        ? `Zoning safety scores ${zoningSafetyScore}/100 from nearby land-use patterns.`
+        ? `Zoning safety scores ${zoningSafetyScore}/100 from land-use zones inside the selected range. Commercial, mixed-use and active public areas can support safety because they often bring more foot traffic, lighting, passive surveillance and CCTV coverage.`
         : 'Zoning safety is unavailable for this area.',
       impact: getImpactText(zoningSafetyScore, 'Safety'),
       lines: [
-        'Land-use around you is translated into safety-friendly scores.',
+        describeScore(
+          zoningSafetyScore,
+          'The surrounding land-use mix is strongly safety-supportive.',
+          'The surrounding land-use mix is generally safety-supportive.',
+          'The surrounding land-use mix is varied, so the local street context matters.',
+          'The surrounding land-use mix may reduce perceived or practical safety.',
+        ),
+        zoneMix
+          ? `Most common zoning types found: ${zoneMix}.`
+          : 'No detailed zoning mix was returned for this area.',
+        'Industrial-heavy or low-activity zones can reduce this signal because there may be fewer people around at different times of day.',
       ],
-      details: [`Zoning features used: ${safety?.zoningDetails?.zoneCount ?? 0}`],
+      details: [
+        `Zoning features used: ${Number.isFinite(zoneCount) ? zoneCount : 0}`,
+        missingZoning ? 'Zoning data was missing, so crime context was used as the fallback.' : 'Zoning data available.',
+      ],
     },
     {
       name: 'Combined safety output',
@@ -396,15 +585,20 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
       met: finalSafetyScore >= 60,
       summary: Number.isFinite(finalSafetyScore) ? `${finalSafetyScore}/100` : 'Unavailable',
       plainText: Number.isFinite(finalSafetyScore)
-        ? `The final safety score is ${finalSafetyScore}/100 after combining crime and zoning signals.`
+        ? `The final safety score is ${finalSafetyScore}/100 after combining recorded-crime context with the surrounding land-use pattern.`
         : 'The final safety score is unavailable for this area.',
       impact: getImpactText(finalSafetyScore, 'Safety'),
       lines: [
-        finalSafetyScore >= 60
-          ? 'Overall, this area feels comparatively safer.'
-          : 'Overall, safety conditions are more mixed here.',
+        describeScore(
+          finalSafetyScore,
+          'Overall, the available safety signals are strong for this selected range.',
+          'Overall, the available safety signals are reasonably reassuring.',
+          'Overall, safety is mixed: some signals are supportive, but others deserve a closer look.',
+          'Overall, safety is the category to investigate most carefully before deciding.',
+        ),
+        `The model gives more weight to crime context (${crimeWeight}%) than zoning (${zoningWeight}%) because recorded incidents are the more direct safety signal.`,
       ],
-      details: ['Final mix: crime 57%, zoning 43%'],
+      details: [`Final mix: crime ${crimeWeight}%, zoning ${zoningWeight}%`],
     },
   ]
 
@@ -412,6 +606,15 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
   const heatScore = Number(environment?.scores?.heat)
   const zoningComfortScore = Number(environment?.scores?.zoning)
   const airQualityScore = Number(environment?.scores?.airQuality)
+  const envRaw = environment?.rawData || {}
+  const envWeights = environment?.weights || {}
+  const envZoneMix = (envRaw.zoneMix || [])
+    .map((zone) => `${zone.label} (${zone.count})`)
+    .join(', ')
+  const greenWeight = Math.round(Number(envWeights.green ?? 0.35) * 100)
+  const heatWeight = Math.round(Number(envWeights.heat ?? 0.30) * 100)
+  const zoningEnvWeight = Math.round(Number(envWeights.zoning ?? 0.15) * 100)
+  const airWeight = Math.round(Number(envWeights.airQuality ?? 0.20) * 100)
 
   const environmentFactors = [
     {
@@ -420,13 +623,24 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
       met: greenScore >= 60,
       summary: Number.isFinite(greenScore) ? `${greenScore}/100` : 'Unavailable',
       plainText: Number.isFinite(greenScore)
-        ? `Green coverage scores ${greenScore}/100 based on vegetation and green space nearby.`
+        ? `Green coverage scores ${greenScore}/100 using vegetation-cover features inside the selected range. Higher vegetation cover generally means more shade, cooler streets and more comfortable outdoor movement.`
         : 'Green coverage is unavailable for this area.',
       impact: getImpactText(greenScore, 'Environment'),
       lines: [
-        greenScore >= 60
-          ? 'Good amount of vegetation and green cover nearby.'
-          : 'Green cover is more limited in this selected range.',
+        describeScore(
+          greenScore,
+          'Vegetation cover looks strong for the selected range.',
+          'Vegetation cover looks reasonably supportive.',
+          'Vegetation cover is present but not a standout strength.',
+          'Vegetation cover is limited, so shade and greenery may be harder to find.',
+        ),
+        `On average, about ${formatDecimal(envRaw.avgGreen)}% of the measured nearby land has vegetation cover.`,
+        describeVegetationRange(envRaw.minGreen, envRaw.maxGreen),
+      ],
+      details: [
+        describeFeatureConfidence(envRaw.vegetationCount, 'vegetation'),
+        `This contributes ${greenWeight}% of the environment score.`,
+        environment?.missingData?.green ? 'Green data was missing, so a neutral fallback was used.' : 'Green data available.',
       ],
     },
     {
@@ -435,11 +649,24 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
       met: heatScore >= 60,
       summary: Number.isFinite(heatScore) ? `${heatScore}/100` : 'Unavailable',
       plainText: Number.isFinite(heatScore)
-        ? `Urban heat scores ${heatScore}/100. Higher scores mean cooler and more comfortable outdoor conditions.`
+        ? `Urban heat scores ${heatScore}/100 using urban heat island measurements inside the selected range. Higher scores mean the area is cooler relative to hotter built-up places.`
         : 'Urban heat is unavailable for this area.',
       impact: getImpactText(heatScore, 'Environment'),
       lines: [
-        'Higher score means cooler and more comfortable outdoor conditions.',
+        describeScore(
+          heatScore,
+          'Heat exposure looks low, which supports outdoor comfort.',
+          'Heat exposure looks manageable for everyday outdoor activity.',
+          'Heat exposure is mixed and may vary by street or time of day.',
+          'Heat exposure looks high, so hot days may feel less comfortable here.',
+        ),
+        `The average heat reading is ${formatDecimal(envRaw.avgHeat)}, where higher values mean stronger heat-island effect.`,
+        describeHeatRange(envRaw.minHeat, envRaw.maxHeat),
+      ],
+      details: [
+        describeFeatureConfidence(envRaw.heatCount, 'heat'),
+        `This contributes ${heatWeight}% of the environment score.`,
+        environment?.missingData?.heat ? 'Heat data was missing, so a neutral fallback was used.' : 'Heat data available.',
       ],
     },
     {
@@ -448,11 +675,25 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
       met: zoningComfortScore >= 60,
       summary: Number.isFinite(zoningComfortScore) ? `${zoningComfortScore}/100` : 'Unavailable',
       plainText: Number.isFinite(zoningComfortScore)
-        ? `Environmental zoning comfort scores ${zoningComfortScore}/100 from nearby land-use types.`
+        ? `Environmental zoning comfort scores ${zoningComfortScore}/100 from nearby land-use types. Parks and residential zones usually support comfort, while industrial or heavily commercial zones can reduce it.`
         : 'Environmental zoning comfort is unavailable for this area.',
       impact: getImpactText(zoningComfortScore, 'Environment'),
       lines: [
-        'Nearby land-use types are mapped to comfort levels.',
+        describeScore(
+          zoningComfortScore,
+          'The land-use mix looks strongly supportive for environmental comfort.',
+          'The land-use mix is generally supportive for environmental comfort.',
+          'The land-use mix is varied, so comfort may change across the area.',
+          'The land-use mix may reduce environmental comfort in this selected range.',
+        ),
+        envZoneMix
+          ? `The most common nearby land uses are ${envZoneMix}, which helps explain whether the area is mostly park, residential, commercial or industrial in character.`
+          : 'No detailed zoning mix was returned for this area.',
+      ],
+      details: [
+        describeFeatureConfidence(envRaw.zoningCount, 'zoning'),
+        `This contributes ${zoningEnvWeight}% of the environment score.`,
+        environment?.missingData?.zoning ? 'Zoning data was missing, so a neutral fallback was used.' : 'Zoning data available.',
       ],
     },
     {
@@ -461,15 +702,26 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
       met: airQualityScore >= 60,
       summary: Number.isFinite(airQualityScore) ? `${airQualityScore}/100` : 'Unavailable',
       plainText: Number.isFinite(airQualityScore)
-        ? `Air quality scores ${airQualityScore}/100 using the nearest available air quality signal.`
+        ? `Air quality scores ${airQualityScore}/100 using the nearest available EPA air-quality signal. This helps capture current breathing comfort, which vegetation and heat data cannot fully explain.`
         : 'Air quality is unavailable for this area.',
       impact: getImpactText(airQualityScore, 'Environment'),
       lines: [
-        airQualityScore >= 60
-          ? 'Air quality is generally healthy for daily activity.'
-          : 'Air quality may need more caution on sensitive days.',
+        describeScore(
+          airQualityScore,
+          'Air quality looks strong for daily outdoor activity.',
+          'Air quality looks generally suitable for daily activity.',
+          'Air quality is mixed, so sensitive users may want to check live conditions.',
+          'Air quality may need more caution, especially for sensitive users.',
+        ),
+        envRaw.airQualitySite
+          ? `The nearest air-quality reading comes from ${envRaw.airQualitySite}, so it is a nearby signal rather than a sensor on this exact street.`
+          : 'Nearest air quality site was not returned.',
       ],
-      details: [`Source: ${environment?.rawData?.airQualitySource || 'Air quality dataset'}`],
+      details: [
+        `Source: ${envRaw.airQualitySource || 'Air quality dataset'}`,
+        `This contributes ${airWeight}% of the environment score.`,
+        environment?.missingData?.airQuality ? 'Air-quality data was missing, so a neutral fallback was used.' : 'Air-quality data available.',
+      ],
     },
   ]
 
@@ -484,13 +736,13 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
       category: 'safety',
       factors: safetyFactors,
       takeaway: summarizeCategory('safety', safetyFactors),
-      scoreExplanation: 'Computed from crime context and zoning safety model.',
+      scoreExplanation: `Safety combines nearby recorded-crime context with land-use zoning in the selected ${rangeMinutes}-minute range. Zoning adds context because active commercial, mixed-use and public areas may have more lighting, foot traffic, passive surveillance and CCTV coverage; crime still has the larger influence because recorded incidents are the more direct safety signal.`,
     },
     environment: {
       category: 'environment',
       factors: environmentFactors,
       takeaway: summarizeCategory('environment', environmentFactors),
-      scoreExplanation: 'Computed from green, heat, zoning and air-quality signals.',
+      scoreExplanation: `Environment combines vegetation cover (${greenWeight}%), urban heat (${heatWeight}%), air quality (${airWeight}%) and zoning comfort (${zoningEnvWeight}%) in the selected ${rangeMinutes}-minute range.`,
     },
   }
 }
@@ -560,16 +812,19 @@ function MiniGauge({ score, color, size = 52 }) {
   )
 }
 
-function CompareBar({ value, avg, color }) {
+function CompareBar({ value, avg, color, label = 'Avg' }) {
+  const hasAvg = Number.isFinite(Number(avg))
   return (
     <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
       <div style={{ position: 'relative', height: 10, borderRadius: 5, background: 'rgba(0,0,0,0.07)' }}>
-        <div style={{ position: 'absolute', top: -3, bottom: -3, width: 2, left: `${avg}%`, background: 'rgba(0,0,0,0.25)', borderRadius: 1, zIndex: 2 }} />
+        {hasAvg && (
+          <div style={{ position: 'absolute', top: -3, bottom: -3, width: 2, left: `${avg}%`, background: 'rgba(0,0,0,0.25)', borderRadius: 1, zIndex: 2 }} />
+        )}
         <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${value ?? 0}%`, background: color, borderRadius: 5 }} />
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, fontWeight: 600, color: '#6b7280' }}>
         <span>This area: <span style={{ color, fontWeight: 800 }}>{value ?? '–'}</span></span>
-        <span>Melb avg: {avg}</span>
+        <span>{label}: {hasAvg ? avg : 'loading'}</span>
       </div>
     </div>
   )
@@ -692,11 +947,177 @@ function formatPercent(value) {
   return `${Math.round(n * 10) / 10}%`
 }
 
+function formatSafePercent(value) {
+  if (value === null || value === undefined || value === '') return 'Unavailable'
+  const n = Number(value)
+  if (!Number.isFinite(n) || n < 0 || n > 100) return 'Unavailable'
+  return `${Math.round(n * 10) / 10}%`
+}
+
 function formatMoney(value, suffix) {
   if (value === null || value === undefined || value === '') return 'Unavailable'
   const n = Number(value)
   if (!Number.isFinite(n)) return 'Unavailable'
   return `$${Math.round(n).toLocaleString('en-AU')}${suffix}`
+}
+
+function weeklyToMonthly(value) {
+  if (value === null || value === undefined || value === '') return null
+  const n = Number(value)
+  if (!Number.isFinite(n)) return null
+  return (n * 365) / 7 / 12
+}
+
+function getIndicatorMetric(indicators, category, namePart) {
+  const factor = findIndicator(indicators, category, namePart)
+  if (!factor) return null
+
+  const status = getIndicatorStatus(factor.score)
+  const nearest = factor.details?.find((line) => line.startsWith('Nearest place:'))?.replace('Nearest place:', '').trim()
+  const availability = factor.details?.find((line) => line.startsWith('Availability:'))?.replace('Availability:', '').trim()
+
+  return {
+    label: factor.name,
+    value: status.label,
+    detail: [nearest && `Nearest: ${nearest}`, availability].filter(Boolean).join(' | '),
+    score: Number.isFinite(Number(factor.score)) ? `${Math.round(Number(factor.score))}/100` : 'Unavailable',
+  }
+}
+
+function buildSituationEnrichment(userProfile, profile, indicators) {
+  if (userProfile?.elderly) {
+    return buildElderlyEnrichment(profile, indicators)
+  }
+
+  if (userProfile?.petOwner) {
+    return buildPetEnrichment(profile, indicators)
+  }
+
+  if (userProfile?.familyWithChildren) {
+    return buildFamilyEnrichment(profile, indicators)
+  }
+
+  return null
+}
+
+function buildFamilyEnrichment(profile, indicators) {
+  const stats = [
+    { label: 'Children 0-14', value: formatSafePercent(profile.age0To14Pct) },
+    { label: 'Family households', value: formatSafePercent(profile.familyHouseholdsPct) },
+    { label: 'One-parent families', value: formatSafePercent(profile.oneParentFamilyPct) },
+    {
+      label: 'Average household size',
+      value: profile.averageHouseholdSize != null ? `${profile.averageHouseholdSize} people` : 'Unavailable',
+    },
+  ].filter((item) => item.value !== 'Unavailable')
+
+  const nearby = [
+    getIndicatorMetric(indicators, 'accessibility', 'school'),
+    getIndicatorMetric(indicators, 'accessibility', 'park'),
+  ].filter(Boolean)
+
+  if (!stats.length && !nearby.length) return null
+
+  const children = formatSafePercent(profile.age0To14Pct)
+  const families = formatSafePercent(profile.familyHouseholdsPct)
+  const oneParent = formatSafePercent(profile.oneParentFamilyPct)
+  const summaryParts = []
+
+  if (children !== 'Unavailable') {
+    summaryParts.push(`${children} of residents are aged 0-14`)
+  }
+  if (families !== 'Unavailable') {
+    summaryParts.push(`${families} of households are family households`)
+  }
+  if (oneParent !== 'Unavailable') {
+    summaryParts.push(`${oneParent} are one-parent families`)
+  }
+
+  return {
+    label: 'Family and children context',
+    tone: {
+      background: '#fff7ed',
+      border: '#fed7aa',
+      accent: '#ea580c',
+      label: '#c2410c',
+      text: '#7c2d12',
+      strong: '#431407',
+    },
+    stats,
+    nearby,
+    summary: summaryParts.length
+      ? `${summaryParts.join(', ')}.`
+      : 'Family-related Census indicators are shown below where available.',
+  }
+}
+
+function buildElderlyEnrichment(profile, indicators) {
+  const stats = [
+    { label: 'Residents 65+', value: formatSafePercent(profile.age65PlusPct) },
+    { label: 'Need assistance', value: formatSafePercent(profile.needForAssistancePct) },
+    { label: 'Lone-person households', value: formatSafePercent(profile.lonePersonHouseholdsPct) },
+    { label: 'No-car households', value: formatSafePercent(profile.noCarHouseholdsPct) },
+  ].filter((item) => item.value !== 'Unavailable')
+
+  const nearby = [
+    getIndicatorMetric(indicators, 'accessibility', 'hospital'),
+    getIndicatorMetric(indicators, 'accessibility', 'bus'),
+    getIndicatorMetric(indicators, 'accessibility', 'train'),
+  ].filter(Boolean)
+
+  if (!stats.length && !nearby.length) return null
+
+  const olderResidents = formatSafePercent(profile.age65PlusPct)
+  const assistance = formatSafePercent(profile.needForAssistancePct)
+  const noCar = formatSafePercent(profile.noCarHouseholdsPct)
+  const summaryParts = []
+
+  if (olderResidents !== 'Unavailable') {
+    summaryParts.push(`${olderResidents} of residents are aged 65+`)
+  }
+  if (assistance !== 'Unavailable') {
+    summaryParts.push(`${assistance} report needing assistance`)
+  }
+  if (noCar !== 'Unavailable') {
+    summaryParts.push(`${noCar} of households have no car`)
+  }
+
+  return {
+    label: 'Older resident context',
+    tone: {
+      background: '#eff6ff',
+      border: '#bfdbfe',
+      accent: '#2563eb',
+      label: '#1d4ed8',
+      text: '#1e3a8a',
+      strong: '#172554',
+    },
+    stats,
+    nearby,
+    summary: summaryParts.length
+      ? `${summaryParts.join(', ')}.`
+      : 'Older-resident Census indicators are shown below where available.',
+  }
+}
+
+function buildPetEnrichment(profile, indicators) {
+  const dogPark = getIndicatorMetric(indicators, 'accessibility', 'dog park')
+  if (!dogPark) return null
+
+  return {
+    label: 'Pet owner context',
+    tone: {
+      background: '#f0fdf4',
+      border: '#bbf7d0',
+      accent: '#16a34a',
+      label: '#15803d',
+      text: '#166534',
+      strong: '#14532d',
+    },
+    stats: [],
+    nearby: [dogPark],
+    summary: 'Dog park access is the clearest pet-specific signal available for this area.',
+  }
 }
 
 function getSituationCensusHighlight(userProfile, censusProfile) {
@@ -770,19 +1191,93 @@ function getSituationCensusHighlight(userProfile, censusProfile) {
   return null
 }
 
-function CensusContextSection({ data, loading, userProfile }) {
+function getInsightPriority(item, userProfile) {
+  const title = String(item?.title || '').toLowerCase()
+
+  if (userProfile?.familyWithChildren) {
+    if (title.includes('household')) return 0
+    if (title.includes('housing')) return 1
+    if (title.includes('rental') || title.includes('ownership')) return 2
+    return null
+  }
+
+  if (userProfile?.elderly) {
+    if (title.includes('older')) return 0
+    if (title.includes('transport')) return 1
+    if (title.includes('household')) return 2
+    if (title.includes('housing')) return 3
+    return null
+  }
+
+  if (userProfile?.petOwner) {
+    if (title.includes('housing')) return 0
+    if (title.includes('rental') || title.includes('ownership')) return 1
+    return null
+  }
+
+  return 0
+}
+
+function getStatPriority(stat, userProfile) {
+  if (userProfile?.familyWithChildren) {
+    const priority = {
+      population: 0,
+      medianAge: 1,
+      medianRent: 2,
+      medianMortgage: 3,
+      renters: 4,
+    }
+    return priority[stat.key] ?? null
+  }
+
+  if (userProfile?.elderly) {
+    const priority = {
+      residents65: 0,
+      medianAge: 1,
+      publicTransport: 2,
+      medianRent: 3,
+      medianMortgage: 4,
+      population: 5,
+    }
+    return priority[stat.key] ?? null
+  }
+
+  if (userProfile?.petOwner) {
+    const priority = {
+      renters: 0,
+      medianRent: 1,
+      medianMortgage: 2,
+      population: 3,
+    }
+    return priority[stat.key] ?? null
+  }
+
+  return 0
+}
+
+function CensusContextSection({ data, loading, userProfile, indicators }) {
   const profile = data?.profile || {}
   const source = data?.source || {}
   const situationHighlight =
     !loading && data?.available ? getSituationCensusHighlight(userProfile, profile) : null
+  const situationEnrichment =
+    !loading && data?.available ? buildSituationEnrichment(userProfile, profile, indicators) : null
   const stats = [
-    { label: 'Population', value: formatNumber(profile.totalPopulation) },
-    { label: 'Median age', value: profile.medianAge != null ? `${profile.medianAge}` : 'Unavailable' },
-    { label: 'Renters', value: formatPercent(profile.rentersPct) },
-    { label: 'Median rent', value: formatMoney(profile.medianRentWeekly, ' / week') },
-    { label: 'Public transport to work', value: formatPercent(profile.publicTransportToWorkPct) },
-    { label: 'Residents 65+', value: formatPercent(profile.age65PlusPct) },
-  ]
+    { key: 'population', label: 'Population', value: formatNumber(profile.totalPopulation) },
+    { key: 'medianAge', label: 'Median age', value: profile.medianAge != null ? `${profile.medianAge}` : 'Unavailable' },
+    { key: 'renters', label: 'Renters', value: formatPercent(profile.rentersPct) },
+    { key: 'medianRent', label: 'Median rent', value: formatMoney(profile.medianRentMonthly ?? weeklyToMonthly(profile.medianRentWeekly), ' / month') },
+    { key: 'medianMortgage', label: 'Median mortgage', value: formatMoney(profile.medianMortgageMonthly, ' / month') },
+    { key: 'publicTransport', label: 'Public transport to work', value: formatPercent(profile.publicTransportToWorkPct) },
+    { key: 'residents65', label: 'Residents 65+', value: formatPercent(profile.age65PlusPct) },
+  ].map((stat, index) => ({ ...stat, index, priority: getStatPriority(stat, userProfile) }))
+    .filter((stat) => !userProfile || stat.priority !== null)
+    .sort((a, b) => (a.priority - b.priority) || (a.index - b.index))
+  const orderedInsights = [...(data?.insights || [])]
+    .map((item, index) => ({ item, index, priority: getInsightPriority(item, userProfile) }))
+    .filter((entry) => !userProfile || entry.priority !== null)
+    .sort((a, b) => (a.priority - b.priority) || (a.index - b.index))
+    .map((entry) => entry.item)
 
   return (
     <div style={{ marginBottom: 28 }} role="region" aria-label="Census context">
@@ -843,6 +1338,69 @@ function CensusContextSection({ data, loading, userProfile }) {
                 </div>
               )}
 
+              {situationEnrichment && (
+                <div style={{
+                  background: situationEnrichment.tone.background,
+                  border: `1px solid ${situationEnrichment.tone.border}`,
+                  borderLeft: `4px solid ${situationEnrichment.tone.accent}`,
+                  borderRadius: 14,
+                  padding: '16px',
+                  marginBottom: 18,
+                }}>
+                  <p style={{ fontSize: 11, fontWeight: 900, letterSpacing: '0.08em', textTransform: 'uppercase', color: situationEnrichment.tone.label, marginBottom: 5 }}>
+                    {situationEnrichment.label}
+                  </p>
+                  <p style={{ fontSize: 13, color: situationEnrichment.tone.text, lineHeight: 1.65, fontWeight: 650, marginBottom: 12 }}>
+                    {situationEnrichment.summary}
+                  </p>
+                  {situationEnrichment.stats.length > 0 && (
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))',
+                      gap: 10,
+                      marginBottom: situationEnrichment.nearby.length ? 12 : 0,
+                    }}>
+                      {situationEnrichment.stats.map((item) => (
+                        <div key={item.label} style={{
+                          background: '#fff',
+                          border: `1px solid ${situationEnrichment.tone.border}`,
+                          borderRadius: 12,
+                          padding: '10px 12px',
+                        }}>
+                          <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.07em', textTransform: 'uppercase', color: situationEnrichment.tone.text, marginBottom: 4 }}>
+                            {item.label}
+                          </p>
+                          <p style={{ fontSize: 16, fontWeight: 900, color: situationEnrichment.tone.strong }}>
+                            {item.value}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {situationEnrichment.nearby.length > 0 && (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 10 }}>
+                      {situationEnrichment.nearby.map((item) => (
+                        <div key={item.label} style={{
+                          background: '#fff',
+                          border: `1px solid ${situationEnrichment.tone.border}`,
+                          borderRadius: 12,
+                          padding: '11px 12px',
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
+                            <p style={{ fontSize: 12, fontWeight: 900, color: situationEnrichment.tone.text }}>{item.label}</p>
+                            <p style={{ fontSize: 11, fontWeight: 900, color: situationEnrichment.tone.label }}>{item.score}</p>
+                          </div>
+                          <p style={{ fontSize: 12, color: situationEnrichment.tone.text, lineHeight: 1.5, fontWeight: 700 }}>{item.value}</p>
+                          {item.detail && (
+                            <p style={{ fontSize: 11, color: situationEnrichment.tone.text, lineHeight: 1.45, marginTop: 4 }}>{item.detail}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
@@ -865,7 +1423,7 @@ function CensusContextSection({ data, loading, userProfile }) {
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14 }}>
-                {(data.insights || []).map((item) => (
+                {orderedInsights.map((item) => (
                   <div key={item.title} style={{
                     border: '1px solid #e5e7eb',
                     borderRadius: 14,
@@ -986,9 +1544,12 @@ export default function InsightsPage() {
   const band = overallScore != null ? getScoreBand(overallScore) : null
   const activeCfg = CATEGORY_CONFIG[activeTab]
   const activeIndicators = indicators[activeTab]
-  const activeGroups = groupIndicatorFactors(activeIndicators?.factors || [])
+  const activeGroups = groupIndicatorFactors(activeIndicators?.factors || [], profile)
   const situationHighlights = buildSituationHighlights(profile, scores, indicators)
-  const interpretationSummary = buildInterpretationSummary(scores, profileLabel, rangeMinutes)
+  const benchmarkScores = STATIC_SCORE_BENCHMARK.scores
+  const benchmarkShortLabel = STATIC_SCORE_BENCHMARK.label
+  const benchmarkTextLabel = 'supported locality average'
+  const interpretationSummary = buildInterpretationSummary(scores, profileLabel, rangeMinutes, benchmarkScores)
 
   return (
     <div style={{ background: '#f5f0eb', minHeight: '100%', paddingBottom: 80 }}>
@@ -1110,8 +1671,8 @@ export default function InsightsPage() {
           {CATEGORIES.map(k => {
             const c = CATEGORY_CONFIG[k]
             const score = scores?.[k]
-            const avg = MELBOURNE_AVG[k]
-            const delta = score != null ? score - avg : null
+            const avg = benchmarkScores?.[k]
+            const delta = score != null && Number.isFinite(Number(avg)) ? score - avg : null
             return (
               <div key={k} style={{
                 background: '#fff', border: `1.5px solid ${c.border}`,
@@ -1131,11 +1692,11 @@ export default function InsightsPage() {
                 </div>
                 {delta != null && (
                   <p style={{ fontSize: 13, fontWeight: 700, color: delta >= 0 ? '#059669' : '#dc2626' }}
-                    aria-label={`${Math.abs(delta)} points ${delta >= 0 ? 'above' : 'below'} Melbourne average`}>
-                    {delta >= 0 ? '▲' : '▼'} {Math.abs(delta)} vs Melb avg
+                    aria-label={`${Math.abs(delta)} points ${delta >= 0 ? 'above' : 'below'} supported locality average`}>
+                    {delta >= 0 ? 'Above' : 'Below'} by {Math.abs(delta)} vs supported avg
                   </p>
                 )}
-                <CompareBar value={loading ? null : score} avg={avg} color={c.color} />
+                <CompareBar value={loading ? null : score} avg={avg} color={c.color} label={benchmarkShortLabel} />
                 {!loading && indicators[k] && (
                   <p style={{ marginTop: 12, fontSize: 13, color: '#4b5563' }}>
                     {indicators[k].factors?.filter(f => f.met).length ?? 0}/{indicators[k].factors?.length ?? 0} indicators met
@@ -1247,7 +1808,7 @@ export default function InsightsPage() {
           </p>
         </div>
 
-        <CensusContextSection data={censusData} loading={censusLoading} userProfile={profile} />
+        <CensusContextSection data={censusData} loading={censusLoading} userProfile={profile} indicators={indicators} />
 
         {/* Interpretation */}
         {!loading && scores && (
@@ -1273,7 +1834,7 @@ export default function InsightsPage() {
                     {interpretationSummary.verdict}
                   </p>
                   <p style={{ fontSize: 15, color: '#475569', lineHeight: 1.65, marginBottom: 12 }}>
-                    {categoryComparisonText(interpretationSummary.rows)}
+                    {categoryComparisonText(interpretationSummary.rows, benchmarkTextLabel)}
                   </p>
                   <p style={{ fontSize: 15, color: '#475569', lineHeight: 1.65, marginBottom: situationHighlights ? 14 : 0 }}>
                     {interpretationSummary.closingLine}
@@ -1318,6 +1879,7 @@ export default function InsightsPage() {
           background: '#fff', border: '1.5px solid #e5e7eb',
           borderRadius: 20, padding: '28px',
           boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
+          marginBottom: 16,
         }}>
           <p style={{ fontSize: 13, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#4b5563', marginBottom: 6 }}>Methodology</p>
           <h2 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 26, fontWeight: 400, color: '#1a2436', marginBottom: 20 }}>
@@ -1370,6 +1932,21 @@ export default function InsightsPage() {
               })}
             </tbody>
           </table>
+        </div>
+
+        <div style={{
+          background: '#fff',
+          border: '1.5px solid #e5e7eb',
+          borderRadius: 16,
+          padding: '16px 18px',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.035)',
+        }} role="note" aria-label="Benchmark explanation">
+          <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#4b5563', marginBottom: 5 }}>
+            Benchmark
+          </p>
+          <p style={{ fontSize: 12, color: '#4b5563', lineHeight: 1.65 }}>
+            {STATIC_SCORE_BENCHMARK.description} The benchmark values are accessibility {STATIC_SCORE_BENCHMARK.scores.accessibility}, safety {STATIC_SCORE_BENCHMARK.scores.safety}, environment {STATIC_SCORE_BENCHMARK.scores.environment}, and overall liveability {STATIC_SCORE_BENCHMARK.scores.liveability}. They are used only as a comparison guide.
+          </p>
         </div>
 
       </div>

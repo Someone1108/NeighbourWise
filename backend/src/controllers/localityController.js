@@ -4,6 +4,11 @@ const {
   getCoverageSuburbs,
   getCoverageMap,
 } = require('../services/localityService');
+const {
+  sendValidationError,
+  validateSuburbName,
+  validateVicNamesId,
+} = require('../utils/validators');
 
 const getLocality = async (req, res) => {
   try {
@@ -12,10 +17,10 @@ const getLocality = async (req, res) => {
 
     let result = null;
 
-    if (name && name.trim()) {
-      result = await getLocalityByName(name);
+    if (name) {
+      result = await getLocalityByName(validateSuburbName(name));
     } else if (vicnamesid) {
-      result = await getLocalityByVicNamesId(vicnamesid);
+      result = await getLocalityByVicNamesId(validateVicNamesId(vicnamesid));
     } else {
       return res.status(400).json({ message: 'name or vicnamesid is required' });
     }
@@ -26,6 +31,8 @@ const getLocality = async (req, res) => {
 
     return res.json(result);
   } catch (error) {
+    if (sendValidationError(res, error)) return;
+
     console.error('Locality fetch error:', error.message);
     return res.status(500).json({ message: 'Failed to fetch locality' });
   }

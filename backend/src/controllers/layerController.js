@@ -1,11 +1,18 @@
 const layerService = require('../services/layerService');
+const {
+  sendValidationError,
+  validateLayerAddressQuery,
+  validateSuburbName,
+} = require('../utils/validators');
 
 async function getLayersForSuburb(req, res) {
   try {
-    const suburbName = req.params.name;
+    const suburbName = validateSuburbName(req.params.name);
     const data = await layerService.getLayersForSuburb(suburbName);
     res.json(data);
   } catch (error) {
+    if (sendValidationError(res, error)) return;
+
     console.error('Error loading suburb layer data:', error);
 
     const statusCode =
@@ -21,7 +28,7 @@ async function getLayersForSuburb(req, res) {
 
 async function getLayersForAddress(req, res) {
   try {
-    const { lat, lng, minutes, radiusMeters } = req.query;
+    const { lat, lng, minutes, radiusMeters } = validateLayerAddressQuery(req.query);
 
     const data = await layerService.getLayersForAddress(
       lat,
@@ -34,6 +41,8 @@ async function getLayersForAddress(req, res) {
       minutes: Number(minutes) || 20,
     });
   } catch (error) {
+    if (sendValidationError(res, error)) return;
+
     console.error('Error loading address layer data:', error);
 
     res.status(500).json({

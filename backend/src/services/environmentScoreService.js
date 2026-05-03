@@ -123,7 +123,11 @@ const getEnvironmentScore = async ({
         4326
       ) AS geom
     )
-    SELECT AVG(v.peranyveg) AS avg_green
+    SELECT
+      AVG(v.peranyveg) AS avg_green,
+      MIN(v.peranyveg) AS min_green,
+      MAX(v.peranyveg) AS max_green,
+      COUNT(*) AS vegetation_count
     FROM public.vegetation_features v
     JOIN buffer_area b
       ON ST_Intersects(v.geom, b.geom)
@@ -165,7 +169,11 @@ const getEnvironmentScore = async ({
         4326
       ) AS geom
     )
-    SELECT AVG(h."uhi18_m") AS avg_heat
+    SELECT
+      AVG(h."uhi18_m") AS avg_heat,
+      MIN(h."uhi18_m") AS min_heat,
+      MAX(h."uhi18_m") AS max_heat,
+      COUNT(*) AS heat_count
     FROM public.heat_features h
     JOIN buffer_area b
       ON ST_Intersects(h.geom, b.geom)
@@ -213,6 +221,15 @@ const getEnvironmentScore = async ({
   );
 
   const zoningScore = calculateAverage(zoningScores);
+  const zoningCounts = new Map();
+  zoningResult.rows.forEach((row) => {
+    const label = row.zone_desc || row.zone_code || 'Unknown zoning';
+    zoningCounts.set(label, (zoningCounts.get(label) || 0) + 1);
+  });
+  const zoneMix = [...zoningCounts.entries()]
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 3);
 
   // 4. Air quality score
   let airQualityResult = null;
@@ -272,8 +289,15 @@ const getEnvironmentScore = async ({
     },
     rawData: {
       avgGreen: avgGreen !== null && avgGreen !== undefined ? Number(avgGreen) : null,
+      minGreen: greenResult.rows[0]?.min_green !== null && greenResult.rows[0]?.min_green !== undefined ? Number(greenResult.rows[0].min_green) : null,
+      maxGreen: greenResult.rows[0]?.max_green !== null && greenResult.rows[0]?.max_green !== undefined ? Number(greenResult.rows[0].max_green) : null,
+      vegetationCount: Number(greenResult.rows[0]?.vegetation_count || 0),
       avgHeat: avgHeat !== null && avgHeat !== undefined ? Number(avgHeat) : null,
+      minHeat: heatResult.rows[0]?.min_heat !== null && heatResult.rows[0]?.min_heat !== undefined ? Number(heatResult.rows[0].min_heat) : null,
+      maxHeat: heatResult.rows[0]?.max_heat !== null && heatResult.rows[0]?.max_heat !== undefined ? Number(heatResult.rows[0].max_heat) : null,
+      heatCount: Number(heatResult.rows[0]?.heat_count || 0),
       zoningCount: zoningResult.rows.length,
+      zoneMix,
       airQualitySite: airQualityResult?.site || null,
       airQualitySource: airQualityResult?.source || null
     },
