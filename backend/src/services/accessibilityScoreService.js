@@ -53,7 +53,7 @@ const ACCESSIBILITY_WEIGHTS = {
     park: 0.08
   },
 
-  pet_owner: {
+  pet: {
     bus_stop: 0.15,
     train_station: 0.15,
     supermarket: 0.15,
