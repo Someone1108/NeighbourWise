@@ -5,26 +5,19 @@ const { getAccessibilityScore } = require('../services/accessibilityScoreService
 const { getSafetyScore } = require('../services/safetyScoreService');
 const { getEnvironmentScore } = require('../services/environmentScoreService');
 const { getLiveabilityScore } = require('../services/scoreService');
-
-function normalizeScoreQuery(query) {
-  const { lat, lng, time, persona } = query;
-
-  const allowedTimes = [10, 20, 30];
-
-  return {
-    lat: Number(lat),
-    lng: Number(lng),
-    time: allowedTimes.includes(Number(time)) ? Number(time) : 20,
-    persona: persona || 'default'
-  };
-}
+const {
+  sendValidationError,
+  validateScoreQuery,
+} = require('../utils/validators');
 
 router.get('/accessibility', async (req, res) => {
   try {
-    const params = normalizeScoreQuery(req.query);
+    const params = validateScoreQuery(req.query);
     const result = await getAccessibilityScore(params);
     res.json(result);
   } catch (err) {
+    if (sendValidationError(res, err)) return;
+
     console.error('Accessibility Score API error:', err);
     res.status(500).json({
       error: 'Failed to calculate accessibility score',
@@ -35,10 +28,12 @@ router.get('/accessibility', async (req, res) => {
 
 router.get('/safety', async (req, res) => {
   try {
-    const params = normalizeScoreQuery(req.query);
+    const params = validateScoreQuery(req.query);
     const result = await getSafetyScore(params);
     res.json(result);
   } catch (err) {
+    if (sendValidationError(res, err)) return;
+
     console.error('Safety Score API error:', err);
     res.status(500).json({
       error: 'Failed to calculate safety score',
@@ -50,17 +45,13 @@ router.get('/safety', async (req, res) => {
 
 router.get('/environment', async (req, res) => {
   try {
-    const { lat, lng, time, persona } = req.query;
-
-    const result = await getEnvironmentScore({
-      lat: Number(lat),
-      lng: Number(lng),
-      time: Number(time || 20),
-      persona: persona || 'default'
-    });
+    const params = validateScoreQuery(req.query);
+    const result = await getEnvironmentScore(params);
 
     res.json(result);
   } catch (err) {
+    if (sendValidationError(res, err)) return;
+
     console.error('Environment score API error:', err);
     res.status(500).json({
       error: 'Failed to calculate environment score',
@@ -71,17 +62,13 @@ router.get('/environment', async (req, res) => {
 
 router.get('/liveability', async (req, res) => {
   try {
-    const { lat, lng, time, persona } = req.query;
-
-    const result = await getLiveabilityScore({
-      lat: Number(lat),
-      lng: Number(lng),
-      time: Number(time || 20),
-      persona: persona || 'default'
-    });
+    const params = validateScoreQuery(req.query);
+    const result = await getLiveabilityScore(params);
 
     res.json(result);
   } catch (err) {
+    if (sendValidationError(res, err)) return;
+
     console.error('Liveability error:', err);
     res.status(500).json({
       error: 'Failed to calculate liveability score',
