@@ -29,11 +29,6 @@ export default function AboutPage() {
       <section className="nwAboutBanner">
         <div className="nwAboutBannerGlow" aria-hidden="true" />
         <div className="nwAboutBannerInner">
-          <span className="nwAboutBannerEyebrow">
-            <span className="nwAboutBannerEyebrowDot" aria-hidden="true" />
-            Monash University · Smart City Project · 2026
-          </span>
-
           <h1 className="nwAboutBannerTitle">
             About <em>NeighbourWise</em>
           </h1>
