@@ -10,6 +10,7 @@ import {
   clearCompareList,
   loadCompareList,
   removeFromCompareList,
+  saveCompareList,
 } from '../utils/storage.js'
 
 const CATEGORY_KEYS = ['accessibility', 'safety', 'environment']
@@ -67,7 +68,7 @@ export default function ComparePage() {
   const [searching, setSearching] = useState(false)
   const [suburbResults, setSuburbResults] = useState([])
   const [addressResults, setAddressResults] = useState([])
-  const [selectedSecondArea, setSelectedSecondArea] = useState(null)
+  const [addingIndex, setAddingIndex] = useState(null)
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -75,35 +76,17 @@ export default function ComparePage() {
   const [data, setData] = useState(null)
 
   const firstArea = compareList[0] || null
-  const savedSecondArea = compareList[1] || null
-  const activeSecondArea = savedSecondArea || selectedSecondArea
+  const secondArea = compareList[1] || null
+  const activeSecondArea = secondArea
 
   const hasResults = suburbResults.length > 0 || addressResults.length > 0
   const postcodeSearch = isPostcodeQuery(searchTerm)
 
-  useEffect(() => {
-    if (savedSecondArea) {
-      setSelectedSecondArea(null)
-      setSearchTerm(getLocationLabel(savedSecondArea))
-    }
-  }, [savedSecondArea])
 
   useEffect(() => {
     const query = searchTerm.trim()
-    const selectedText = getLocationLabel(selectedSecondArea)
 
-    if (selectedSecondArea && query === selectedText) {
-      setSuburbResults([])
-      setAddressResults([])
-      setSearching(false)
-      return
-    }
-
-    if (selectedSecondArea && query !== selectedText) {
-      setSelectedSecondArea(null)
-    }
-
-    if (savedSecondArea) {
+    if (addingIndex === null) {
       setSuburbResults([])
       setAddressResults([])
       setSearching(false)
@@ -161,7 +144,7 @@ export default function ComparePage() {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [searchTerm, selectedSecondArea, savedSecondArea, postcodeSearch])
+  }, [searchTerm, addingIndex, postcodeSearch])
 
   useEffect(() => {
     if (!firstArea) {
@@ -282,12 +265,40 @@ export default function ComparePage() {
     }
   }, [firstArea, activeSecondArea])
 
-  function onSelectSecondArea(location) {
-    setSelectedSecondArea(location)
-    setSearchTerm(getLocationLabel(location))
+  function onSelectArea(location) {
+    if (addingIndex === null) return
+
+    setError('')
+
+    const newArea = {
+      ...location,
+      locationName: getLocationLabel(location),
+      displayName: location.displayName || getLocationLabel(location),
+      fullAddress: location.fullAddress || '',
+      name: location.name || '',
+      type: location.type || location.placeType || 'suburb',
+      placeType: location.placeType || location.type || 'suburb',
+      postcode: location.postcode || null,
+      lat: location.lat,
+      lng: location.lng,
+      source: location.source || '',
+      profile: firstArea?.profile || {},
+      rangeMinutes: firstArea?.rangeMinutes || 20,
+      selectedLocation: location,
+    }
+
+    const updated = [...compareList]
+    updated[addingIndex] = newArea
+
+    const compacted = updated.filter(Boolean)
+
+    saveCompareList(compacted)
+    setCompareList(compacted)
+
+    setAddingIndex(null)
+    setSearchTerm('')
     setSuburbResults([])
     setAddressResults([])
-    setError('')
   }
 
   function removeSavedArea(areaItem) {
@@ -295,18 +306,7 @@ export default function ComparePage() {
     setCompareList(next)
   }
 
-  function clearSecondSelection() {
-    if (savedSecondArea) {
-      const next = removeFromCompareList(savedSecondArea)
-      setCompareList(next)
-    }
-    setSelectedSecondArea(null)
-    setSearchTerm('')
-    setSuburbResults([])
-    setAddressResults([])
-    setData(null)
-    setHint('Search and select a second suburb, postcode, or address to compare.')
-  }
+  
 
   const compareSubtitle = useMemo(() => {
     if (loading) return 'Loading comparison...'
@@ -329,94 +329,75 @@ export default function ComparePage() {
         : 0
     : 0
 
-  return (
-    <div className="nwPage">
-      <h1 className="nwPageTitle">Compare Areas</h1>
-      <p className="nwSubtitle">
-        {data
-          ? `${shortLabel(data.area1, 22)} vs ${shortLabel(data.area2, 22)}`
-          : 'Add two areas to compare them side by side'}
-      </p>
 
-      <div className="nwCompareTopGrid">
-        <div className="nwCard nwComparePanel nwComparePanel--area1">
-          <div className="nwCompareLabel">Area 1</div>
-          {firstArea ? (
-            <>
-              <h2 className="nwCompareAreaTitle" title={firstArea.locationName}>
-                {shortLabel(firstArea.locationName)}
-              </h2>
-              <p className="nwCompareAreaMeta">
-                {safeRangeMinutes(firstArea.rangeMinutes)}-minute travel range
-              </p>
-              <div className="nwChipRow">
-                <span className="nwChip">✓ Saved from map</span>
-              </div>
+  function renderAreaPanel(area, index) {
+    const isAdding = addingIndex === index
+
+    return (
+      <div className={`nwCard nwComparePanel nwComparePanel--area${index + 1}`}>
+        <div className="nwCompareLabel">Area {index + 1}</div>
+
+        {area ? (
+          <>
+            <h2 className="nwCompareAreaTitle" title={getLocationLabel(area)}>
+              {shortLabel(getLocationLabel(area))}
+            </h2>
+
+            <p className="nwCompareAreaMeta">
+              {safeRangeMinutes(area.rangeMinutes)}-minute travel range
+            </p>
+
+            <div className="nwChipRow">
+              <span className="nwChip">✓ Area selected</span>
+            </div>
+
+            <div className="nwBtnRow">
+              <Button variant="secondary" onClick={() => removeSavedArea(area)}>
+                Remove
+              </Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="nwCompareEmptyText">No area selected yet.</p>
+
+            {!isAdding ? (
               <div className="nwBtnRow">
-                <Button variant="secondary" onClick={() => removeSavedArea(firstArea)}>
-                  Remove
-                </Button>
-              </div>
-            </>
-          ) : (
-            <>
-              <p className="nwCompareEmptyText">
-                No first area saved yet. Search a suburb on the map and click "Add to Compare".
-              </p>
-              <div className="nwBtnRow">
-                <Button variant="primary" onClick={() => navigate('/map')}>
-                  Go to Map
-                </Button>
-              </div>
-            </>
-          )}
-        </div>
-
-        <div className="nwCard nwComparePanel nwComparePanel--area2">
-          <div className="nwCompareLabel">Area 2</div>
-
-          {!activeSecondArea ? (
-            <>
-              <h2 className="nwCompareAreaTitle">Find a second area</h2>
-              <p className="nwCompareAreaMeta" style={{ marginBottom: 12 }}>
-                Type a suburb, postcode, or address below.
-              </p>
-
-              <div className="nwSearchBlock">
-                <label
-                  htmlFor="compare-search-input"
-                  style={{ display: 'block', fontSize: 13, fontWeight: 700, color: 'var(--muted-dark)', marginBottom: 6 }}
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    setAddingIndex(index)
+                    setSearchTerm('')
+                    setSuburbResults([])
+                    setAddressResults([])
+                  }}
                 >
-                  Search suburb, postcode or address
-                </label>
+                  Add Area
+                </Button>
+              </div>
+            ) : (
+              <div className="nwSearchBlock">
                 <input
-                  id="compare-search-input"
                   className="nwInput nwSearchInput"
-                  placeholder="e.g. Richmond, 3076, or 45 Chapel St"
+                  placeholder="Search suburb, postcode or address"
                   value={searchTerm}
                   onChange={(e) => {
                     setSearchTerm(e.target.value)
                     setError('')
                   }}
-                  aria-autocomplete="list"
-                  aria-expanded={hasResults && !selectedSecondArea}
                   autoComplete="off"
                 />
 
                 {searching ? <div className="nwSearchStatus">Searching…</div> : null}
 
-                {!searching && hasResults && !selectedSecondArea ? (
+                {!searching && hasResults ? (
                   <div className="nwSearchResults">
-                    {suburbResults.length > 0 ? (
-                      <div className="nwSearchGroupLabel">Suburbs</div>
-                    ) : null}
-
-                    {suburbResults.map((result, index) => (
+                    {suburbResults.map((result, i) => (
                       <button
-                        key={`compare-suburb-${result.id}-${index}`}
+                        key={`area-${index}-suburb-${result.id}-${i}`}
                         type="button"
                         className="nwSearchResultItem"
-                        onClick={() => onSelectSecondArea(result)}
+                        onClick={() => onSelectArea(result)}
                       >
                         <div className="nwSearchResultName">
                           {result.displayName || result.name}
@@ -427,18 +408,12 @@ export default function ComparePage() {
                       </button>
                     ))}
 
-                    {addressResults.length > 0 ? (
-                      <div className="nwSearchGroupLabel nwSearchGroupDivider">
-                        {postcodeSearch ? 'Postcodes / addresses' : 'Addresses'}
-                      </div>
-                    ) : null}
-
-                    {addressResults.map((result, index) => (
+                    {addressResults.map((result, i) => (
                       <button
-                        key={`compare-address-${result.id || result.displayName}-${index}`}
+                        key={`area-${index}-address-${result.id || result.displayName}-${i}`}
                         type="button"
                         className="nwSearchResultItem"
-                        onClick={() => onSelectSecondArea(result)}
+                        onClick={() => onSelectArea(result)}
                       >
                         <div className="nwSearchResultName">
                           {result.displayName || result.fullAddress || result.name}
@@ -453,36 +428,38 @@ export default function ComparePage() {
                   </div>
                 ) : null}
 
-                {!searching &&
-                ((!postcodeSearch && searchTerm.trim().length >= 3) ||
-                  postcodeSearch) &&
-                !hasResults &&
-                !selectedSecondArea ? (
-                  <div className="nwSearchStatus">No results found — try a different name.</div>
-                ) : null}
+                <div className="nwBtnRow">
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      setAddingIndex(null)
+                      setSearchTerm('')
+                      setSuburbResults([])
+                      setAddressResults([])
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
               </div>
-            </>
-          ) : (
-            <>
-              <h2 className="nwCompareAreaTitle" title={getLocationLabel(activeSecondArea)}>
-                {shortLabel(getLocationLabel(activeSecondArea))}
-              </h2>
-              <p className="nwCompareAreaMeta">
-                {savedSecondArea
-                  ? `${safeRangeMinutes(savedSecondArea.rangeMinutes)}-minute travel range`
-                  : 'Selected on this page'}
-              </p>
-              <div className="nwChipRow">
-                <span className="nwChip">✓ Area selected</span>
-              </div>
-              <div className="nwBtnRow">
-                <Button variant="secondary" onClick={clearSecondSelection}>
-                  Change area
-                </Button>
-              </div>
-            </>
-          )}
-        </div>
+            )}
+          </>
+        )}
+      </div>
+    )
+  }
+  return (
+    <div className="nwPage">
+      <h1 className="nwPageTitle">Compare Areas</h1>
+      <p className="nwSubtitle">
+        {data
+          ? `${shortLabel(data.area1, 22)} vs ${shortLabel(data.area2, 22)}`
+          : 'Add two areas to compare them side by side'}
+      </p>
+
+      <div className="nwCompareTopGrid">
+        {renderAreaPanel(firstArea, 0)}
+        {renderAreaPanel(secondArea, 1)}
       </div>
 
       <div className="nwCard nwCompareResultsCard">
