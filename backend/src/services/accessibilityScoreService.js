@@ -101,7 +101,9 @@ const getAccessibilityScore = async ({
   lat,
   lng,
   time = 20,
-  persona = 'default'
+  persona = 'default',
+  sequentialPois = false,
+  requestDelayMs = 0
 }) => {
   // 🔥 注意：這裡要轉成 km（因為你的 insight 是 distanceKm）
   const maxDistanceMeters = MAX_DISTANCE_MAP[time];
@@ -114,7 +116,13 @@ const getAccessibilityScore = async ({
   const breakdown = {};
 
   // 🔥 一次拿全部 POI（你現在的架構）
-  const response = await fetchPoiInsights({ lat, lng, time });
+  const response = await fetchPoiInsights({
+    lat,
+    lng,
+    time,
+    sequential: sequentialPois,
+    requestDelayMs
+  });
   const allPois = response.results || [];
 
   const indicators = Object.keys(weights);
