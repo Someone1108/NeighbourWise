@@ -45,7 +45,7 @@ const HOW_TO_STEPS = [
   { step: '4', label: 'Compare', desc: 'Add areas to your compare list to weigh up two suburbs side by side.' },
 ]
 
-const SCROLL_DURATION_MS = 1400
+const SCROLL_DURATION_MS = 2200
 
 export default function HomePage() {
   const navigate = useNavigate()
@@ -597,6 +597,7 @@ export default function HomePage() {
                   className={`profile-card${profile[key] ? ' active' : ''}`}
                   role="radio"
                   aria-checked={profile[key]}
+                  aria-label={`${title}: ${desc}`}
                   tabIndex={0}
                   onClick={() => toggleProfile(key)}
                   onKeyDown={(e) => e.key === 'Enter' && toggleProfile(key)}

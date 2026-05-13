@@ -11,9 +11,25 @@ export default function NavigationBar() {
   const navigate = useNavigate()
   const [compareCount, setCompareCount] = useState(() => loadCompareList().length)
   const [scrolled, setScrolled] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
 
   const isHome = location.pathname === '/'
   const isActive = (path) => location.pathname === path
+
+  // Close mobile menu on route change
+  useEffect(() => {
+    setMenuOpen(false)
+  }, [location.pathname])
+
+  // Close on Escape
+  useEffect(() => {
+    if (!menuOpen) return
+    function onKey(e) {
+      if (e.key === 'Escape') setMenuOpen(false)
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [menuOpen])
 
   function hasEnteredAddress() {
     const ctx = loadContext()
@@ -38,6 +54,7 @@ export default function NavigationBar() {
 
   function handleMapClick(e) {
     e.preventDefault()
+    setMenuOpen(false)
     if (hasEnteredAddress()) {
       navigate('/map')
       return
@@ -120,7 +137,63 @@ export default function NavigationBar() {
             About
           </Link>
         </nav>
+
+        <button
+          className="nwNavHamburger"
+          onClick={() => setMenuOpen(v => !v)}
+          aria-expanded={menuOpen}
+          aria-label={menuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+        >
+          <span className="nwHamburgerBar" />
+          <span className="nwHamburgerBar" />
+          <span className="nwHamburgerBar" />
+        </button>
       </div>
+
+      {menuOpen && (
+        <nav className="nwNavMobileMenu" aria-label="Mobile navigation">
+          <Link
+            to="/"
+            className={isActive('/') ? 'active' : ''}
+            aria-current={isActive('/') ? 'page' : undefined}
+            onClick={() => setMenuOpen(false)}
+          >
+            Home
+          </Link>
+
+          <Link
+            to="/map"
+            onClick={handleMapClick}
+            className={isActive('/map') ? 'active' : ''}
+            aria-current={isActive('/map') ? 'page' : undefined}
+          >
+            Map
+          </Link>
+
+          <Link
+            to="/compare"
+            className={isActive('/compare') ? 'active' : ''}
+            aria-current={isActive('/compare') ? 'page' : undefined}
+            onClick={() => setMenuOpen(false)}
+          >
+            Compare
+            {compareCount > 0 && (
+              <span className="nwCompareBadge" aria-label={`${compareCount} areas saved for comparison`}>
+                {compareCount}
+              </span>
+            )}
+          </Link>
+
+          <Link
+            to="/about"
+            className={isActive('/about') ? 'active' : ''}
+            aria-current={isActive('/about') ? 'page' : undefined}
+            onClick={() => setMenuOpen(false)}
+          >
+            About
+          </Link>
+        </nav>
+      )}
     </header>
   )
 }
