@@ -139,16 +139,42 @@ export function addToCompareList(item) {
   const locationName = getSafeLocationName(item)
   const compareKey = getSafeCompareKey(item)
 
-  if (!compareKey || !locationName) return current
+  if (!compareKey || !locationName) {
+    return {
+      success: false,
+      reason: 'INVALID_AREA',
+      current
+    }
+  }
+
+  // 如果已經存在同一個 area，不重複加入
+  const alreadyExists = current.some((x) => {
+    const existingKey = getSafeCompareKey(x)
+    return existingKey === compareKey
+  })
+
+  if (alreadyExists) {
+    return {
+      success: true,
+      reason: 'ALREADY_EXISTS',
+      list: current
+    }
+  }
+
+  // 如果 Area1 + Area2 都已經存在，不直接加入
+  // 交給前端跳出 Replace Area1 / Replace Area2 / Cancel
+  if (current.length >= 2) {
+    return {
+      success: false,
+      reason: 'COMPARE_FULL',
+      current,
+      pendingItem: item
+    }
+  }
 
   const normalizedSelectedLocation = normalizeSelectedLocation(item)
 
-  const next = current.filter((x) => {
-    const existingKey = getSafeCompareKey(x)
-    return existingKey !== compareKey
-  })
-
-  next.push({
+  const newArea = {
     compareKey,
     id: normalizedSelectedLocation.id,
     locationName,
@@ -179,13 +205,91 @@ export function addToCompareList(item) {
     rangeMinutes: normalizeRangeMinutes(item?.rangeMinutes),
     selectedLocation: normalizedSelectedLocation,
     addedAt: Date.now(),
-  })
+  }
 
-  const capped = next.slice(-2)
-  saveCompareList(capped)
-  return capped
+  const next = [...current, newArea]
+
+  saveCompareList(next)
+
+  return {
+    success: true,
+    reason: 'ADDED',
+    list: next
+  }
 }
 
+// Replace one compare area (Area1 or Area2)
+// 替換 Compare Page 中的其中一個比較區域
+
+export function replaceCompareArea(index, item) {
+  const current = loadCompareList()
+
+  if (![0, 1].includes(index)) {
+    return current
+  }
+
+  const locationName = getSafeLocationName(item)
+  const compareKey = getSafeCompareKey(item)
+
+  if (!compareKey || !locationName) {
+    return current
+  }
+
+  const normalizedSelectedLocation = normalizeSelectedLocation(item)
+
+  const newArea = {
+    compareKey,
+    id: normalizedSelectedLocation.id,
+    locationName,
+    displayName: String(
+      item?.displayName ||
+        normalizedSelectedLocation.displayName ||
+        locationName
+    ).trim(),
+    fullAddress: String(
+      item?.fullAddress ||
+        normalizedSelectedLocation.fullAddress ||
+        ''
+    ).trim(),
+    name: String(
+      item?.name ||
+        normalizedSelectedLocation.name ||
+        ''
+    ).trim(),
+    type:
+      item?.type ||
+      item?.placeType ||
+      normalizedSelectedLocation.type ||
+      'suburb',
+    placeType:
+      item?.placeType ||
+      normalizedSelectedLocation.placeType ||
+      item?.type ||
+      'suburb',
+    postcode:
+      item?.postcode ||
+      normalizedSelectedLocation.postcode ||
+      null,
+    lat: item?.lat ?? normalizedSelectedLocation.lat ?? null,
+    lng: item?.lng ?? normalizedSelectedLocation.lng ?? null,
+    source:
+      item?.source ||
+      normalizedSelectedLocation.source ||
+      '',
+    profile: item?.profile || {},
+    rangeMinutes: normalizeRangeMinutes(item?.rangeMinutes),
+    selectedLocation: normalizedSelectedLocation,
+    addedAt: Date.now(),
+  }
+
+  const next = [...current]
+
+  next[index] = newArea
+
+  saveCompareList(next)
+
+  return next
+}
 export function clearCompareList() {
   saveCompareList([])
 }

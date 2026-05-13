@@ -14,7 +14,6 @@ import {
 } from "../services/api.js";
 import {
   addToCompareList,
-  loadCompareList,
   loadContext,
   saveContext
 } from "../utils/storage.js";
@@ -310,9 +309,24 @@ export default function MapPage() {
                   selectedLocation
                 };
 
-                const list = addToCompareList(compareItem);
-                setCompareHint(`Added to compare (${list.length}/2).`);
-                navigate("/compare");
+                const result = addToCompareList(compareItem);
+                if (result.success) {
+                  setCompareHint(
+                    result.reason === "ALREADY_EXISTS"
+                      ? "This area is already in compare."
+                      : `Added to compare (${result.list.length}/2).`
+                  );
+                  return;
+                }
+
+                if (result.reason === "COMPARE_FULL") {
+                  setCompareHint(
+                    "Compare list is full. Please go to Compare page to remove or replace an area."
+                  );
+                  return;
+                }
+
+                setCompareHint("Unable to add this area to compare.");
               }}
             >
               Add to Compare
@@ -332,22 +346,7 @@ export default function MapPage() {
                 See Detailed Insights
               </Button>
             )}
-
-            <Button
-              variant="dark"
-              onClick={() => {
-                const count = loadCompareList().length;
-                if (count < 2) {
-                  setCompareHint(
-                    "Please add two areas before opening Compare."
-                  );
-                  return;
-                }
-                navigate("/compare");
-              }}
-            >
-              Compare Areas
-            </Button>
+            
           </div>
         </section>
 
