@@ -22,7 +22,7 @@ const PROFILES = [
 
 const VALUE_PROPS = [
   {
-    icon: '🏆',
+    icon: '🚇',
     title: 'Liveability Score',
     desc: 'See suburb ratings across accessibility, safety and environment.',
   },
@@ -45,6 +45,8 @@ const HOW_TO_STEPS = [
   { step: '4', label: 'Compare', desc: 'Add areas to your compare list to weigh up two suburbs side by side.' },
 ]
 
+const SCROLL_DURATION_MS = 1400
+
 export default function HomePage() {
   const navigate = useNavigate()
 
@@ -54,6 +56,7 @@ export default function HomePage() {
   const [addressResults, setAddressResults] = useState([])
   const [selectedLocation, setSelectedLocation] = useState(null)
   const [showCoverageModal, setShowCoverageModal] = useState(false)
+  const [showScorePreview, setShowScorePreview] = useState(false)
   const [supportedSuburbs, setSupportedSuburbs] = useState([])
 
   const [coverageMapData, setCoverageMapData] = useState(null)
@@ -261,6 +264,34 @@ export default function HomePage() {
     navigate('/map', { state: ctx })
   }
 
+  function scrollToSearch() {
+    const searchTarget = document.getElementById('home-search-input')
+    if (!searchTarget) return
+
+    const scrollEl = document.scrollingElement || document.documentElement
+    const startPosition = scrollEl.scrollTop
+    const targetPosition = searchTarget.getBoundingClientRect().top + scrollEl.scrollTop - 80
+    const distance = targetPosition - startPosition
+    let startTime = null
+
+    function easeInOutCubic(progress) {
+      return progress < 0.5
+        ? 4 * progress * progress * progress
+        : 1 - Math.pow(-2 * progress + 2, 3) / 2
+    }
+
+    function animateScroll(currentTime) {
+      if (!startTime) startTime = currentTime
+      const elapsed = currentTime - startTime
+      const scrollProgress = Math.min(elapsed / SCROLL_DURATION_MS, 1)
+      const scrollEl = document.scrollingElement || document.documentElement
+      scrollEl.scrollTop = startPosition + distance * easeInOutCubic(scrollProgress)
+      if (scrollProgress < 1) requestAnimationFrame(animateScroll)
+    }
+
+    requestAnimationFrame(animateScroll)
+  }
+
   const hasResults = suburbResults.length > 0 || addressResults.length > 0
 
   return (
@@ -288,11 +319,7 @@ export default function HomePage() {
               <button
                 type="button"
                 className="hero-cta-primary"
-                onClick={() =>
-                  document
-                    .getElementById('home-search-input')
-                    ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-                }
+                onClick={scrollToSearch}
               >
                 Explore Liveability
                 <span className="hero-cta-arrow" aria-hidden="true">→</span>
@@ -310,7 +337,7 @@ export default function HomePage() {
             </div>
 
             <p className="hero-trust-line hero-fade-in hero-fade-in-3">
-              300+ Melbourne suburbs · Built on open government data · Free to use
+              486+ Melbourne suburbs · Built on open government data · Free to use
             </p>
           </div>
 
@@ -332,11 +359,74 @@ export default function HomePage() {
           </div>
 
           <div className="vp-inner">
-            {VALUE_PROPS.map((vp) => (
+            {VALUE_PROPS.map((vp, i) => (
               <div key={vp.title} className="vp-card">
                 <div className="vp-card-icon" aria-hidden="true">{vp.icon}</div>
                 <h3>{vp.title}</h3>
                 <p>{vp.desc}</p>
+                {i === 0 && (
+                  <div className="vp-example-wrap">
+                    <button
+                      type="button"
+                      className="vp-example-link"
+                      onClick={() => setShowScorePreview(v => !v)}
+                    >
+                      See example →
+                    </button>
+                    <div className={`vp-score-tooltip${showScorePreview ? ' is-open' : ''}`} aria-hidden="true">
+                      <div className="nwCard nwScorePreviewCard">
+                        <div className="nwScoreHeader">
+                          <div className="nwScoreHeaderTop">
+                            <div className="nwScoreHeaderInfo">
+                              <div className="nwScoreHeaderEyebrow">FITZROY, VIC</div>
+                              <h3 className="nwScoreHeaderTitle">Overall Liveability</h3>
+                              <span className="nwScoreTier is-good">
+                                <span className="nwScoreTierDot" aria-hidden="true" />
+                                Good
+                              </span>
+                              <div className="nwScoreHeaderProfile">Scored for: Family</div>
+                            </div>
+                            <div className="nwScoreDonut" style={{ "--nw-score": 74 }}>
+                              <div className="nwScoreDonutInner">
+                                <div className="nwScoreDonutValue">74</div>
+                                <div className="nwScoreDonutOf">/100</div>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="nwScoreHeaderBars">
+                            <section className="nwScoreBar" aria-label="accessibility score">
+                              <div className="nwScoreBarTop">
+                                <div className="nwScoreBarLabel">Accessibility</div>
+                                <div className="nwScoreBarValue">80 / 100</div>
+                              </div>
+                              <div className="nwProgressOuter" role="progressbar" aria-valuenow={80} aria-valuemin={0} aria-valuemax={100} aria-label="Accessibility: 80 out of 100">
+                                <div className="nwProgressInner" style={{ width: "80%" }} />
+                              </div>
+                            </section>
+                            <section className="nwScoreBar" aria-label="safety score">
+                              <div className="nwScoreBarTop">
+                                <div className="nwScoreBarLabel">Safety</div>
+                                <div className="nwScoreBarValue">72 / 100</div>
+                              </div>
+                              <div className="nwProgressOuter" role="progressbar" aria-valuenow={72} aria-valuemin={0} aria-valuemax={100} aria-label="Safety: 72 out of 100">
+                                <div className="nwProgressInner" style={{ width: "72%" }} />
+                              </div>
+                            </section>
+                            <section className="nwScoreBar" aria-label="environment score">
+                              <div className="nwScoreBarTop">
+                                <div className="nwScoreBarLabel">Environment</div>
+                                <div className="nwScoreBarValue">67 / 100</div>
+                              </div>
+                              <div className="nwProgressOuter" role="progressbar" aria-valuenow={67} aria-valuemin={0} aria-valuemax={100} aria-label="Environment: 67 out of 100">
+                                <div className="nwProgressInner" style={{ width: "67%" }} />
+                              </div>
+                            </section>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -362,12 +452,13 @@ export default function HomePage() {
               </li>
             ))}
           </ol>
+          <p className="howtoClosing">Make your move with confidence.</p>
         </section>
 
         <section className="coverageSection" aria-labelledby="coverage-heading">
           <div className="coverageSectionInner">
             <div className="coverageCopy">
-              <p className="coverageEyebrow">Coverage</p>
+              <p className="coverageEyebrow">Where we work</p>
               <h2 id="coverage-heading" className="coverageTitle">
                 See which parts of Melbourne we cover
               </h2>
@@ -409,7 +500,7 @@ export default function HomePage() {
           <div className="search-inner">
             <p className="search-section-label">Get started</p>
             <h2 id="search-heading" className="search-section-title">
-              Check a suburb or address
+              Ready to explore? Search your suburb.
             </h2>
 
             <label
