@@ -3,6 +3,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import ScoreBar from "../components/ScoreBar.jsx";
 import NeighbourMap from "../components/NeighbourMap.jsx";
 import Button from "../components/buttons/Button.jsx";
+import LoadingOverlay from "../components/LoadingOverlay.jsx";
+import Toast from "../components/Toast.jsx";
 import {
   getMapContext,
   getLocalityPolygon,
@@ -253,9 +255,9 @@ export default function MapPage() {
           className="nwMapLeft"
           aria-label="Interactive neighbourhood map"
         >
-          <div aria-live="polite" aria-atomic="true" className="nwSrOnly">
-            {loading ? "Loading map data, please wait…" : ""}
-          </div>
+          {loading && (
+            <LoadingOverlay label="Loading map data…" />
+          )}
 
           <NeighbourMap
             coordinates={
@@ -571,9 +573,11 @@ export default function MapPage() {
         </aside>
       </div>
 
-      <div role="status" aria-live="polite" className="nwMapActionsHint">
-        {compareHint || ""}
-      </div>
+      <Toast
+        message={compareHint}
+        duration={2400}
+        onClose={() => setCompareHint("")}
+      />
     </div>
   );
 }
