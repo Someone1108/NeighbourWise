@@ -281,8 +281,7 @@ export default function HomePage() {
             </h1>
 
             <p className="hero-subtitle hero-fade-in hero-fade-in-2">
-              Data-backed insights across accessibility, safety and environment -
-              personalised to your situation.
+              Find out if a suburb suits your lifestyle before you commit. Scores for transport, safety and green space, tailored to you.
             </p>
 
             <div className="hero-cta-row hero-fade-in hero-fade-in-3">
@@ -309,6 +308,10 @@ export default function HomePage() {
                 How it works
               </button>
             </div>
+
+            <p className="hero-trust-line hero-fade-in hero-fade-in-3">
+              300+ Melbourne suburbs · Built on open government data · Free to use
+            </p>
           </div>
 
           <button
