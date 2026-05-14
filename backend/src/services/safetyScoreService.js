@@ -1,17 +1,17 @@
 // (B) Safety & Comfort score
 // Safety & Comfort =
-// Crime 35% + Activity 20% + Noise/traffic comfort 20%
-// + Transport stop comfort 15% + Zoning 10%
+// Crime 45% + Activity 10% + Noise/traffic comfort 15%
+// + Transport stop comfort 10% + Zoning 20%
 
 const pool = require('../utils/db');
 const { MAX_DISTANCE_MAP } = require('../utils/distanceConfig');
 
 const SAFETY_WEIGHTS = {
-  crime: 0.35,
-  activity: 0.2,
-  noise: 0.2,
-  transportComfort: 0.15,
-  zoning: 0.1
+  crime: 0.45,
+  activity: 0.1,
+  noise: 0.15,
+  transportComfort: 0.1,
+  zoning: 0.2
 };
 
 function clampScore(score) {
@@ -24,6 +24,11 @@ function round2(value) {
 
 function round3(value) {
   return Number(value.toFixed(3));
+}
+
+function calibrateSparseSupportScore(score, baseline = 40, scale = 0.6) {
+  if (score === null || score === undefined) return null;
+  return round2(clampScore(baseline + Number(score) * scale));
 }
 
 function isMissingTableError(error) {
@@ -485,6 +490,17 @@ async function getSafetyScore({ lat, lng, time = 20, persona = 'default' }) {
     await getTransportComfortScoreWithinRadius({ lat, lng, radiusMeters });
   const zoningResult = await getZoningScoreWithinRadius({ lat, lng, radiusMeters });
 
+  const calibratedActivityScore = activityResult.available
+    ? calibrateSparseSupportScore(activityResult.activityScore, 40, 0.6)
+    : null;
+  const calibratedTransportComfortScore = transportComfortResult.available
+    ? calibrateSparseSupportScore(
+        transportComfortResult.transportComfortScore,
+        35,
+        0.65
+      )
+    : null;
+
   const components = {
     crime: {
       available: crimeResult.crimeScore != null,
@@ -492,7 +508,7 @@ async function getSafetyScore({ lat, lng, time = 20, persona = 'default' }) {
     },
     activity: {
       available: activityResult.available,
-      score: activityResult.activityScore
+      score: calibratedActivityScore
     },
     noise: {
       available: noiseResult.available,
@@ -500,7 +516,7 @@ async function getSafetyScore({ lat, lng, time = 20, persona = 'default' }) {
     },
     transportComfort: {
       available: transportComfortResult.available,
-      score: transportComfortResult.transportComfortScore
+      score: calibratedTransportComfortScore
     },
     zoning: {
       available: zoningResult.zoningScore != null,
@@ -558,9 +574,11 @@ async function getSafetyScore({ lat, lng, time = 20, persona = 'default' }) {
 
     scores: {
       crime: crimeResult.crimeScore != null ? round2(crimeResult.crimeScore) : null,
-      activity: activityResult.activityScore,
+      activity: calibratedActivityScore,
+      rawActivity: activityResult.activityScore,
       noise: noiseResult.noiseComfortScore,
-      transportComfort: transportComfortResult.transportComfortScore,
+      transportComfort: calibratedTransportComfortScore,
+      rawTransportComfort: transportComfortResult.transportComfortScore,
       zoning: zoningResult.zoningScore != null ? round2(zoningResult.zoningScore) : null,
       rawSafety: round2(rawSafetyScore)
     },
