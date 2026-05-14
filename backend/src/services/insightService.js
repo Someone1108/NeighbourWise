@@ -15,6 +15,9 @@ const categoryMap = {
   dog_park: 'dog_park'
 };
 
+const delay = (ms = 0) =>
+  new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
+
 
 // Haversine formula：計算兩點距離（公里）
 const calculateDistanceKm = (lat1, lng1, lat2, lng2) => {
@@ -168,14 +171,31 @@ const fetchCategoryByType = async ({ lat, lng, type }) => {
 };
 
 // 抓所有 POI insights
-const fetchPoiInsights = async ({ lat, lng, time }) => {
+const fetchPoiInsights = async ({
+  lat,
+  lng,
+  time,
+  sequential = false,
+  requestDelayMs = 0
+}) => {
   const allTypes = Object.keys(categoryMap);
 
-  const allResults = await Promise.all(
-    allTypes.map((poiType) =>
-      fetchCategoryByType({ lat, lng, type: poiType })
-    )
-  );
+  let allResults;
+
+  if (sequential) {
+    allResults = [];
+
+    for (const poiType of allTypes) {
+      allResults.push(await fetchCategoryByType({ lat, lng, type: poiType }));
+      await delay(requestDelayMs);
+    }
+  } else {
+    allResults = await Promise.all(
+      allTypes.map((poiType) =>
+        fetchCategoryByType({ lat, lng, type: poiType })
+      )
+    );
+  }
 
   let results = allResults.flat();
 

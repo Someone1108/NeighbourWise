@@ -5,6 +5,8 @@
   "main": "index.js",
   "scripts": {
     "dev": "nodemon src/server.js",
+    "export:suburb-scores": "node scripts/precomputeSuburbScores.js --output-csv=exports/suburb_scores.csv",
+    "precompute:suburb-scores": "node scripts/precomputeSuburbScores.js",
     "start": "node src/server.js"
   },
   "keywords": [],
