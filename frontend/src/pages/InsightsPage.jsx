@@ -28,8 +28,8 @@ const CATEGORY_CONFIG = {
     border: '#bfdbfe',
     icon: '🚇',
     description: 'Transit links, walkability & essential services',
-    weight: 35,
-    sources: 'GTFS + OpenStreetMap',
+    weight: 40,
+    sources: 'OpenStreetMap POIs: bus stops, train stations, supermarkets, hospitals, schools, parks and dog parks',
   },
   safety: {
     label: 'Safety',
@@ -39,7 +39,7 @@ const CATEGORY_CONFIG = {
     icon: '🛡️',
     description: 'Crime rates, street lighting & pedestrian infrastructure',
     weight: 35,
-    sources: 'Crime Statistics VIC + VicPlan',
+    sources: 'Crime Statistics Victoria, VicPlan zoning, OSM activity places, road/rail noise proxies and public transport stop comfort tags',
   },
   environment: {
     label: 'Environment',
@@ -48,8 +48,8 @@ const CATEGORY_CONFIG = {
     border: '#fed7aa',
     icon: '🌿',
     description: 'Green space, air quality & urban heat exposure',
-    weight: 30,
-    sources: 'Urban Heat Islands + EPA AirWatch',
+    weight: 25,
+    sources: 'Vegetation cover, urban heat island data, VicPlan zoning comfort and EPA AirWatch air quality',
   },
 }
 
@@ -394,8 +394,11 @@ function getPersonaIndicatorPriority(factor, profile) {
   const name = String(factor?.name || '').toLowerCase()
 
   if (name.includes('crime context')) return 0
-  if (name.includes('zoning safety')) return 1
-  if (name.includes('combined safety')) return 2
+  if (name.includes('activity')) return 1
+  if (name.includes('noise')) return 2
+  if (name.includes('transport comfort')) return 3
+  if (name.includes('zoning safety')) return 4
+  if (name.includes('combined safety')) return 5
 
   if (profile?.familyWithChildren) {
     if (name.includes('school')) return 0
@@ -508,6 +511,9 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
   })
 
   const crimeScore = Number(safety?.scores?.crime)
+  const activityScore = Number(safety?.scores?.activity)
+  const noiseScore = Number(safety?.scores?.noise)
+  const transportComfortScore = Number(safety?.scores?.transportComfort)
   const zoningSafetyScore = Number(safety?.scores?.zoning)
   const finalSafetyScore = Number(safety?.safetyScore)
   const rawCrimeAverage = Number(safety?.crimeDetails?.averageInRadius)
@@ -518,9 +524,18 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
     .map((zone) => `${zone.label} (${zone.count})`)
     .join(', ')
   const crimeWeight = Math.round(Number(safety?.weights?.crime ?? 0.57) * 100)
+  const activityWeight = Math.round(Number(safety?.weights?.activity ?? 0) * 100)
+  const noiseWeight = Math.round(Number(safety?.weights?.noise ?? 0) * 100)
+  const transportComfortWeight = Math.round(Number(safety?.weights?.transportComfort ?? 0) * 100)
   const zoningWeight = Math.round(Number(safety?.weights?.zoning ?? 0.43) * 100)
   const missingCrime = safety?.missingData?.crime
+  const missingActivity = safety?.missingData?.activity
+  const missingNoise = safety?.missingData?.noise
+  const missingTransportComfort = safety?.missingData?.transportComfort
   const missingZoning = safety?.missingData?.zoning
+  const activityCount = Number(safety?.activityDetails?.featureCount)
+  const noiseFeatureCount = Number(safety?.noiseDetails?.featureCount)
+  const transportStopCount = Number(safety?.transportComfortDetails?.stopCount)
 
   const safetyFactors = [
     {
@@ -550,6 +565,84 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
       details: [
         `Nearby suburbs used: ${Number.isFinite(nearbySuburbCount) ? nearbySuburbCount : 0}`,
         missingCrime ? 'Crime data was missing, so zoning was used as the fallback.' : 'Crime data available.',
+      ],
+    },
+    {
+      name: 'Activity and passive safety',
+      score: activityScore,
+      met: activityScore >= 60,
+      summary: Number.isFinite(activityScore) ? `${activityScore}/100` : 'Unavailable',
+      plainText: Number.isFinite(activityScore)
+        ? `Activity and passive safety scores ${activityScore}/100 using nearby active places such as cafes, shops, restaurants, libraries and community facilities.`
+        : 'Activity and passive safety is unavailable for this area.',
+      impact: getImpactText(activityScore, 'Safety'),
+      lines: [
+        describeScore(
+          activityScore,
+          'Nearby active places strongly support passive surveillance and everyday street activity.',
+          'Nearby active places generally support passive surveillance and street activity.',
+          'Activity is present but uneven, so some streets may feel quieter than others.',
+          'There are fewer mapped active places nearby, which may reduce passive surveillance.',
+        ),
+        Number.isFinite(activityCount)
+          ? `${activityCount} mapped active places were found in the selected range.`
+          : 'Activity feature count was not returned.',
+      ],
+      details: [
+        `This contributes ${activityWeight}% of the safety score.`,
+        missingActivity ? 'Activity data unavailable.' : 'Activity data available.',
+      ],
+    },
+    {
+      name: 'Noise and traffic comfort',
+      score: noiseScore,
+      met: noiseScore >= 60,
+      summary: Number.isFinite(noiseScore) ? `${noiseScore}/100` : 'Unavailable',
+      plainText: Number.isFinite(noiseScore)
+        ? `Noise and traffic comfort scores ${noiseScore}/100 using nearby major roads, road links, rail, tram and light rail features.`
+        : 'Noise and traffic comfort is unavailable for this area.',
+      impact: getImpactText(noiseScore, 'Safety'),
+      lines: [
+        describeScore(
+          noiseScore,
+          'Traffic and rail noise pressure looks low for the selected range.',
+          'Traffic and rail noise pressure looks manageable.',
+          'Traffic and rail comfort is mixed, so main-road exposure is worth checking.',
+          'Traffic or rail noise pressure is likely pulling the safety comfort score down.',
+        ),
+        Number.isFinite(noiseFeatureCount)
+          ? `${noiseFeatureCount} road or rail features contributed to this signal.`
+          : 'Noise feature count was not returned.',
+      ],
+      details: [
+        `This contributes ${noiseWeight}% of the safety score.`,
+        missingNoise ? 'Noise data unavailable.' : 'Noise data available.',
+      ],
+    },
+    {
+      name: 'Transport comfort',
+      score: transportComfortScore,
+      met: transportComfortScore >= 60,
+      summary: Number.isFinite(transportComfortScore) ? `${transportComfortScore}/100` : 'Unavailable',
+      plainText: Number.isFinite(transportComfortScore)
+        ? `Transport comfort scores ${transportComfortScore}/100 using nearby public transport stops and comfort tags such as lighting, shelter, benches, cover, wheelchair access and tactile paving.`
+        : 'Transport comfort is unavailable for this area.',
+      impact: getImpactText(transportComfortScore, 'Safety'),
+      lines: [
+        describeScore(
+          transportComfortScore,
+          'Nearby transport stops look strongly supportive for comfortable waiting and movement.',
+          'Nearby transport stops look reasonably comfortable.',
+          'Transport comfort is mixed, so individual stops are worth checking.',
+          'Nearby stop comfort appears limited based on mapped tags.',
+        ),
+        Number.isFinite(transportStopCount)
+          ? `${transportStopCount} public transport stop records were found in the selected range.`
+          : 'Transport stop count was not returned.',
+      ],
+      details: [
+        `This contributes ${transportComfortWeight}% of the safety score.`,
+        missingTransportComfort ? 'Transport comfort data unavailable.' : 'Transport comfort data available.',
       ],
     },
     {
@@ -596,9 +689,9 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
           'Overall, safety is mixed: some signals are supportive, but others deserve a closer look.',
           'Overall, safety is the category to investigate most carefully before deciding.',
         ),
-        `The model gives more weight to crime context (${crimeWeight}%) than zoning (${zoningWeight}%) because recorded incidents are the more direct safety signal.`,
+        `The model combines crime (${crimeWeight}%), activity (${activityWeight}%), noise comfort (${noiseWeight}%), transport comfort (${transportComfortWeight}%) and zoning (${zoningWeight}%).`,
       ],
-      details: [`Final mix: crime ${crimeWeight}%, zoning ${zoningWeight}%`],
+      details: [`Final mix: crime ${crimeWeight}%, activity ${activityWeight}%, noise ${noiseWeight}%, transport comfort ${transportComfortWeight}%, zoning ${zoningWeight}%`],
     },
   ]
 
@@ -736,7 +829,7 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
       category: 'safety',
       factors: safetyFactors,
       takeaway: summarizeCategory('safety', safetyFactors),
-      scoreExplanation: `Safety combines nearby recorded-crime context with land-use zoning in the selected ${rangeMinutes}-minute range. Zoning adds context because active commercial, mixed-use and public areas may have more lighting, foot traffic, passive surveillance and CCTV coverage; crime still has the larger influence because recorded incidents are the more direct safety signal.`,
+      scoreExplanation: `Safety combines recorded-crime context (${crimeWeight}%), activity and passive safety (${activityWeight}%), noise and traffic comfort (${noiseWeight}%), public transport stop comfort (${transportComfortWeight}%) and zoning context (${zoningWeight}%) in the selected ${rangeMinutes}-minute range.`,
     },
     environment: {
       category: 'environment',
