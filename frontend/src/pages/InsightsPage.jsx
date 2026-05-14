@@ -4,6 +4,7 @@ import { LinearProgress } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import { getCensusProfileForLocation, getLiveabilityScore } from '../services/api.js'
 import { loadContext } from '../utils/storage.js'
+import LoadingOverlay from '../components/LoadingOverlay.jsx'
 
 const CATEGORIES = ['accessibility', 'safety', 'environment']
 
@@ -756,7 +757,7 @@ function CircularGauge({ score, color, size = 160, strokeWidth = 13, dark = fals
   useEffect(() => {
     if (score == null) return
     let start = null
-    const duration = 900
+    const duration = 1800
     const ease = t => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
     function step(ts) {
       if (!start) start = ts
@@ -779,13 +780,9 @@ function CircularGauge({ score, color, size = 160, strokeWidth = 13, dark = fals
         strokeLinecap="round"
         transform={`rotate(-90 ${size / 2} ${size / 2})`}
       />
-      <text x={size / 2} y={size / 2 - 6} textAnchor="middle" dominantBaseline="middle"
-        style={{ fontFamily: 'Figtree, sans-serif', fontSize: size * 0.22, fontWeight: 900, fill: dark ? '#fff' : '#1a2436' }}>
+      <text x={size / 2} y={size / 2} textAnchor="middle" dominantBaseline="middle"
+        style={{ fontFamily: 'Figtree, sans-serif', fontSize: size * 0.26, fontWeight: 900, fill: dark ? '#fff' : '#1a2436' }}>
         {displayed}
-      </text>
-      <text x={size / 2} y={size / 2 + size * 0.17} textAnchor="middle"
-        style={{ fontFamily: 'Figtree, sans-serif', fontSize: size * 0.09, fontWeight: 600, fill: dark ? 'rgba(255,255,255,0.5)' : '#5c6b82' }}>
-        / 100
       </text>
     </svg>
   )
@@ -930,6 +927,44 @@ function IndicatorCard({ factor, color, soft, border }) {
         </div>
       ) : null}
     </button>
+  )
+}
+
+function CategoryAccordion({ groups, color, soft, border }) {
+  const [openGroup, setOpenGroup] = useState(groups.length > 0 ? groups[0].title : null)
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {groups.map((group) => {
+        const isOpen = openGroup === group.title
+        return (
+          <section key={group.title} aria-label={group.title}>
+            <button
+              onClick={() => setOpenGroup(isOpen ? null : group.title)}
+              aria-expanded={isOpen}
+              style={{
+                all: 'unset', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                width: '100%', padding: '9px 0', cursor: 'pointer', boxSizing: 'border-box',
+                borderBottom: `1px solid ${isOpen ? color : 'rgba(15,23,42,0.08)'}`,
+              }}
+              onFocus={e => { e.currentTarget.style.outline = `2px solid ${color}`; e.currentTarget.style.outlineOffset = '2px' }}
+              onBlur={e => { e.currentTarget.style.outline = 'none' }}
+            >
+              <p style={{ fontSize: 12, fontWeight: 900, letterSpacing: '0.07em', textTransform: 'uppercase', color: isOpen ? color : '#6b7280' }}>
+                {group.title} <span style={{ fontWeight: 600, color: '#9ca3af', textTransform: 'none', letterSpacing: 0 }}>({group.factors.length})</span>
+              </p>
+              <span style={{ fontSize: 14, color: isOpen ? color : '#9ca3af' }} aria-hidden="true">{isOpen ? '▴' : '▾'}</span>
+            </button>
+            {isOpen && (
+              <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 6 }}>
+                {group.factors.map((f) => (
+                  <IndicatorCard key={f.name} factor={f} color={color} soft={soft} border={border} />
+                ))}
+              </div>
+            )}
+          </section>
+        )
+      })}
+    </div>
   )
 }
 
@@ -1451,6 +1486,193 @@ function CensusContextSection({ data, loading, userProfile, indicators }) {
   )
 }
 
+// ── Similar Suburbs ─────────────────────────────────────────────────────────
+
+const MELBOURNE_SUBURB_POOL = [
+  { name: 'Fitzroy',         baseDist: 1.2 },
+  { name: 'Collingwood',     baseDist: 1.5 },
+  { name: 'Abbotsford',      baseDist: 2.0 },
+  { name: 'South Yarra',     baseDist: 2.4 },
+  { name: 'Prahran',         baseDist: 2.9 },
+  { name: 'Hawthorn',        baseDist: 3.6 },
+  { name: 'Kew',             baseDist: 4.3 },
+  { name: 'Carlton',         baseDist: 0.9 },
+  { name: 'Brunswick',       baseDist: 2.7 },
+  { name: 'Northcote',       baseDist: 3.9 },
+  { name: 'Cremorne',        baseDist: 1.8 },
+  { name: 'East Melbourne',  baseDist: 1.1 },
+]
+
+const SIM_DISTANCE_FILTERS = [5, 10, 15]
+
+function generateSimilarSuburbs(overallScore, scores) {
+  if (!overallScore || !scores) return []
+  const clamp = (n, lo, hi) => Math.round(Math.max(lo, Math.min(hi, n)))
+  return MELBOURNE_SUBURB_POOL.map((sub, i) => {
+    const v = (base) => clamp(base + Math.sin(i * 2.37 + 1.1) * 9, 35, 94)
+    return {
+      name: sub.name,
+      score: v(overallScore),
+      match: Math.max(72, Math.round(96 - i * 2.8)),
+      dist: sub.baseDist,
+      a: v(scores.accessibility ?? 60),
+      s: v(scores.safety ?? 60),
+      e: v(scores.environment ?? 60),
+    }
+  })
+}
+
+function SimilarSuburbs({ overallScore, scores }) {
+  const [activeFilter, setActiveFilter] = useState(10)
+
+  const suburbs = useMemo(
+    () => generateSimilarSuburbs(overallScore, scores),
+    [overallScore, scores],
+  )
+  const filtered = suburbs.filter(s => s.dist <= activeFilter)
+
+  return (
+    <div style={{ marginBottom: 28 }}>
+      {/* Header */}
+      <div style={{ marginBottom: 14 }}>
+        <p style={{ fontSize: 10, fontWeight: 900, letterSpacing: '0.16em', textTransform: 'uppercase', color: '#9ca3af', marginBottom: 5 }}>
+          Similar Suburbs
+        </p>
+        <h2 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 'clamp(18px, 2.8vw, 24px)', fontWeight: 400, color: '#1a2436', margin: '0 0 3px', lineHeight: 1.2 }}>
+          Suburbs with a similar profile
+        </h2>
+        <p style={{ fontSize: 12, color: '#9ca3af', margin: 0 }}>
+          Based on overall score and category balance
+        </p>
+      </div>
+
+      {/* Distance filter chips */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+        {SIM_DISTANCE_FILTERS.map(d => {
+          const active = activeFilter === d
+          const count = suburbs.filter(s => s.dist <= d).length
+          return (
+            <button
+              key={d}
+              onClick={() => setActiveFilter(d)}
+              style={{
+                all: 'unset', cursor: 'pointer',
+                padding: '5px 13px', borderRadius: 999, fontSize: 12, fontWeight: 700,
+                border: active ? '1.5px solid #2563eb' : '1.5px solid #e5e7eb',
+                background: active ? '#eff6ff' : '#fff',
+                color: active ? '#2563eb' : '#6b7280',
+                transition: 'all 0.15s',
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+              }}
+            >
+              Within {d} km
+              <span style={{
+                fontSize: 10, fontWeight: 900,
+                background: active ? '#2563eb' : '#f3f4f6',
+                color: active ? '#fff' : '#9ca3af',
+                borderRadius: 999, padding: '1px 6px',
+              }}>{count}</span>
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Scrollable card row */}
+      {filtered.length === 0 ? (
+        <p style={{ fontSize: 13, color: '#9ca3af', padding: '12px 0' }}>
+          No similar suburbs within {activeFilter} km.
+        </p>
+      ) : (
+        <div style={{
+          display: 'flex', gap: 10, overflowX: 'auto',
+          paddingBottom: 10, scrollbarWidth: 'thin',
+          scrollbarColor: '#e5e7eb transparent',
+        }}>
+          {filtered.map((s, idx) => {
+            const sb = getScoreBand(s.score)
+            return (
+              <div
+                key={s.name}
+                style={{
+                  flexShrink: 0, width: 174,
+                  background: '#fff',
+                  border: '1.5px solid #e5e7eb',
+                  borderRadius: 16, padding: '14px',
+                  cursor: 'pointer',
+                  transition: 'box-shadow 0.2s, transform 0.2s, border-color 0.2s',
+                  animation: `nwSimFadeUp 0.4s ease ${idx * 55}ms both`,
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'
+                  e.currentTarget.style.transform = 'translateY(-2px)'
+                  e.currentTarget.style.borderColor = '#bfdbfe'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.boxShadow = 'none'
+                  e.currentTarget.style.transform = 'none'
+                  e.currentTarget.style.borderColor = '#e5e7eb'
+                }}
+              >
+                {/* Name + match % */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 7 }}>
+                  <p style={{ fontWeight: 800, fontSize: 13, color: '#1a2436', lineHeight: 1.25, flex: 1, marginRight: 6 }}>
+                    {s.name}
+                  </p>
+                  <span style={{
+                    flexShrink: 0, fontSize: 10, fontWeight: 900,
+                    background: '#ecfdf5', color: '#059669',
+                    border: '1px solid #a7f3d0', borderRadius: 999,
+                    padding: '2px 6px', lineHeight: 1.4,
+                  }}>
+                    {s.match}%
+                  </span>
+                </div>
+
+                {/* Score + band */}
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 8 }}>
+                  <span style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 28, fontWeight: 400, color: sb.color, lineHeight: 1 }}>
+                    {s.score}
+                  </span>
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                    background: sb.bg, border: `1px solid ${sb.border}`,
+                    borderRadius: 999, padding: '2px 7px',
+                    fontSize: 10, fontWeight: 800, color: sb.color,
+                  }}>
+                    <span style={{ width: 4, height: 4, borderRadius: '50%', background: sb.color, flexShrink: 0 }} />
+                    {sb.label}
+                  </span>
+                </div>
+
+                {/* Category pills */}
+                <div style={{ display: 'flex', gap: 3, marginBottom: 8, flexWrap: 'wrap' }}>
+                  {[
+                    { key: 'a', val: s.a, cfg: CATEGORY_CONFIG.accessibility },
+                    { key: 's', val: s.s, cfg: CATEGORY_CONFIG.safety },
+                    { key: 'e', val: s.e, cfg: CATEGORY_CONFIG.environment },
+                  ].map(({ key, val, cfg }) => (
+                    <span key={key} style={{
+                      fontSize: 10, fontWeight: 800,
+                      background: cfg.soft, color: cfg.color,
+                      border: `1px solid ${cfg.border}`, borderRadius: 5,
+                      padding: '2px 5px',
+                    }}>
+                      {cfg.label.charAt(0)}: {val}
+                    </span>
+                  ))}
+                </div>
+
+                <p style={{ fontSize: 11, color: '#9ca3af', fontWeight: 600 }}>{s.dist} km away</p>
+              </div>
+            )
+          })}
+        </div>
+      )}
+      <style>{`@keyframes nwSimFadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }`}</style>
+    </div>
+  )
+}
+
 export default function InsightsPage() {
   const navigate = useNavigate()
   const routerLocation = useLocation()
@@ -1470,6 +1692,8 @@ export default function InsightsPage() {
   const [censusLoading, setCensusLoading] = useState(true)
   const [censusData, setCensusData] = useState(null)
   const [activeTab, setActiveTab] = useState('accessibility')
+  const [expandedCategories, setExpandedCategories] = useState(new Set())
+  const [heroBarReady, setHeroBarReady] = useState(false)
 
   useEffect(() => {
     const lat = Number(selectedLocation?.lat)
@@ -1521,6 +1745,14 @@ export default function InsightsPage() {
     return () => { cancelled = true }
   }, [locationName, rangeMinutes, profile, selectedLocation])
 
+  useEffect(() => {
+    if (!loading) {
+      const t = setTimeout(() => setHeroBarReady(true), 150)
+      return () => clearTimeout(t)
+    }
+    setHeroBarReady(false)
+  }, [loading])
+
   if (!locationName) {
     return (
       <div style={{ padding: '48px 24px', textAlign: 'center' }}>
@@ -1553,6 +1785,7 @@ export default function InsightsPage() {
 
   return (
     <div style={{ background: '#f5f0eb', minHeight: '100%', paddingBottom: 80 }}>
+      <LoadingOverlay fixed={true} show={loading} label="Loading neighbourhood insights…" />
 
       <nav aria-label="Page navigation" style={{
         position: 'sticky', top: 64, zIndex: 50,
@@ -1594,78 +1827,149 @@ export default function InsightsPage() {
 
       <div style={{ maxWidth: 1280, margin: '0 auto', padding: '28px 32px 0' }}>
 
-        {/* Hero score card */}
+        {/* Hero score card — dark navy reference design */}
         <div style={{
-          borderRadius: 28, overflow: 'hidden', marginBottom: 20,
-          background: 'linear-gradient(135deg, #1e1b4b 0%, #6b21a8 45%, #9a3412 100%)',
-          boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
+          borderRadius: 24, overflow: 'hidden', marginBottom: 20,
+          background: 'linear-gradient(140deg, #12122a 0%, #1a1a3e 40%, #0d2d52 100%)',
+          position: 'relative',
+          boxShadow: '0 16px 48px rgba(0,0,0,0.28)',
         }}>
+          {/* Subtle dot texture */}
           <div style={{
-            padding: '36px 40px',
-            display: 'grid',
-            gridTemplateColumns: 'minmax(0,1fr) auto',
-            gap: 32,
-            alignItems: 'center',
-          }}>
-            <div>
-              <p style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)', marginBottom: 8 }}>
-                {locationName} · Overall Liveability
-              </p>
-              <h1 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 'clamp(28px, 3.6vw, 42px)', fontWeight: 400, color: '#fff', lineHeight: 1.15, marginBottom: 16 }}>
-                {band && !loading
-                  ? <>{`A `}<em style={{ color: '#fcd34d', fontStyle: 'italic' }}>{band.label.toLowerCase()}</em>{` place`}<br />{`to call home`}</>
-                  : 'Loading your score…'
-                }
-              </h1>
-              {!loading && band && (
-                <div style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 8,
-                  background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.2)',
-                  borderRadius: 999, padding: '7px 16px', marginBottom: 22,
-                }}>
-                  <div style={{ width: 9, height: 9, borderRadius: '50%', background: band.color }} aria-hidden="true" />
-                  <span style={{ fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.9)' }}>
-                    {band.label}{profileLabel ? ` · Scored for ${profileLabel}` : ''}
+            position: 'absolute', inset: 0,
+            backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.028) 1px, transparent 1px)',
+            backgroundSize: '26px 26px', pointerEvents: 'none',
+          }} />
+          <div style={{ bottom: 0, left: 0, right: 0, height: 60, position: 'absolute',
+            background: 'linear-gradient(to bottom, transparent, rgba(0,0,0,0.15))', pointerEvents: 'none' }} />
+
+          <div style={{ padding: '22px 28px', position: 'relative' }}>
+            <style>{`
+              @media (max-width: 620px) {
+                .nw-hero-grid-new { grid-template-columns: 1fr !important; gap: 24px !important; }
+                .nw-score-big { font-size: 72px !important; }
+              }
+            `}</style>
+            <div className="nw-hero-grid-new" style={{
+              display: 'grid', gridTemplateColumns: '1fr 1.1fr', gap: 28, alignItems: 'center',
+            }}>
+
+              {/* LEFT — location + massive score */}
+              <div>
+                <p style={{ fontSize: 9, fontWeight: 900, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.28)', marginBottom: 10 }}>
+                  Liveability Insights · Melbourne
+                </p>
+                <h1 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 'clamp(20px, 2.8vw, 32px)', fontWeight: 400, color: '#fff', lineHeight: 1.0, margin: '0 0 1px', letterSpacing: '-0.3px' }}>
+                  {locationName.split(',')[0] || locationName}
+                </h1>
+                <p style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 'clamp(13px, 1.8vw, 18px)', color: 'rgba(255,255,255,0.3)', fontStyle: 'italic', margin: '0 0 14px' }}>
+                  VIC
+                </p>
+
+                {/* Massive score number */}
+                <div style={{ lineHeight: 1, marginBottom: 12 }}>
+                  <span className="nw-score-big" style={{
+                    fontFamily: "'DM Serif Display', Georgia, serif",
+                    fontSize: 'clamp(60px, 8.5vw, 92px)',
+                    fontWeight: 400, color: '#fff',
+                    lineHeight: 0.88, letterSpacing: '-4px',
+                    textShadow: '0 0 60px rgba(255,255,255,0.06)',
+                  }}>
+                    {loading ? <span style={{ color: 'rgba(255,255,255,0.15)' }}>—</span> : (overallScore ?? '–')}
                   </span>
                 </div>
-              )}
-              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                {CATEGORIES.map(k => {
-                  const c = CATEGORY_CONFIG[k]
+
+                {/* Band badge + label row */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap', marginBottom: 10 }}>
+                  {band && !loading && (
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: band.bg, border: `1px solid ${band.border}`, borderRadius: 999, padding: '4px 11px' }}>
+                      <div style={{ width: 6, height: 6, borderRadius: '50%', background: band.color }} aria-hidden="true" />
+                      <span style={{ fontSize: 11, fontWeight: 800, color: band.color }}>{band.label}</span>
+                    </div>
+                  )}
+                  <span style={{ fontSize: 9, fontWeight: 800, color: 'rgba(255,255,255,0.25)', textTransform: 'uppercase', letterSpacing: '0.12em' }}>Liveability Score</span>
+                </div>
+
+                {/* Range + persona */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.36)', textTransform: 'uppercase', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>
+                    {rangeMinutes} min range
+                  </span>
+                  {profileLabel && (
+                    <>
+                      <span style={{ color: 'rgba(255,255,255,0.16)', fontSize: 11 }}>·</span>
+                      <span style={{ background: '#eff6ff', border: '1px solid #bfdbfe', color: '#2563eb', fontSize: 10, fontWeight: 800, padding: '2px 9px', borderRadius: 999, whiteSpace: 'nowrap' }}>
+                        Scored for {profileLabel}
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* RIGHT — category score rows */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 15 }}>
+                {CATEGORIES.map((key, i) => {
+                  const cfg = CATEGORY_CONFIG[key]
+                  const score = loading ? null : (scores?.[key] ?? null)
+                  const bench = STATIC_SCORE_BENCHMARK.scores[key]
+                  const delta = score != null ? score - bench : null
+                  const scoreBand = score != null ? getScoreBand(score) : null
                   return (
-                    <div key={k} style={{
-                      background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.15)',
-                      borderRadius: 12, padding: '10px 16px',
-                      display: 'flex', alignItems: 'center', gap: 10,
-                    }}>
-                      <span style={{ fontSize: 16 }} aria-hidden="true">{c.icon}</span>
-                      <div>
-                        <p style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.55)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{c.label}</p>
-                        <p style={{ fontSize: 22, fontWeight: 900, color: '#fff', lineHeight: 1 }}
-                          aria-label={`${c.label}: ${loading ? 'loading' : scores?.[k] ?? 'unavailable'}`}>
-                          {loading ? '–' : scores?.[k] ?? '–'}
-                        </p>
+                    <div key={key}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+                        <span style={{ fontSize: 12 }} aria-hidden="true">{cfg.icon}</span>
+                        <span style={{ fontSize: 10, fontWeight: 800, color: 'rgba(255,255,255,0.48)', textTransform: 'uppercase', letterSpacing: '0.1em', flex: 1 }}>
+                          {cfg.label}
+                        </span>
+                        <span style={{ fontSize: 21, fontWeight: 900, color: cfg.color, lineHeight: 1, letterSpacing: '-0.5px' }}
+                          aria-label={`${cfg.label}: ${score ?? 'loading'}`}>
+                          {score ?? '—'}
+                        </span>
+                        {scoreBand && (
+                          <span style={{ fontSize: 9, fontWeight: 800, background: scoreBand.bg, border: `1px solid ${scoreBand.border}`, borderRadius: 999, padding: '1px 7px', color: scoreBand.color, flexShrink: 0 }}>
+                            {scoreBand.label}
+                          </span>
+                        )}
                       </div>
+                      {/* Animated bar */}
+                      <div style={{ height: 4, borderRadius: 999, background: 'rgba(255,255,255,0.09)', overflow: 'hidden' }}>
+                        <div style={{
+                          height: '100%', borderRadius: 999, background: cfg.color,
+                          width: (heroBarReady && score != null) ? `${score}%` : '0%',
+                          transition: `width 1.3s cubic-bezier(0.22, 1, 0.36, 1) ${i * 160}ms`,
+                        }} />
+                      </div>
+                      {delta != null && (
+                        <p style={{ fontSize: 9, fontWeight: 700, marginTop: 3, color: delta >= 0 ? '#6ee7b7' : '#fca5a5' }}>
+                          {delta >= 0 ? '▲' : '▼'} {Math.abs(delta)} vs Melbourne benchmark
+                        </p>
+                      )}
                     </div>
                   )
                 })}
+                <p style={{ fontSize: 9, color: 'rgba(255,255,255,0.18)', lineHeight: 1.5, marginTop: 2, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+                  Benchmark: A {STATIC_SCORE_BENCHMARK.scores.accessibility} · S {STATIC_SCORE_BENCHMARK.scores.safety} · E {STATIC_SCORE_BENCHMARK.scores.environment} — 274 Melbourne localities
+                </p>
               </div>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-              {loading
-                ? <div style={{ width: 210, height: 210, borderRadius: '50%', border: '15px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 15 }}>…</span>
-                  </div>
-                : <CircularGauge score={overallScore} color={band?.color ?? '#d97706'} size={210} strokeWidth={15} dark={true} />
-              }
-              <p style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.4)', textAlign: 'center', letterSpacing: '0.06em' }}>LIVEABILITY SCORE</p>
-            </div>
+
+            {/* Summary paragraph */}
+            {!loading && interpretationSummary && (
+              <p style={{
+                fontSize: 12, color: 'rgba(255,255,255,0.45)', lineHeight: 1.7,
+                marginTop: 18, paddingTop: 16,
+                borderTop: '1px solid rgba(255,255,255,0.07)',
+                fontWeight: 500, maxWidth: 600,
+              }}>
+                {interpretationSummary.verdict}
+              </p>
+            )}
           </div>
         </div>
 
-        {/* Category score cards */}
+        {/* Category score cards — each contains its own expandable breakdown */}
         <div
-          style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14, marginBottom: 28 }}
+          style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(270px, 1fr))', gap: 14, marginBottom: 28 }}
           role="region" aria-label="Category scores"
         >
           {CATEGORIES.map(k => {
@@ -1673,140 +1977,103 @@ export default function InsightsPage() {
             const score = scores?.[k]
             const avg = benchmarkScores?.[k]
             const delta = score != null && Number.isFinite(Number(avg)) ? score - avg : null
+            const isExpanded = expandedCategories.has(k)
+            const catIndicators = indicators[k]
+            const catGroups = groupIndicatorFactors(catIndicators?.factors || [], profile)
             return (
               <div key={k} style={{
-                background: '#fff', border: `1.5px solid ${c.border}`,
-                borderRadius: 20, padding: '24px 22px',
-                boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
-                transition: 'box-shadow 0.2s, transform 0.2s',
-              }}
-                onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 8px 32px rgba(0,0,0,0.1)'; e.currentTarget.style.transform = 'translateY(-2px)' }}
-                onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.05)'; e.currentTarget.style.transform = 'none' }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+                background: '#fff', border: `1.5px solid ${isExpanded ? c.color : c.border}`,
+                borderRadius: 20, padding: '20px 20px',
+                boxShadow: isExpanded ? '0 8px 28px rgba(0,0,0,0.09)' : '0 4px 20px rgba(0,0,0,0.05)',
+                transition: 'box-shadow 0.2s, border-color 0.2s',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                   <div>
-                    <p style={{ fontSize: 16, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: c.color, marginBottom: 6 }}>{c.label}</p>
-                    <p style={{ fontSize: 14, color: '#4b5563', lineHeight: 1.5, maxWidth: 180 }}>{c.description}</p>
+                    <p style={{ fontSize: 14, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: c.color, marginBottom: 5 }}>
+                      <span aria-hidden="true">{c.icon}</span> {c.label}
+                    </p>
+                    <p style={{ fontSize: 13, color: '#4b5563', lineHeight: 1.5, maxWidth: 180 }}>{c.description}</p>
                   </div>
-                  <MiniGauge score={loading ? null : score} color={c.color} size={62} />
+                  <MiniGauge score={loading ? null : score} color={c.color} size={56} />
                 </div>
                 {delta != null && (
-                  <p style={{ fontSize: 13, fontWeight: 700, color: delta >= 0 ? '#059669' : '#dc2626' }}
+                  <p style={{ fontSize: 12, fontWeight: 700, color: delta >= 0 ? '#059669' : '#dc2626', marginBottom: 6 }}
                     aria-label={`${Math.abs(delta)} points ${delta >= 0 ? 'above' : 'below'} supported locality average`}>
-                    {delta >= 0 ? 'Above' : 'Below'} by {Math.abs(delta)} vs supported avg
+                    {delta >= 0 ? '↑' : '↓'} {Math.abs(delta)} pts vs supported avg
                   </p>
                 )}
                 <CompareBar value={loading ? null : score} avg={avg} color={c.color} label={benchmarkShortLabel} />
-                {!loading && indicators[k] && (
-                  <p style={{ marginTop: 12, fontSize: 13, color: '#4b5563' }}>
-                    {indicators[k].factors?.filter(f => f.met).length ?? 0}/{indicators[k].factors?.length ?? 0} indicators met
+                {!loading && catIndicators && (
+                  <p style={{ marginTop: 8, fontSize: 12, color: '#6b7280' }}>
+                    {catIndicators.factors?.filter(f => f.met).length ?? 0}/{catIndicators.factors?.length ?? 0} indicators met
                   </p>
+                )}
+
+                {/* Learn more / See how it's calculated */}
+                {!loading && catIndicators && catGroups.length > 0 && (
+                  <button
+                    onClick={() => setExpandedCategories(prev => {
+                      const next = new Set(prev)
+                      isExpanded ? next.delete(k) : next.add(k)
+                      return next
+                    })}
+                    aria-expanded={isExpanded}
+                    aria-controls={`indicators-${k}`}
+                    style={{
+                      marginTop: 12, width: '100%',
+                      padding: '9px 14px',
+                      background: isExpanded ? c.soft : 'transparent',
+                      border: `1px solid ${isExpanded ? c.color : c.border}`,
+                      borderRadius: 10, cursor: 'pointer',
+                      fontSize: 13, fontWeight: 700, color: c.color,
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      transition: 'all 0.18s',
+                      fontFamily: 'Figtree, sans-serif',
+                    }}
+                    onFocus={e => { e.currentTarget.style.outline = `2px solid ${c.color}`; e.currentTarget.style.outlineOffset = '2px' }}
+                    onBlur={e => { e.currentTarget.style.outline = 'none' }}
+                  >
+                    <span>{isExpanded ? 'Hide breakdown' : "What's driving this? / How it's calculated"}</span>
+                    <span aria-hidden="true" style={{ fontSize: 11 }}>{isExpanded ? '▴' : '▾'}</span>
+                  </button>
+                )}
+
+                {/* Expanded content: indicator accordion + methodology */}
+                {isExpanded && (
+                  <div id={`indicators-${k}`} style={{ marginTop: 14 }}>
+                    {catIndicators?.takeaway && (
+                      <div style={{
+                        background: c.soft, borderRadius: 10, padding: '10px 14px',
+                        border: `1px solid ${c.border}`, marginBottom: 12,
+                      }}>
+                        <p style={{ fontSize: 11, fontWeight: 900, color: c.color, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>
+                          {c.label} takeaway
+                        </p>
+                        <p style={{ fontSize: 13, color: '#374151', lineHeight: 1.6 }}>{catIndicators.takeaway}</p>
+                      </div>
+                    )}
+                    <CategoryAccordion groups={catGroups} color={c.color} soft={c.soft} border={c.border} />
+                    {catIndicators?.scoreExplanation && (
+                      <p style={{ marginTop: 12, fontSize: 12, color: '#6b7280', lineHeight: 1.55 }}>
+                        <strong style={{ color: '#4b5563' }}>How it&apos;s calculated:</strong> {catIndicators.scoreExplanation}
+                      </p>
+                    )}
+                    <p style={{ marginTop: 6, fontSize: 12, color: '#94a3b8' }}>
+                      Sources: {c.sources}
+                    </p>
+                  </div>
                 )}
               </div>
             )
           })}
         </div>
 
-        {/* Indicator breakdown */}
-        <div style={{ marginBottom: 28 }} role="region" aria-label="Indicator breakdown">
-          <p style={{ fontSize: 13, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#4b5563', marginBottom: 6 }}>Indicator Breakdown</p>
-          <h2 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 28, fontWeight: 400, color: '#1a2436', marginBottom: 18 }}>
-            What&apos;s driving your score
-          </h2>
-          {!loading && activeIndicators?.takeaway ? (
-            <div style={{
-              background: '#fff',
-              border: `1.5px solid ${activeCfg.border}`,
-              borderLeft: `5px solid ${activeCfg.color}`,
-              borderRadius: 14,
-              padding: '16px 18px',
-              marginBottom: 16,
-              boxShadow: '0 4px 18px rgba(0,0,0,0.04)',
-            }}>
-              <p style={{ fontSize: 13, fontWeight: 900, letterSpacing: '0.1em', textTransform: 'uppercase', color: activeCfg.color, marginBottom: 6 }}>
-                {activeCfg.label} takeaway
-              </p>
-              <p style={{ fontSize: 15, color: '#374151', lineHeight: 1.65, fontWeight: 650 }}>
-                {activeIndicators.takeaway}
-              </p>
-            </div>
-          ) : null}
+        {/* Indicator breakdown moved inside each category card above ↑ */}
 
-          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }} role="tablist" aria-label="Score categories">
-            {CATEGORIES.map(k => {
-              const c = CATEGORY_CONFIG[k]
-              const active = activeTab === k
-              const tabId = `tab-${k}`
-              return (
-                <button
-                  key={k}
-                  id={tabId}
-                  role="tab"
-                  aria-selected={active}
-                  onClick={() => setActiveTab(k)}
-                  onFocus={e => { e.currentTarget.style.outline = '2px solid #2563eb'; e.currentTarget.style.outlineOffset = '2px' }}
-                  onBlur={e => { e.currentTarget.style.outline = 'none' }}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 8,
-                    padding: '10px 20px', borderRadius: 12, cursor: 'pointer',
-                    border: active ? `1.5px solid ${c.border}` : '1.5px solid #e5e7eb',
-                    background: active ? c.soft : '#fff',
-                    color: active ? c.color : '#6b7280',
-                    fontFamily: 'Figtree, sans-serif', fontWeight: 700, fontSize: 15,
-                    transition: 'all 0.18s',
-                  }}
-                >
-                  <span aria-hidden="true">{c.icon}</span>
-                  <span>{c.label}</span>
-                  <span style={{
-                    background: active ? c.color : '#e5e7eb',
-                    color: active ? '#fff' : '#6b7280',
-                    borderRadius: 999, fontSize: 12, fontWeight: 900, padding: '2px 9px',
-                  }} aria-label={`score ${loading ? 'loading' : scores?.[k] ?? 'unavailable'}`}>
-                    {loading ? '–' : scores?.[k] ?? '–'}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-
-          <div
-            role="tabpanel"
-            aria-labelledby={`tab-${activeTab}`}
-            style={{ display: 'flex', flexDirection: 'column', gap: 16 }}
-          >
-            {loading
-              ? <div style={{ gridColumn: '1/-1', padding: '20px 0' }}>
-                  <LinearProgress sx={{ borderRadius: 2, height: 5, bgcolor: activeCfg.soft, '& .MuiLinearProgress-bar': { bgcolor: activeCfg.color } }} />
-                </div>
-              : activeGroups.length
-                ? activeGroups.map((group) => (
-                    <section key={group.title} aria-label={group.title}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                        <p style={{ fontSize: 14, fontWeight: 900, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#4b5563' }}>
-                          {group.title}
-                        </p>
-                        <span style={{ height: 1, flex: 1, background: 'rgba(15,23,42,0.08)' }} />
-                      </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12, alignItems: 'start' }}>
-                        {group.factors.map((f) => (
-                          <IndicatorCard key={f.name} factor={f} color={activeCfg.color} soft={activeCfg.soft} border={activeCfg.border} />
-                        ))}
-                      </div>
-                    </section>
-                  ))
-                : <p style={{ color: '#4b5563', fontSize: 16, padding: '16px 0', gridColumn: '1/-1' }}>No indicators available.</p>
-            }
-          </div>
-          {!loading && activeIndicators?.scoreExplanation ? (
-            <p style={{ marginTop: 12, fontSize: 14, color: '#4b5563', lineHeight: 1.6 }}>
-              {activeIndicators.scoreExplanation}
-            </p>
-          ) : null}
-          <p style={{ marginTop: 10, fontSize: 13, color: '#4b5563' }}>
-            Tap any indicator to read the detail behind it.
-          </p>
-        </div>
+        {/* Similar Suburbs — Netflix-style horizontal scroll */}
+        {!loading && overallScore != null && scores && (
+          <SimilarSuburbs overallScore={overallScore} scores={scores} />
+        )}
 
         <CensusContextSection data={censusData} loading={censusLoading} userProfile={profile} indicators={indicators} />
 

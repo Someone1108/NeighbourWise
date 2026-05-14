@@ -419,7 +419,7 @@ body {
   color: var(--text-dark);
   border-radius: 16px;
   padding: 13px 18px;
-  font-size: 15px;
+  font-size: 17px;
   cursor: pointer;
   font-weight: 700;
   transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
@@ -1008,8 +1008,21 @@ body {
   min-height: 240px;
   text-align: left;
   position: relative;
+  display: flex;
+  flex-direction: column;
   /* No overflow:hidden — search dropdown is absolute-positioned and must
      be allowed to escape the panel on the y-axis. */
+}
+
+/* Content area grows, pushes button to bottom */
+.nwComparePanelContent {
+  flex: 1 1 auto;
+}
+
+/* Button row always anchored at the bottom */
+.nwComparePanel .nwBtnRow {
+  margin-top: auto;
+  padding-top: 14px;
 }
 
 /* Solid colour cards with white text — area1 = teal, area2 = orange.
@@ -1047,6 +1060,40 @@ body {
 
 .nwComparePanel--area2 .nwCompareLabel {
   opacity: 0.9;
+}
+
+/* "No area selected yet." text should be white on both coloured cards */
+.nwComparePanel--area2 .nwCompareEmptyText {
+  color: #ffffff;
+}
+
+/* Buttons inside coloured compare panels: white background with coloured text */
+.nwComparePanel--area1 .nwBtn {
+  background: #ffffff;
+  color: var(--accent-2);
+  border-color: rgba(255, 255, 255, 0.5);
+  font-weight: 800;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.nwComparePanel--area1 .nwBtn:hover {
+  background: #f0fdf4;
+  border-color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.nwComparePanel--area2 .nwBtn {
+  background: #ffffff;
+  color: var(--accent);
+  border-color: rgba(255, 255, 255, 0.5);
+  font-weight: 800;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.nwComparePanel--area2 .nwBtn:hover {
+  background: #fff7ed;
+  border-color: #ffffff;
+  transform: translateY(-1px);
 }
 
 /* Saved-from-map / area-selected chip should sit nicely on coloured cards */

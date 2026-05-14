@@ -332,132 +332,142 @@ export default function ComparePage() {
 
   function renderAreaPanel(area, index) {
     const isAdding = addingIndex === index
+    const areaLabel = `Area ${index + 1}`
 
     return (
-      <div className={`nwCard nwComparePanel nwComparePanel--area${index + 1}`}>
-        <div className="nwCompareLabel">Area {index + 1}</div>
+      <div
+        className={`nwCard nwComparePanel nwComparePanel--area${index + 1}`}
+        role="region"
+        aria-label={areaLabel}
+      >
+        <div className="nwCompareLabel" aria-hidden="true">{areaLabel}</div>
 
-        {area ? (
-          <>
-            <h2 className="nwCompareAreaTitle" title={getLocationLabel(area)}>
-              {shortLabel(getLocationLabel(area))}
-            </h2>
-
-            <p className="nwCompareAreaMeta">
-              {safeRangeMinutes(area.rangeMinutes)}-minute travel range
-            </p>
-
-            <div className="nwChipRow">
-              <span className="nwChip">✓ Area selected</span>
-            </div>
-
-            <div className="nwBtnRow">
-              <Button variant="secondary" onClick={() => removeSavedArea(area)}>
-                Remove
-              </Button>
-            </div>
-          </>
-        ) : (
-          <>
-            <p className="nwCompareEmptyText">No area selected yet.</p>
-
-            {!isAdding ? (
-              <div className="nwBtnRow">
-                <Button
-                  variant="primary"
-                  onClick={() => {
-                    setAddingIndex(index)
-                    setSearchTerm('')
-                    setSuburbResults([])
-                    setAddressResults([])
-                  }}
-                >
-                  Add Area
-                </Button>
+        {/* Scrollable content — grows to fill space, button stays at bottom */}
+        <div className="nwComparePanelContent">
+          {area ? (
+            <>
+              <h2 className="nwCompareAreaTitle" title={getLocationLabel(area)}>
+                {shortLabel(getLocationLabel(area))}
+              </h2>
+              <p className="nwCompareAreaMeta">
+                {safeRangeMinutes(area.rangeMinutes)}-minute travel range
+              </p>
+              <div className="nwChipRow">
+                <span className="nwChip">✓ Area selected</span>
               </div>
-            ) : (
-              <div className="nwSearchBlock">
-                <input
-                  className="nwInput nwSearchInput"
-                  placeholder="Search suburb, postcode or address"
-                  value={searchTerm}
-                  onChange={(e) => {
-                    setSearchTerm(e.target.value)
-                    setError('')
-                  }}
-                  autoComplete="off"
-                />
-
-                {searching ? <div className="nwSearchStatus">Searching…</div> : null}
-
-                {!searching && hasResults ? (
-                  <div className="nwSearchResults">
-                    {suburbResults.map((result, i) => (
-                      <button
-                        key={`area-${index}-suburb-${result.id}-${i}`}
-                        type="button"
-                        className="nwSearchResultItem"
-                        onClick={() => onSelectArea(result)}
-                      >
-                        <div className="nwSearchResultName">
-                          {result.displayName || result.name}
-                        </div>
-                        <div className="nwSearchResultMeta">
-                          {result.state || result.placeType || 'Suburb'}
-                        </div>
-                      </button>
-                    ))}
-
-                    {addressResults.map((result, i) => (
-                      <button
-                        key={`area-${index}-address-${result.id || result.displayName}-${i}`}
-                        type="button"
-                        className="nwSearchResultItem"
-                        onClick={() => onSelectArea(result)}
-                      >
-                        <div className="nwSearchResultName">
-                          {result.displayName || result.fullAddress || result.name}
-                        </div>
-                        <div className="nwSearchResultMeta">
-                          {result.suburb
-                            ? `${result.suburb}${result.postcode ? `, ${result.postcode}` : ''}`
-                            : result.placeType || 'Address'}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-
-                <div className="nwBtnRow">
-                  <Button
-                    variant="secondary"
-                    onClick={() => {
-                      setAddingIndex(null)
-                      setSearchTerm('')
-                      setSuburbResults([])
-                      setAddressResults([])
+            </>
+          ) : (
+            <>
+              <p className="nwCompareEmptyText">No area selected yet.</p>
+              {isAdding && (
+                <div className="nwSearchBlock">
+                  <input
+                    className="nwInput nwSearchInput"
+                    placeholder="Search suburb, postcode or address"
+                    aria-label={`Search location for ${areaLabel}`}
+                    value={searchTerm}
+                    onChange={(e) => {
+                      setSearchTerm(e.target.value)
+                      setError('')
                     }}
-                  >
-                    Cancel
-                  </Button>
+                    autoComplete="off"
+                    // eslint-disable-next-line jsx-a11y/no-autofocus
+                    autoFocus
+                  />
+                  {searching ? (
+                    <div className="nwSearchStatus" aria-live="polite" aria-atomic="true">Searching…</div>
+                  ) : null}
+                  {!searching && hasResults ? (
+                    <div className="nwSearchResults" role="listbox" aria-label={`Search results for ${areaLabel}`}>
+                      {suburbResults.map((result, i) => (
+                        <button
+                          key={`area-${index}-suburb-${result.id}-${i}`}
+                          type="button"
+                          role="option"
+                          aria-selected="false"
+                          className="nwSearchResultItem"
+                          onClick={() => onSelectArea(result)}
+                        >
+                          <div className="nwSearchResultName">
+                            {result.displayName || result.name}
+                          </div>
+                          <div className="nwSearchResultMeta">
+                            {result.state || result.placeType || 'Suburb'}
+                          </div>
+                        </button>
+                      ))}
+                      {addressResults.map((result, i) => (
+                        <button
+                          key={`area-${index}-address-${result.id || result.displayName}-${i}`}
+                          type="button"
+                          role="option"
+                          aria-selected="false"
+                          className="nwSearchResultItem"
+                          onClick={() => onSelectArea(result)}
+                        >
+                          <div className="nwSearchResultName">
+                            {result.displayName || result.fullAddress || result.name}
+                          </div>
+                          <div className="nwSearchResultMeta">
+                            {result.suburb
+                              ? `${result.suburb}${result.postcode ? `, ${result.postcode}` : ''}`
+                              : result.placeType || 'Address'}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
-              </div>
-            )}
-          </>
-        )}
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Button row — always at the bottom of the card regardless of content state */}
+        <div className="nwBtnRow">
+          {area ? (
+            <Button variant="secondary" onClick={() => removeSavedArea(area)}>
+              Remove
+            </Button>
+          ) : !isAdding ? (
+            <Button
+              variant="primary"
+              onClick={() => {
+                setAddingIndex(index)
+                setSearchTerm('')
+                setSuburbResults([])
+                setAddressResults([])
+              }}
+            >
+              Add Area
+            </Button>
+          ) : (
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setAddingIndex(null)
+                setSearchTerm('')
+                setSuburbResults([])
+                setAddressResults([])
+              }}
+            >
+              Cancel
+            </Button>
+          )}
+        </div>
       </div>
     )
   }
   return (
     <div className="nwPage">
       <h1 className="nwPageTitle">Compare Areas</h1>
-      <p className="nwSubtitle">
+      <p className="nwSubtitle" aria-live="polite">
         {data
           ? `${shortLabel(data.area1, 22)} vs ${shortLabel(data.area2, 22)}`
           : 'Add two areas to compare them side by side'}
       </p>
 
-      <div className="nwCompareTopGrid">
+      <div className="nwCompareTopGrid" role="group" aria-label="Select areas to compare">
         {renderAreaPanel(firstArea, 0)}
         {renderAreaPanel(secondArea, 1)}
       </div>
@@ -575,7 +585,7 @@ export default function ComparePage() {
             onClick={() => {
               clearCompareList()
               setCompareList([])
-              setSelectedSecondArea(null)
+              setAddingIndex(null)
               setSearchTerm('')
               setData(null)
             }}
