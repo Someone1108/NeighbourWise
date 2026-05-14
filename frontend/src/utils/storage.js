@@ -8,6 +8,9 @@ function normalizeRangeMinutes(value) {
   return 20
 }
 
+// The core purpose of these three functions is:
+// Because different pages and APIs may return data in different formats, 
+// the system first standardizes the data structure to prevent errors in the Compare feature.
 function getSafeLocationName(item) {
   return String(
     item?.locationName ||
@@ -100,6 +103,8 @@ export function clearContext() {
   }
 }
 
+// Trigger a custom event to notify the app that the compare list has been updated.
+// 觸發自訂事件，通知系統 Compare List 已更新。
 function emitCompareUpdated() {
   try {
     window.dispatchEvent(new Event(COMPARE_UPDATED_EVENT))

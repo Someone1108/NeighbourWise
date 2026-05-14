@@ -8,6 +8,7 @@ const layerRoutes = require('./routes/layerRoutes');
 const scoreRoutes = require('./routes/scoreRoutes');
 const aqiRoutes = require('./routes/aqiRoutes');
 const censusRoutes = require('./routes/censusRoutes');
+const recommendationRoutes = require('./routes/recommendationRoutes');
 
 const app = express();
 
@@ -25,5 +26,6 @@ app.use('/api/layers', layerRoutes);
 app.use('/api/score', scoreRoutes);
 app.use('/api/aqi', aqiRoutes);
 app.use('/api/census', censusRoutes);
+app.use('/api/recommendations', recommendationRoutes);
 
 module.exports = app;
