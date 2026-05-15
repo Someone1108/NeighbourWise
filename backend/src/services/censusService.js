@@ -248,7 +248,29 @@ async function getCensusByPostcode(postcode) {
   `;
 
   const result = await pool.query(sql, [value]);
-  return shapeResult(result.rows[0], 'postcode', value, 'postcode-to-sa2');
+  if (result.rows[0]) {
+    return shapeResult(result.rows[0], 'postcode', value, 'postcode-to-sa2');
+  }
+
+  const fallbackSql = `
+    select
+      $1::text as postcode,
+      l.sa2_name_2021,
+      null::numeric as overlap_area_pct,
+      'postcode_locality_lookup'::text as confidence,
+      p.*
+    from public.postcode_locality_lookup l
+    inner join public.census_sa2_profile_valid p
+      on p.sa2_code_2021 = l.sa2_code_2021
+    where l.postcode = $1
+      and l.sa2_code_2021 is not null
+      and trim(l.sa2_code_2021::text) <> ''
+    order by l.locality asc
+    limit 1;
+  `;
+
+  const fb = await pool.query(fallbackSql, [value]);
+  return shapeResult(fb.rows[0], 'postcode', value, 'postcode-locality-to-sa2');
 }
 
 async function getCensusBySa2(code) {

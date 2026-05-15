@@ -114,6 +114,26 @@ export default function HomePage() {
     let cancelled = false
 
     const timer = setTimeout(() => {
+      const isPostcodeOnly = /^\d{4}$/.test(query)
+
+      if (isPostcodeOnly) {
+        searchAddresses(query)
+          .then((rows) => {
+            if (cancelled) return
+            const list = Array.isArray(rows) ? rows : []
+            setSuburbResults(dedupeAndFilter(list))
+            setAddressResults([])
+          })
+          .catch((err) => {
+            console.error('Search fetch failed:', err)
+            if (!cancelled) {
+              setSuburbResults([])
+              setAddressResults([])
+            }
+          })
+        return
+      }
+
       Promise.allSettled([searchLocalities(query), searchAddresses(query)])
         .then((results) => {
           if (cancelled) return

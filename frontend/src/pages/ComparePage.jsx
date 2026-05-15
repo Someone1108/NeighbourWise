@@ -117,6 +117,28 @@ export default function ComparePage() {
     setSearching(true)
 
     const timer = setTimeout(() => {
+      if (postcodeSearch) {
+        searchAddresses(query)
+          .then((rows) => {
+            if (cancelled) return
+            const list = Array.isArray(rows) ? rows : []
+            setSuburbResults(dedupeAndFilter(list))
+            setAddressResults([])
+          })
+          .catch((err) => {
+            console.error('Compare search failed:', err)
+            if (!cancelled) {
+              setSuburbResults([])
+              setAddressResults([])
+            }
+          })
+          .finally(() => {
+            if (cancelled) return
+            setSearching(false)
+          })
+        return
+      }
+
       Promise.allSettled([searchLocalities(query), searchAddresses(query)])
         .then((results) => {
           if (cancelled) return
