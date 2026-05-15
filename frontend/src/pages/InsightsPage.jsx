@@ -1570,7 +1570,10 @@ function SimilarSuburbs({ overallScore, scores }) {
                 fontSize: 10, fontWeight: 900,
                 background: active ? '#2563eb' : '#f3f4f6',
                 color: active ? '#fff' : '#9ca3af',
-                borderRadius: 999, padding: '1px 6px',
+                borderRadius: '50%',
+                width: 20, height: 20,
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0,
               }}>{count}</span>
             </button>
           )
@@ -1629,14 +1632,14 @@ function SimilarSuburbs({ overallScore, scores }) {
                 </div>
 
                 {/* Score + band */}
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8 }}>
                   <span style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 28, fontWeight: 400, color: sb.color, lineHeight: 1 }}>
                     {s.score}
                   </span>
                   <span style={{
                     display: 'inline-flex', alignItems: 'center', gap: 4,
                     background: sb.bg, border: `1px solid ${sb.border}`,
-                    borderRadius: 999, padding: '2px 7px',
+                    borderRadius: 999, padding: '3px 11px',
                     fontSize: 10, fontWeight: 800, color: sb.color,
                   }}>
                     <span style={{ width: 4, height: 4, borderRadius: '50%', background: sb.color, flexShrink: 0 }} />
