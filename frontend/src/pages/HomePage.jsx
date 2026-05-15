@@ -588,7 +588,12 @@ export default function HomePage() {
               {error && <p className="search-error">{error}</p>}
             </div>
 
-            <p className="profile-label" id="profile-label">Your situation</p>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6, marginBottom: 0 }}>
+              <p className="profile-label" id="profile-label" style={{ margin: 0 }}>Your situation</p>
+              <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>
+                No match? Skip this and explore anyway.
+              </p>
+            </div>
 
             <div className="profile-row" role="radiogroup" aria-labelledby="profile-label">
               {PROFILES.map(({ key, title, icon, desc }) => (
