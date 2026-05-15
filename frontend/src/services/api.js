@@ -148,11 +148,17 @@ export async function searchLocalities(query) {
     `${API_BASE_URL}/api/search/localities?q=${encodeURIComponent(q)}`
   )
 
-  return results.map((item) => ({
-    ...item,
-    type: item.placeType || 'suburb',
-    displayName: item.fullAddress || item.name,
-  }))
+  return results.map((item) => {
+    const placeType = item.placeType || 'suburb'
+    const displayName =
+      placeType === 'postcode'
+        ? item.fullAddress ||
+          [item.locality, item.state ? `${item.state} ${item.postcode || ''}`.trim() : item.postcode]
+            .filter(Boolean)
+            .join(', ')
+        : item.fullAddress || item.name
+    return { ...item, type: placeType, displayName }
+  })
 }
 
 /**
@@ -168,11 +174,17 @@ export async function searchAddresses(query) {
     `${API_BASE_URL}/api/search/address?q=${encodeURIComponent(q)}`
   )
 
-  return results.map((item) => ({
-    ...item,
-    type: item.placeType || 'address',
-    displayName: item.fullAddress || item.name,
-  }))
+  return results.map((item) => {
+    const placeType = item.placeType || 'address'
+    const displayName =
+      placeType === 'postcode'
+        ? item.fullAddress ||
+          [item.locality, item.state ? `${item.state} ${item.postcode || ''}`.trim() : item.postcode]
+            .filter(Boolean)
+            .join(', ')
+        : item.fullAddress || item.name
+    return { ...item, type: placeType, displayName }
+  })
 }
 
 /**
