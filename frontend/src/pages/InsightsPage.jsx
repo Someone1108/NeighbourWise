@@ -1854,52 +1854,79 @@ export default function InsightsPage() {
               display: 'grid', gridTemplateColumns: '1fr 1.1fr', gap: 28, alignItems: 'center',
             }}>
 
-              {/* LEFT — location + massive score */}
+              {/* LEFT — location + animated circle gauge */}
               <div>
-                <p style={{ fontSize: 9, fontWeight: 900, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.28)', marginBottom: 10 }}>
+                <p style={{ fontSize: 9, fontWeight: 900, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.55)', marginBottom: 10 }}>
                   Liveability Insights · Melbourne
                 </p>
                 <h1 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 'clamp(20px, 2.8vw, 32px)', fontWeight: 400, color: '#fff', lineHeight: 1.0, margin: '0 0 1px', letterSpacing: '-0.3px' }}>
                   {locationName.split(',')[0] || locationName}
                 </h1>
-                <p style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 'clamp(13px, 1.8vw, 18px)', color: 'rgba(255,255,255,0.3)', fontStyle: 'italic', margin: '0 0 14px' }}>
+                <p style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 'clamp(13px, 1.8vw, 18px)', color: 'rgba(255,255,255,0.55)', fontStyle: 'italic', margin: '0 0 16px' }}>
                   VIC
                 </p>
 
-                {/* Massive score number */}
-                <div style={{ lineHeight: 1, marginBottom: 12 }}>
-                  <span className="nw-score-big" style={{
-                    fontFamily: "'DM Serif Display', Georgia, serif",
-                    fontSize: 'clamp(60px, 8.5vw, 92px)',
-                    fontWeight: 400, color: '#fff',
-                    lineHeight: 0.88, letterSpacing: '-4px',
-                    textShadow: '0 0 60px rgba(255,255,255,0.06)',
-                  }}>
-                    {loading ? <span style={{ color: 'rgba(255,255,255,0.15)' }}>—</span> : (overallScore ?? '–')}
-                  </span>
-                </div>
+                {/* Animated circle gauge */}
+                {(() => {
+                  const R = 52
+                  const circ = 2 * Math.PI * R
+                  const offset = (heroBarReady && overallScore != null) ? circ * (1 - overallScore / 100) : circ
+                  const gaugeColor = band?.color || '#f47c20'
+                  return (
+                    <svg width="136" height="136" viewBox="0 0 136 136" style={{ display: 'block', marginBottom: 16, overflow: 'visible' }} aria-hidden="true">
+                      {/* Track */}
+                      <circle cx="68" cy="68" r={R} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="9" />
+                      {/* Glow layer */}
+                      <circle cx="68" cy="68" r={R} fill="none"
+                        stroke={gaugeColor} strokeWidth="9"
+                        strokeLinecap="round" opacity="0.22"
+                        strokeDasharray={circ}
+                        strokeDashoffset={offset}
+                        transform="rotate(-90 68 68)"
+                        style={{ filter: 'blur(4px)', transition: `stroke-dashoffset 1.5s cubic-bezier(0.22, 1, 0.36, 1)` }}
+                      />
+                      {/* Main arc */}
+                      <circle cx="68" cy="68" r={R} fill="none"
+                        stroke={gaugeColor} strokeWidth="9"
+                        strokeLinecap="round"
+                        strokeDasharray={circ}
+                        strokeDashoffset={offset}
+                        transform="rotate(-90 68 68)"
+                        style={{ transition: `stroke-dashoffset 1.5s cubic-bezier(0.22, 1, 0.36, 1)` }}
+                      />
+                      {/* Score number */}
+                      <text x="68" y="62" textAnchor="middle" dominantBaseline="middle"
+                        fill="#fff" fontSize="38"
+                        fontFamily="'DM Serif Display', Georgia, serif" fontWeight="400">
+                        {loading ? '—' : (overallScore ?? '–')}
+                      </text>
+                      {/* Label */}
+                      <text x="68" y="84" textAnchor="middle"
+                        fill="rgba(255,255,255,0.5)" fontSize="9" fontWeight="800"
+                        letterSpacing="2" style={{ textTransform: 'uppercase' }}>
+                        OVERALL
+                      </text>
+                    </svg>
+                  )
+                })()}
 
-                {/* Band badge + label row */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap', marginBottom: 10 }}>
+                {/* One row: Good · 20 min range · profile */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   {band && !loading && (
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: band.bg, border: `1px solid ${band.border}`, borderRadius: 999, padding: '4px 11px' }}>
                       <div style={{ width: 6, height: 6, borderRadius: '50%', background: band.color }} aria-hidden="true" />
                       <span style={{ fontSize: 11, fontWeight: 800, color: band.color }}>{band.label}</span>
                     </div>
                   )}
-                  <span style={{ fontSize: 9, fontWeight: 800, color: 'rgba(255,255,255,0.25)', textTransform: 'uppercase', letterSpacing: '0.12em' }}>Liveability Score</span>
-                </div>
-
-                {/* Range + persona */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.36)', textTransform: 'uppercase', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>
+                  <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 13 }}>·</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.65)', textTransform: 'uppercase', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>
                     {rangeMinutes} min range
                   </span>
                   {profileLabel && (
                     <>
-                      <span style={{ color: 'rgba(255,255,255,0.16)', fontSize: 11 }}>·</span>
+                      <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 13 }}>·</span>
                       <span style={{ background: '#eff6ff', border: '1px solid #bfdbfe', color: '#2563eb', fontSize: 10, fontWeight: 800, padding: '2px 9px', borderRadius: 999, whiteSpace: 'nowrap' }}>
-                        Scored for {profileLabel}
+                        {profileLabel}
                       </span>
                     </>
                   )}
@@ -1907,7 +1934,7 @@ export default function InsightsPage() {
               </div>
 
               {/* RIGHT — category score rows */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 15 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
                 {CATEGORIES.map((key, i) => {
                   const cfg = CATEGORY_CONFIG[key]
                   const score = loading ? null : (scores?.[key] ?? null)
@@ -1916,23 +1943,23 @@ export default function InsightsPage() {
                   const scoreBand = score != null ? getScoreBand(score) : null
                   return (
                     <div key={key}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
-                        <span style={{ fontSize: 12 }} aria-hidden="true">{cfg.icon}</span>
-                        <span style={{ fontSize: 10, fontWeight: 800, color: 'rgba(255,255,255,0.48)', textTransform: 'uppercase', letterSpacing: '0.1em', flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 7 }}>
+                        <span style={{ fontSize: 15 }} aria-hidden="true">{cfg.icon}</span>
+                        <span style={{ fontSize: 12, fontWeight: 800, color: 'rgba(255,255,255,0.75)', textTransform: 'uppercase', letterSpacing: '0.1em', flex: 1 }}>
                           {cfg.label}
                         </span>
-                        <span style={{ fontSize: 21, fontWeight: 900, color: cfg.color, lineHeight: 1, letterSpacing: '-0.5px' }}
+                        <span style={{ fontSize: 23, fontWeight: 900, color: cfg.color, lineHeight: 1, letterSpacing: '-0.5px' }}
                           aria-label={`${cfg.label}: ${score ?? 'loading'}`}>
                           {score ?? '—'}
                         </span>
                         {scoreBand && (
-                          <span style={{ fontSize: 9, fontWeight: 800, background: scoreBand.bg, border: `1px solid ${scoreBand.border}`, borderRadius: 999, padding: '1px 7px', color: scoreBand.color, flexShrink: 0 }}>
+                          <span style={{ fontSize: 10, fontWeight: 800, background: scoreBand.bg, border: `1px solid ${scoreBand.border}`, borderRadius: 999, padding: '2px 9px', color: scoreBand.color, flexShrink: 0 }}>
                             {scoreBand.label}
                           </span>
                         )}
                       </div>
                       {/* Animated bar */}
-                      <div style={{ height: 4, borderRadius: 999, background: 'rgba(255,255,255,0.09)', overflow: 'hidden' }}>
+                      <div style={{ height: 7, borderRadius: 999, background: 'rgba(255,255,255,0.12)', overflow: 'hidden' }}>
                         <div style={{
                           height: '100%', borderRadius: 999, background: cfg.color,
                           width: (heroBarReady && score != null) ? `${score}%` : '0%',
@@ -1940,30 +1967,16 @@ export default function InsightsPage() {
                         }} />
                       </div>
                       {delta != null && (
-                        <p style={{ fontSize: 9, fontWeight: 700, marginTop: 3, color: delta >= 0 ? '#6ee7b7' : '#fca5a5' }}>
+                        <p style={{ fontSize: 10, fontWeight: 700, marginTop: 4, color: delta >= 0 ? '#6ee7b7' : '#fca5a5' }}>
                           {delta >= 0 ? '▲' : '▼'} {Math.abs(delta)} vs Melbourne benchmark
                         </p>
                       )}
                     </div>
                   )
                 })}
-                <p style={{ fontSize: 9, color: 'rgba(255,255,255,0.18)', lineHeight: 1.5, marginTop: 2, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.07)' }}>
-                  Benchmark: A {STATIC_SCORE_BENCHMARK.scores.accessibility} · S {STATIC_SCORE_BENCHMARK.scores.safety} · E {STATIC_SCORE_BENCHMARK.scores.environment} — 274 Melbourne localities
-                </p>
               </div>
             </div>
 
-            {/* Summary paragraph */}
-            {!loading && interpretationSummary && (
-              <p style={{
-                fontSize: 12, color: 'rgba(255,255,255,0.45)', lineHeight: 1.7,
-                marginTop: 18, paddingTop: 16,
-                borderTop: '1px solid rgba(255,255,255,0.07)',
-                fontWeight: 500, maxWidth: 600,
-              }}>
-                {interpretationSummary.verdict}
-              </p>
-            )}
           </div>
         </div>
 
