@@ -812,7 +812,7 @@ export default function ComparePage() {
                     onMouseEnter={e => { e.currentTarget.style.opacity = '0.92'; e.currentTarget.style.transform = 'translateY(-1px)' }}
                     onMouseLeave={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.transform = 'none' }}
                   >
-                    Recommend another suburb ▲
+                    Recommend another suburb
                   </button>
                 )}
 
