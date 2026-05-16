@@ -186,25 +186,44 @@ function buildSituationHighlights(profile, scores, indicators) {
     const park = findIndicator(indicators, 'accessibility', 'park')
     const schoolScore = Number(school?.score)
     const parkScore = Number(park?.score)
+    const strongestFamilySignal = [
+      {
+        key: 'environment',
+        value: environment,
+        text: 'This area works best for a family through outdoor comfort: green space, heat and air-quality signals are the most supportive part of the result, which helps with parks, walking and time outside',
+      },
+      {
+        key: 'safety',
+        value: safety,
+        text: 'This area works well for a family through its safety and comfort signal, which helps everyday trips feel more manageable',
+      },
+      {
+        key: 'accessibility',
+        value: accessibility,
+        text: 'This area works well for a family through everyday access, with local services, schools and parks doing more of the practical work',
+      },
+    ]
+      .filter((signal) => Number.isFinite(signal.value))
+      .sort((a, b) => b.value - a.value)[0]
     const accessPhrase =
       Number.isFinite(schoolScore) && Number.isFinite(parkScore)
         ? schoolScore >= 65 && parkScore >= 65
-          ? 'school and park access both look supportive for everyday family routines'
+          ? 'School and park access both look supportive for everyday family routines'
           : schoolScore >= 65
-            ? 'school access looks supportive, while park access is worth checking in more detail'
+            ? 'School access looks supportive, while park access is worth checking in more detail'
             : parkScore >= 65
-              ? 'park access looks supportive, while school access is worth checking in more detail'
-              : 'school and park access may need extra checking for everyday routines'
-        : 'school and park access are useful to check for everyday family routines'
+              ? 'Park access looks supportive, while school access is worth checking in more detail'
+              : 'School and park access look like the main everyday routine checks to verify'
+        : 'School and park access are useful checks for everyday family routines'
     const safetyPhrase = Number.isFinite(safety)
       ? safety >= 65
-        ? 'The safety signal also looks reassuring enough to keep this area in consideration.'
-        : 'The safety signal is the part to look at more carefully before deciding.'
-      : 'Safety context is unavailable for this area.'
+        ? 'The safety signal also looks reassuring enough to keep this area in consideration'
+        : 'The safety signal is the part to inspect more closely before deciding'
+      : 'Safety context is unavailable for this area'
 
     return {
       title: 'For a family household',
-      summary: 'For a family household, the key checks are school access, parks and safety.',
+      summary: strongestFamilySignal?.text || 'This area has some useful signals for family routines, especially when you compare schools, parks and safety together.',
       points: [
         accessPhrase,
         safetyPhrase,
@@ -271,7 +290,7 @@ const TARGET_COUNT_MAP = {
   hospital: 2,
   school: 3,
   park: 5,
-  dog_park: 3,
+  dog_park: 1,
 }
 
 const INDICATOR_WEIGHT_CONFIG = {
@@ -281,7 +300,7 @@ const INDICATOR_WEIGHT_CONFIG = {
   hospital: { distance: 0.7, count: 0.3 },
   school: { distance: 0.6, count: 0.4 },
   park: { distance: 0.5, count: 0.5 },
-  dog_park: { distance: 0.5, count: 0.5 },
+  dog_park: { distance: 0.3, count: 0.7 },
 }
 
 const TIME_DISTANCE_KM = { 10: 0.8, 20: 1.6, 30: 2.4 }

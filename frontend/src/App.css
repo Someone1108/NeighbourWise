@@ -904,8 +904,41 @@ body {
   width: 100%;
 }
 
-.nwSearchInput {
+.nwSearchControls {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
   width: 100%;
+}
+
+.nwSearchInput {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+}
+
+.nwSearchCancelButton {
+  flex: 0 0 auto;
+  border: 1px solid rgba(255, 255, 255, 0.52);
+  border-radius: 14px;
+  background: #ffffff;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 800;
+  padding: 0 18px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+  transition: background 0.18s ease, transform 0.18s ease;
+}
+
+.nwSearchCancelButton:hover {
+  background: #fff7ed;
+  transform: translateY(-1px);
+}
+
+.nwSearchCancelButton:focus-visible {
+  outline: 3px solid rgba(255, 255, 255, 0.5);
+  outline-offset: 2px;
 }
 
 .nwSearchStatus {
@@ -1006,7 +1039,6 @@ body {
 
 .nwComparePanel {
   min-height: 240px;
-  height: 240px;
   text-align: left;
   position: relative;
   display: flex;
@@ -1115,6 +1147,14 @@ body {
 .nwComparePanel--area2 .nwSearchInput {
   background: #ffffff;
   color: var(--text-dark);
+}
+
+.nwComparePanel--area1 .nwSearchCancelButton {
+  color: var(--accent-2);
+}
+
+.nwComparePanel--area1 .nwSearchCancelButton:hover {
+  background: #f0fdf4;
 }
 
 /* Focus ring: use white outline instead of orange on both coloured cards */
@@ -1580,7 +1620,7 @@ body {
 
 .vp-header {
   text-align: center;
-  max-width: 520px;
+  max-width: 760px;
   margin: 0 auto 48px;
 }
 
@@ -2183,6 +2223,14 @@ body {
 @media (max-width: 640px) {
   .hero-scroll {
     display: none;
+  }
+
+  .nwSearchControls {
+    flex-direction: column;
+  }
+
+  .nwSearchCancelButton {
+    min-height: 48px;
   }
 
   .vp-inner {

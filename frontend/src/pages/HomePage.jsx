@@ -332,7 +332,7 @@ export default function HomePage() {
             </h1>
 
             <p className="hero-subtitle hero-fade-in hero-fade-in-2">
-              Find out if a suburb suits your lifestyle before you commit. Scores for transport, safety and green space, tailored to you.
+              Everything you need to choose your suburb
             </p>
 
             <div className="hero-cta-row hero-fade-in hero-fade-in-3">
@@ -372,7 +372,7 @@ export default function HomePage() {
         <section id="value-prop" className="vp-section" aria-labelledby="vp-heading">
           <div className="vp-header">
             <p className="vp-header-label">What you get</p>
-            <h2 id="vp-heading">Everything you need to choose your suburb</h2>
+            <h2 id="vp-heading">Find out if a suburb suits your lifestyle before you commit. Scores for transport, safety and green space, tailored to you</h2>
           </div>
 
           <div className="vp-inner">
