@@ -72,11 +72,11 @@ const getLocalityByVicNamesId = async (vicnamesid) => {
 const getCoverageSuburbs = async () => {
   const sql = `
     select distinct
-      "LOCALITY" as name
-    from public.locality_polygon
-    where "LOCALITY" is not null
-      and trim("LOCALITY") <> ''
-    order by "LOCALITY" asc;
+      "PLACE_NAME" as name
+    from public.locality_point
+    where "PLACE_NAME" is not null
+      and trim("PLACE_NAME") <> ''
+    order by "PLACE_NAME" asc;
   `;
 
   const result = await pool.query(sql);
@@ -89,15 +89,18 @@ const getCoverageSuburbs = async () => {
 const getCoverageMap = async () => {
   const sql = `
     select
-      id,
-      "LOCALITY" as name,
+      lp.id,
+      lp."PLACE_NAME" as name,
+      st_asgeojson(lp.geom)::json as point_geometry,
       st_asgeojson(
-        st_simplifypreservetopology(geom, 0.00015)
-      )::json as geometry
-    from public.locality_polygon
-    where "LOCALITY" is not null
-      and trim("LOCALITY") <> ''
-    order by "LOCALITY" asc;
+        st_simplifypreservetopology(poly.geom, 0.00015)
+      )::json as polygon_geometry
+    from public.locality_point lp
+    left join public.locality_polygon poly
+      on upper(poly."LOCALITY") = upper(lp."PLACE_NAME")
+    where lp."PLACE_NAME" is not null
+      and trim(lp."PLACE_NAME") <> ''
+    order by lp."PLACE_NAME" asc;
   `;
 
   const result = await pool.query(sql);
@@ -105,14 +108,15 @@ const getCoverageMap = async () => {
   return {
     type: 'FeatureCollection',
     features: result.rows
-      .filter((row) => row.geometry)
+      .filter((row) => row.polygon_geometry || row.point_geometry)
       .map((row) => ({
         type: 'Feature',
         properties: {
           id: row.id,
           locality: row.name,
+          coverageGeometry: row.polygon_geometry ? 'polygon' : 'point',
         },
-        geometry: row.geometry,
+        geometry: row.polygon_geometry || row.point_geometry,
       })),
   };
 };

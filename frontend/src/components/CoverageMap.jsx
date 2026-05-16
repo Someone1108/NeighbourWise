@@ -21,11 +21,22 @@ function FitCoverageBounds({ data }) {
 }
 
 export default function CoverageMap({ data, loading, error, onRetry }) {
-  const coverageStyle = {
-    color: '#8b5cf6',
-    weight: 1.2,
-    fillColor: '#8b5cf6',
-    fillOpacity: 0.02,
+  const coverageStyle = (feature) => {
+    if (feature?.geometry?.type === 'Point') {
+      return {
+        color: '#6d28d9',
+        weight: 1,
+        fillColor: '#8b5cf6',
+        fillOpacity: 0.75,
+      }
+    }
+
+    return {
+      color: '#8b5cf6',
+      weight: 1.2,
+      fillColor: '#8b5cf6',
+      fillOpacity: 0.02,
+    }
   }
 
   if (loading) {
@@ -101,6 +112,15 @@ export default function CoverageMap({ data, loading, error, onRetry }) {
         <GeoJSON
           data={data}
           style={coverageStyle}
+          pointToLayer={(_feature, latlng) => (
+            L.circleMarker(latlng, {
+              radius: 3,
+              color: '#6d28d9',
+              weight: 1,
+              fillColor: '#8b5cf6',
+              fillOpacity: 0.75,
+            })
+          )}
           interactive={false}
         />
 

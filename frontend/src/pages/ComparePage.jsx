@@ -5,6 +5,7 @@ import LoadingOverlay from '../components/LoadingOverlay.jsx'
 import ChangeConditionsModal from '../components/ChangeConditionsModal.jsx'
 import CompareReplaceModal from '../components/CompareReplaceModal.jsx'
 import {
+  getCensusProfileForLocation,
   getLiveabilityScore,
   searchAddresses,
   searchLocalities,
@@ -83,6 +84,263 @@ function labelForCategory(key) {
   return CATEGORY_META[key]?.label || key
 }
 
+function hasSituationProfile(profile) {
+  return Boolean(profile?.familyWithChildren || profile?.elderly || profile?.petOwner)
+}
+
+function getSharedCompareProfile(firstArea, secondArea) {
+  if (hasSituationProfile(firstArea?.profile)) return firstArea.profile
+  if (hasSituationProfile(secondArea?.profile)) return secondArea.profile
+  return firstArea?.profile || secondArea?.profile || {}
+}
+
+const ACCESSIBILITY_FACTOR_LABELS = {
+  bus_stop: 'Bus stop coverage',
+  train_station: 'Train station access',
+  supermarket: 'Supermarket access',
+  hospital: 'Hospital access',
+  school: 'School access',
+  park: 'Park access',
+}
+
+const SAFETY_FACTOR_LABELS = {
+  crime: 'Crime context',
+  activity: 'Street activity',
+  noise: 'Noise and traffic comfort',
+  transportComfort: 'Public transport stop comfort',
+  zoning: 'Zoning safety',
+}
+
+const ENVIRONMENT_FACTOR_LABELS = {
+  green: 'Green coverage',
+  heat: 'Urban heat comfort',
+  zoning: 'Environmental zoning comfort',
+  airQuality: 'Air quality',
+}
+
+function formatCompareNumber(value) {
+  if (value === null || value === undefined || value === '') return 'Unavailable'
+  const n = Number(value)
+  if (!Number.isFinite(n)) return 'Unavailable'
+  return Math.round(n).toLocaleString('en-AU')
+}
+
+function formatComparePercent(value) {
+  if (value === null || value === undefined || value === '') return 'Unavailable'
+  const n = Number(value)
+  if (!Number.isFinite(n)) return 'Unavailable'
+  return `${Math.round(n * 10) / 10}%`
+}
+
+function weeklyToMonthly(value) {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return null
+  return n * 52 / 12
+}
+
+function formatCompareMoney(value, suffix = '') {
+  if (value === null || value === undefined || value === '') return 'Unavailable'
+  const n = Number(value)
+  if (!Number.isFinite(n)) return 'Unavailable'
+  return `$${Math.round(n).toLocaleString('en-AU')}${suffix}`
+}
+
+function buildScoreFactors(scoreData) {
+  const breakdown = scoreData?.breakdown || {}
+  const accessibilityBreakdown = breakdown.accessibility?.breakdown || {}
+  const safetyScores = breakdown.safety?.scores || {}
+  const environmentScores = breakdown.environment?.scores || {}
+
+  const accessibility = Object.entries(accessibilityBreakdown).map(([key, item]) => ({
+    category: 'Accessibility',
+    name: ACCESSIBILITY_FACTOR_LABELS[key] || key.replaceAll('_', ' '),
+    score: Number(item?.score),
+  }))
+
+  const safety = Object.entries(SAFETY_FACTOR_LABELS).map(([key, name]) => ({
+    category: 'Safety & Comfort',
+    name,
+    score: Number(safetyScores[key]),
+  }))
+
+  const environment = Object.entries(ENVIRONMENT_FACTOR_LABELS).map(([key, name]) => ({
+    category: 'Environment',
+    name,
+    score: Number(environmentScores[key]),
+  }))
+
+  return [...accessibility, ...safety, ...environment]
+    .filter((factor) => Number.isFinite(factor.score))
+    .map((factor) => ({ ...factor, score: Math.round(factor.score) }))
+}
+
+function factorPhrase(factor) {
+  return `${factor.name} (${factor.score}/100)`
+}
+
+function findScoreFactor(scoreData, namePart) {
+  const needle = String(namePart).toLowerCase()
+  return buildScoreFactors(scoreData).find((factor) =>
+    String(factor.name || '').toLowerCase().includes(needle)
+  )
+}
+
+function describeFactor(factor, fallbackLabel) {
+  if (!factor) return `${fallbackLabel} unavailable`
+  return factorPhrase(factor)
+}
+
+function scoreStatus(score) {
+  const value = Number(score)
+  if (!Number.isFinite(value)) return 'Unavailable'
+  if (value >= 75) return 'Strong'
+  if (value >= 60) return 'Good'
+  if (value >= 45) return 'Mixed'
+  return 'Limited'
+}
+
+function buildSituationScoreCard(factor, fallbackLabel) {
+  return {
+    label: factor?.name || fallbackLabel,
+    value: Number.isFinite(Number(factor?.score)) ? `${Math.round(Number(factor.score))}/100` : 'Unavailable',
+    status: scoreStatus(factor?.score),
+  }
+}
+
+function buildSituationInsightSummary({ scoreData, censusData, profile }) {
+  const censusProfile = censusData?.profile || {}
+  const factors = buildScoreFactors(scoreData)
+  if (!factors.length) {
+    return {
+      label: 'Situation context',
+      text: 'Situation-specific score signals are unavailable for this area, so use the Census context below as the main comparison guide.',
+      panelTitle: 'Local context',
+      panelText: 'Detailed score signals are unavailable.',
+      stats: [],
+      scoreCards: [],
+    }
+  }
+
+  if (profile?.familyWithChildren) {
+    const text = `For a family household, the useful checks are ${describeFactor(findScoreFactor(scoreData, 'school'), 'school access')}, ${describeFactor(findScoreFactor(scoreData, 'park'), 'park access')} and ${describeFactor(findScoreFactor(scoreData, 'crime'), 'crime context')}. Census context adds that ${formatComparePercent(censusProfile.familyHouseholdsPct)} of households are family households, ${formatComparePercent(censusProfile.age0To14Pct)} of residents are aged 0-14 and the average household size is ${censusProfile.averageHouseholdSize ?? 'Unavailable'}.`
+    return {
+      label: 'Relevant for families',
+      text,
+      panelTitle: 'Family context',
+      panelText: `${formatComparePercent(censusProfile.familyHouseholdsPct)} of households are family households, ${formatComparePercent(censusProfile.age0To14Pct)} of residents are aged 0-14 and average household size is ${censusProfile.averageHouseholdSize ?? 'Unavailable'}.`,
+      stats: [
+        { label: 'Family households', value: formatComparePercent(censusProfile.familyHouseholdsPct) },
+        { label: 'Children 0-14', value: formatComparePercent(censusProfile.age0To14Pct) },
+        { label: 'Household size', value: censusProfile.averageHouseholdSize ?? 'Unavailable' },
+      ],
+      scoreCards: [
+        buildSituationScoreCard(findScoreFactor(scoreData, 'school'), 'School access'),
+        buildSituationScoreCard(findScoreFactor(scoreData, 'park'), 'Park access'),
+        buildSituationScoreCard(findScoreFactor(scoreData, 'crime'), 'Crime context'),
+      ],
+    }
+  }
+
+  if (profile?.elderly) {
+    const text = `For an older resident, the useful checks are ${describeFactor(findScoreFactor(scoreData, 'hospital'), 'hospital access')}, ${describeFactor(findScoreFactor(scoreData, 'bus stop'), 'bus stop coverage')} and ${describeFactor(findScoreFactor(scoreData, 'train'), 'train station access')}. Census context adds that ${formatComparePercent(censusProfile.age65PlusPct)} of residents are aged 65+, ${formatComparePercent(censusProfile.needForAssistancePct)} report needing assistance, ${formatComparePercent(censusProfile.lonePersonHouseholdsPct)} of households are lone-person households and ${formatComparePercent(censusProfile.noCarHouseholdsPct)} have no car.`
+    return {
+      label: 'Relevant for older residents',
+      text,
+      panelTitle: 'Older resident context',
+      panelText: `${formatComparePercent(censusProfile.age65PlusPct)} of residents are aged 65+, ${formatComparePercent(censusProfile.needForAssistancePct)} report needing assistance and ${formatComparePercent(censusProfile.noCarHouseholdsPct)} of households have no car.`,
+      stats: [
+        { label: 'Residents 65+', value: formatComparePercent(censusProfile.age65PlusPct) },
+        { label: 'Need assistance', value: formatComparePercent(censusProfile.needForAssistancePct) },
+        { label: 'Lone-person households', value: formatComparePercent(censusProfile.lonePersonHouseholdsPct) },
+        { label: 'No-car households', value: formatComparePercent(censusProfile.noCarHouseholdsPct) },
+      ],
+      scoreCards: [
+        buildSituationScoreCard(findScoreFactor(scoreData, 'hospital'), 'Hospital access'),
+        buildSituationScoreCard(findScoreFactor(scoreData, 'bus stop'), 'Bus stop coverage'),
+        buildSituationScoreCard(findScoreFactor(scoreData, 'train'), 'Train station access'),
+      ],
+    }
+  }
+
+  if (profile?.petOwner) {
+    const text = `For a pet owner, the useful checks are ${describeFactor(findScoreFactor(scoreData, 'park'), 'park access')}, ${describeFactor(findScoreFactor(scoreData, 'green'), 'green coverage')} and local housing flexibility. Census context adds that ${formatComparePercent(censusProfile.rentersPct)} of households rent, ${formatComparePercent(censusProfile.ownerOccupiedPct)} are owner-occupied and the average household size is ${censusProfile.averageHouseholdSize ?? 'Unavailable'}.`
+    return {
+      label: 'Relevant for pet owners',
+      text,
+      panelTitle: 'Pet owner context',
+      panelText: `${formatComparePercent(censusProfile.rentersPct)} of households rent, ${formatComparePercent(censusProfile.ownerOccupiedPct)} are owner-occupied and average household size is ${censusProfile.averageHouseholdSize ?? 'Unavailable'}.`,
+      stats: [
+        { label: 'Renters', value: formatComparePercent(censusProfile.rentersPct) },
+        { label: 'Owner-occupied', value: formatComparePercent(censusProfile.ownerOccupiedPct) },
+        { label: 'Household size', value: censusProfile.averageHouseholdSize ?? 'Unavailable' },
+      ],
+      scoreCards: [
+        buildSituationScoreCard(findScoreFactor(scoreData, 'park'), 'Park access'),
+        buildSituationScoreCard(findScoreFactor(scoreData, 'green'), 'Green coverage'),
+        buildSituationScoreCard(findScoreFactor(scoreData, 'supermarket'), 'Supermarket access'),
+      ],
+    }
+  }
+
+  const strongestCategory = CATEGORY_KEYS
+    .map((key) => ({ label: labelForCategory(key), score: Number(scoreData?.scores?.[key]) }))
+    .filter((item) => Number.isFinite(item.score))
+    .sort((a, b) => b.score - a.score)[0]
+
+  const text = `For a general lifestyle comparison, ${strongestCategory ? `${strongestCategory.label.toLowerCase()} is the strongest score signal (${Math.round(strongestCategory.score)}/100). ` : ''}The Census context is also important: median age is ${censusProfile.medianAge ?? 'Unavailable'}, ${formatComparePercent(censusProfile.rentersPct)} of households rent and ${formatComparePercent(censusProfile.publicTransportToWorkPct)} of workers use public transport to work.`
+  return {
+    label: 'Lifestyle context',
+    text,
+    panelTitle: 'General context',
+    panelText: `Median age is ${censusProfile.medianAge ?? 'Unavailable'}, ${formatComparePercent(censusProfile.rentersPct)} of households rent and ${formatComparePercent(censusProfile.publicTransportToWorkPct)} of workers use public transport to work.`,
+    stats: [
+      { label: 'Median age', value: censusProfile.medianAge ?? 'Unavailable' },
+      { label: 'Renters', value: formatComparePercent(censusProfile.rentersPct) },
+      { label: 'Public transport to work', value: formatComparePercent(censusProfile.publicTransportToWorkPct) },
+    ],
+    scoreCards: [
+      buildSituationScoreCard(findScoreFactor(scoreData, 'bus stop'), 'Bus stop coverage'),
+      buildSituationScoreCard(findScoreFactor(scoreData, 'crime'), 'Crime context'),
+      buildSituationScoreCard(findScoreFactor(scoreData, 'air quality'), 'Air quality'),
+    ],
+  }
+}
+
+function buildCensusInsightSummary(censusData) {
+  if (!censusData?.available) {
+    return {
+      snapshot: 'Census profile unavailable for this location.',
+      housing: 'Housing and ownership context unavailable.',
+      transport: 'Transport behaviour unavailable.',
+      stats: [],
+    }
+  }
+
+  const profile = censusData.profile || {}
+  const rentMonthly = profile.medianRentMonthly ?? weeklyToMonthly(profile.medianRentWeekly)
+
+  return {
+    snapshot: `The Census profile shows a population of ${formatCompareNumber(profile.totalPopulation)}, a median age of ${profile.medianAge ?? 'Unavailable'}, ${formatComparePercent(profile.familyHouseholdsPct)} family households and ${formatComparePercent(profile.age65PlusPct)} residents aged 65 or over.`,
+    housing: `${formatComparePercent(profile.rentersPct)} of households rent. Median rent is ${formatCompareMoney(rentMonthly, ' / month')}, while the median mortgage repayment is ${formatCompareMoney(profile.medianMortgageMonthly, ' / month')}.`,
+    transport: `${formatComparePercent(profile.publicTransportToWorkPct)} of workers use public transport to work, ${formatComparePercent(profile.carToWorkPct)} travel by car and ${formatComparePercent(profile.noCarHouseholdsPct)} of households have no car.`,
+    stats: [
+      { label: 'Population', value: formatCompareNumber(profile.totalPopulation) },
+      { label: 'Median age', value: profile.medianAge ?? 'Unavailable' },
+      { label: 'Renters', value: formatComparePercent(profile.rentersPct) },
+      { label: 'Median rent', value: formatCompareMoney(rentMonthly, ' / month') },
+      { label: 'Median mortgage', value: formatCompareMoney(profile.medianMortgageMonthly, ' / month') },
+      { label: 'Public transport', value: formatComparePercent(profile.publicTransportToWorkPct) },
+    ],
+  }
+}
+
+function buildCompareInsights({ scoreData, censusData, profile }) {
+  return {
+    situation: buildSituationInsightSummary({ scoreData, censusData, profile }),
+    census: buildCensusInsightSummary(censusData),
+  }
+}
+
 function getLocationLabel(item) {
   return (
     item?.displayName ||
@@ -91,6 +349,22 @@ function getLocationLabel(item) {
     item?.name ||
     ''
   )
+}
+
+function getCensusLookupLocation(area) {
+  const selected = area?.selectedLocation || {}
+  return {
+    ...selected,
+    ...area,
+    name: selected.name || area?.name || area?.locationName || area?.displayName,
+    displayName: selected.displayName || area?.displayName || area?.locationName || area?.name,
+    fullAddress: selected.fullAddress || area?.fullAddress || '',
+    placeType: selected.placeType || selected.type || area?.placeType || area?.type || 'suburb',
+    type: selected.type || selected.placeType || area?.type || area?.placeType || 'suburb',
+    postcode: selected.postcode || area?.postcode || null,
+    lat: selected.lat ?? area?.lat,
+    lng: selected.lng ?? area?.lng,
+  }
 }
 
 function isPostcodeQuery(value) {
@@ -117,6 +391,176 @@ function miniProgress(score, outOf = 100, ready = true, side = 'left') {
           transition: 'transform 1s cubic-bezier(0.22, 1, 0.36, 1)',
         }}
       />
+    </div>
+  )
+}
+
+function CompareInsightParagraph({ children }) {
+  return (
+    <p style={{ fontSize: 13, lineHeight: 1.55, color: '#334155', margin: 0 }}>
+      {children}
+    </p>
+  )
+}
+
+function CompareStatGrid({ stats, columns = 'repeat(auto-fit, minmax(130px, 1fr))' }) {
+  if (!stats?.length) return null
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: columns, gap: 8, marginTop: 10 }}>
+      {stats.map((stat) => (
+        <div key={stat.label} style={{
+          background: '#fff',
+          border: '1px solid #bfdbfe',
+          borderRadius: 10,
+          padding: '10px 12px',
+          minHeight: 66,
+        }}>
+          <p style={{ fontSize: 9, fontWeight: 900, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#1e40af', marginBottom: 6 }}>
+            {stat.label}
+          </p>
+          <p style={{ fontSize: 17, fontWeight: 900, color: '#0f172a', lineHeight: 1.15 }}>
+            {stat.value}
+          </p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function CompareScoreCardGrid({ cards }) {
+  if (!cards?.length) return null
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8, marginTop: 10 }}>
+      {cards.map((card) => (
+        <div key={card.label} style={{
+          background: '#fff',
+          border: '1px solid #bfdbfe',
+          borderRadius: 10,
+          padding: '10px 12px',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+            <p style={{ fontSize: 12, fontWeight: 900, color: '#1e3a8a', lineHeight: 1.25 }}>
+              {card.label}
+            </p>
+            <p style={{ fontSize: 11, fontWeight: 900, color: '#2563eb', whiteSpace: 'nowrap' }}>
+              {card.value}
+            </p>
+          </div>
+          <p style={{ fontSize: 12, fontWeight: 800, color: '#1e40af' }}>
+            {card.status}
+          </p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function CompareContextCard({ title, children }) {
+  return (
+    <div style={{
+      background: '#fff',
+      border: '1px solid #e5e7eb',
+      borderRadius: 12,
+      padding: '14px 16px',
+    }}>
+      <p style={{ fontSize: 14, fontWeight: 900, color: '#047857', marginBottom: 8 }}>
+        {title}
+      </p>
+      <CompareInsightParagraph>{children}</CompareInsightParagraph>
+    </div>
+  )
+}
+
+function CompareInsightCell({ insight }) {
+  if (!insight) {
+    return (
+      <p style={{ fontSize: 13, color: '#64748b', lineHeight: 1.5 }}>
+        Insight context is unavailable.
+      </p>
+    )
+  }
+
+  return (
+    <div style={{ display: 'grid', gap: 14 }}>
+      <div style={{
+        background: '#ecfdf5',
+        border: '1px solid #a7f3d0',
+        borderLeft: '4px solid #0f766e',
+        borderRadius: 12,
+        padding: '14px 16px',
+      }}>
+        <p style={{ fontSize: 11, fontWeight: 900, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#047857', marginBottom: 8 }}>
+          {insight.situation.label}
+        </p>
+        <p style={{ fontSize: 13, lineHeight: 1.6, color: '#064e3b', margin: 0, fontWeight: 650 }}>
+          {insight.situation.text}
+        </p>
+      </div>
+
+      <div style={{
+        background: '#eff6ff',
+        border: '1px solid #bfdbfe',
+        borderLeft: '4px solid #2563eb',
+        borderRadius: 12,
+        padding: '14px 16px',
+      }}>
+        <p style={{ fontSize: 11, fontWeight: 900, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#1d4ed8', marginBottom: 8 }}>
+          {insight.situation.panelTitle}
+        </p>
+        <p style={{ fontSize: 13, lineHeight: 1.55, color: '#1e3a8a', margin: 0, fontWeight: 700 }}>
+          {insight.situation.panelText}
+        </p>
+        <CompareStatGrid stats={insight.situation.stats} />
+        <CompareScoreCardGrid cards={insight.situation.scoreCards} />
+      </div>
+
+      <CompareStatGrid stats={insight.census.stats} columns="repeat(auto-fit, minmax(120px, 1fr))" />
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 10 }}>
+        <CompareContextCard title="Census snapshot">
+          {insight.census.snapshot}
+        </CompareContextCard>
+        <CompareContextCard title="Housing">
+          {insight.census.housing}
+        </CompareContextCard>
+        <CompareContextCard title="Transport behaviour">
+          {insight.census.transport}
+        </CompareContextCard>
+      </div>
+    </div>
+  )
+}
+
+function CompareInsightsTable({ data }) {
+  return (
+    <div style={{ marginTop: 18 }}>
+      <div style={{ marginBottom: 10 }}>
+        <p style={{ fontSize: 10, fontWeight: 900, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#64748b', marginBottom: 4 }}>
+          Key comparison insights
+        </p>
+        <p style={{ fontSize: 13, color: '#64748b', margin: 0, lineHeight: 1.5 }}>
+          Situation-specific context and Census signals from each area, side by side.
+        </p>
+      </div>
+
+      <table className="nwCompareTable" aria-label="Key comparison insights" style={{ marginTop: 0 }}>
+        <thead>
+          <tr>
+            <th style={{ width: '50%' }} title={data.area1}>{data.area1}</th>
+            <th style={{ width: '50%' }} title={data.area2}>{data.area2}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style={{ verticalAlign: 'top', padding: '18px 20px' }}>
+              <CompareInsightCell insight={data.insights?.[0]} />
+            </td>
+            <td style={{ verticalAlign: 'top', padding: '18px 20px' }}>
+              <CompareInsightCell insight={data.insights?.[1]} />
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   )
 }
@@ -320,22 +764,34 @@ export default function ComparePage() {
 
     const firstTime = safeRangeMinutes(firstArea.rangeMinutes)
     const secondTime = safeRangeMinutes(activeSecondArea.rangeMinutes ?? firstArea.rangeMinutes)
+    const comparisonProfile = getSharedCompareProfile(firstArea, activeSecondArea)
 
-    Promise.all([
-      getLiveabilityScore({
-        lat: firstLat,
-        lng: firstLng,
-        time: firstTime,
-        persona: firstArea.profile || 'default',
-      }),
-      getLiveabilityScore({
-        lat: secondLat,
-        lng: secondLng,
-        time: secondTime,
-        persona: activeSecondArea.profile || firstArea.profile || 'default',
-      }),
-    ])
-      .then(([r1, r2]) => {
+    const firstScoreRequest = getLiveabilityScore({
+      lat: firstLat,
+      lng: firstLng,
+      time: firstTime,
+      persona: comparisonProfile || 'default',
+    })
+
+    const secondScoreRequest = getLiveabilityScore({
+      lat: secondLat,
+      lng: secondLng,
+      time: secondTime,
+      persona: comparisonProfile || 'default',
+    })
+
+    const firstCensusRequest = getCensusProfileForLocation(getCensusLookupLocation(firstArea)).catch((err) => {
+      console.error('Compare first Census load failed:', err)
+      return null
+    })
+
+    const secondCensusRequest = getCensusProfileForLocation(getCensusLookupLocation(activeSecondArea)).catch((err) => {
+      console.error('Compare second Census load failed:', err)
+      return null
+    })
+
+    Promise.all([firstScoreRequest, secondScoreRequest, firstCensusRequest, secondCensusRequest])
+      .then(([r1, r2, census1, census2]) => {
         if (cancelled) return
 
         const scores = {
@@ -381,6 +837,10 @@ export default function ComparePage() {
           overall1,
           overall2,
           scores,
+          insights: [
+            buildCompareInsights({ scoreData: r1, censusData: census1, profile: comparisonProfile }),
+            buildCompareInsights({ scoreData: r2, censusData: census2, profile: comparisonProfile }),
+          ],
           recommendation,
         })
       })
@@ -511,6 +971,7 @@ export default function ComparePage() {
         ? 2
         : 0
     : 0
+  const sharedCompareProfile = getSharedCompareProfile(firstArea, activeSecondArea)
 
 
   function renderAreaPanel(area, index) {
@@ -727,7 +1188,7 @@ export default function ComparePage() {
             <div className="nwCompareScoreSummary">
               <div
                 className="nwCompareScoreBox"
-                style={winner === 1 ? { borderColor: 'var(--accent-2)', background: 'var(--teal-bg)' } : {}}
+                style={{ textAlign: 'right', ...(winner === 1 ? { borderColor: 'var(--accent-2)', background: 'var(--teal-bg)' } : {}) }}
               >
                 {winner === 1 && (
                   <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--accent-2)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>
@@ -757,9 +1218,9 @@ export default function ComparePage() {
             <table className="nwCompareTable" aria-label="Comparison table">
               <thead>
                 <tr>
-                  <th style={{ width: '36%', textAlign: 'right' }} title={data.area1}>{shortLabel(data.area1, 22)}</th>
-                  <th style={{ width: '28%', textAlign: 'center' }}>Category</th>
-                  <th style={{ width: '36%', textAlign: 'left' }} title={data.area2}>{shortLabel(data.area2, 22)}</th>
+                  <th style={{ width: '42%', textAlign: 'right' }} title={data.area1}>{shortLabel(data.area1, 22)}</th>
+                  <th style={{ width: '16%', textAlign: 'center' }}>Category</th>
+                  <th style={{ width: '42%', textAlign: 'left' }} title={data.area2}>{shortLabel(data.area2, 22)}</th>
                 </tr>
               </thead>
               <tbody>
@@ -778,7 +1239,7 @@ export default function ComparePage() {
                         {miniProgress(s1, 100, tableReady, 'left')}
                       </td>
                       {/* CENTRE — icon left + bold label right, horizontal */}
-                      <td style={{ textAlign: 'center', verticalAlign: 'middle', padding: '14px 8px' }}>
+                      <td style={{ textAlign: 'center', verticalAlign: 'middle', padding: '14px 6px' }}>
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                           <span style={{
                             width: 32, height: 32, borderRadius: 9,
@@ -805,6 +1266,8 @@ export default function ComparePage() {
                 })}
               </tbody>
             </table>
+
+            <CompareInsightsTable data={data} />
 
             <div
               className="nwCompareRecommendation"
@@ -1124,7 +1587,7 @@ export default function ComparePage() {
       {showConditionsModal && (
         <ChangeConditionsModal
           rangeMinutes={firstArea?.rangeMinutes ?? 20}
-          profile={firstArea?.profile ?? {}}
+          profile={sharedCompareProfile}
           onSave={({ rangeMinutes: newRange, profile: newProfile }) => {
             // Apply the new range and profile to all compare list items
             const updated = compareList.map(item => ({
