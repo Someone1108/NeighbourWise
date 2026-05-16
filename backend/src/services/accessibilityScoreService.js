@@ -10,7 +10,7 @@ const TARGET_COUNT_MAP = {
   hospital: 2,
   school: 3,
   park: 5,
-  dog_park: 3
+  dog_park: 1
 };
 
 // 🎯 distance vs count 權重
@@ -21,7 +21,7 @@ const INDICATOR_WEIGHT_CONFIG = {
   hospital: { distance: 0.7, count: 0.3 },
   school: { distance: 0.6, count: 0.4 },
   park: { distance: 0.5, count: 0.5 },
-  dog_park: { distance: 0.5, count: 0.5 }
+  dog_park: { distance: 0.3, count: 0.7 }
 };
 
 // 🎯 persona 權重（Accessibility內）

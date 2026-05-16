@@ -155,6 +155,29 @@ const searchAddresses = async (query) => {
     return results;
   };
 
+  const getContextValue = (feature, keys) => {
+    const context = feature.properties?.context;
+
+    if (context && !Array.isArray(context) && typeof context === 'object') {
+      for (const key of keys) {
+        const item = context[key];
+        const value = item?.name || item?.text || item?.short_code || item;
+        if (typeof value === 'string' && value.trim()) return value.trim();
+      }
+    }
+
+    const legacyContext = feature.context || [];
+    for (const item of legacyContext) {
+      const id = String(item?.id || '').toLowerCase();
+      if (keys.some((key) => id.startsWith(`${key}.`))) {
+        const value = item?.text || item?.name;
+        if (typeof value === 'string' && value.trim()) return value.trim();
+      }
+    }
+
+    return null;
+  };
+
   const response = await axios.get(url, {
     params: {
       q: mapboxQuery,
@@ -187,7 +210,9 @@ const searchAddresses = async (query) => {
       lng: Number(feature.geometry?.coordinates?.[0]),
       placeType: feature.properties?.feature_type || 'address',
       source: 'mapbox',
-      postcode: isPostcodeQuery ? trimmedQuery : null,
+      locality: getContextValue(feature, ['locality', 'place', 'district']),
+      suburb: getContextValue(feature, ['locality', 'place', 'district']),
+      postcode: getContextValue(feature, ['postcode']) || (isPostcodeQuery ? trimmedQuery : null),
     }));
 
   return dedupeAddresses(mappedResults).slice(0, 5);

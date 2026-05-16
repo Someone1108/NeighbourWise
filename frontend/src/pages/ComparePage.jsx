@@ -273,12 +273,21 @@ function buildSituationInsightSummary({ scoreData, censusData, profile }) {
   }
 
   if (profile?.petOwner) {
-    const text = `For a pet owner, the useful checks are ${describeFactor(findScoreFactor(scoreData, 'park'), 'park access')}, ${describeFactor(findScoreFactor(scoreData, 'green'), 'green coverage')} and local housing flexibility. Census context adds that ${formatComparePercent(censusProfile.rentersPct)} of households rent, ${formatComparePercent(censusProfile.ownerOccupiedPct)} are owner-occupied and the average household size is ${censusProfile.averageHouseholdSize ?? 'Unavailable'}.`
+    const hasHousingContext = censusData?.available && (
+      censusProfile.rentersPct != null ||
+      censusProfile.ownerOccupiedPct != null ||
+      censusProfile.averageHouseholdSize != null
+    )
+    const text = hasHousingContext
+      ? `For a pet owner, the useful checks are ${describeFactor(findScoreFactor(scoreData, 'park'), 'park access')}, ${describeFactor(findScoreFactor(scoreData, 'green'), 'green coverage')} and local housing flexibility. Census context adds that ${formatComparePercent(censusProfile.rentersPct)} of households rent, ${formatComparePercent(censusProfile.ownerOccupiedPct)} are owner-occupied and the average household size is ${censusProfile.averageHouseholdSize ?? 'Unavailable'}.`
+      : `For a pet owner, the useful checks are ${describeFactor(findScoreFactor(scoreData, 'park'), 'park access')}, ${describeFactor(findScoreFactor(scoreData, 'green'), 'green coverage')} and local housing flexibility. Census housing context is unavailable for this location.`
     return {
       label: 'Relevant for pet owners',
       text,
       panelTitle: 'Pet owner context',
-      panelText: `${formatComparePercent(censusProfile.rentersPct)} of households rent, ${formatComparePercent(censusProfile.ownerOccupiedPct)} are owner-occupied and average household size is ${censusProfile.averageHouseholdSize ?? 'Unavailable'}.`,
+      panelText: hasHousingContext
+        ? `${formatComparePercent(censusProfile.rentersPct)} of households rent, ${formatComparePercent(censusProfile.ownerOccupiedPct)} are owner-occupied and average household size is ${censusProfile.averageHouseholdSize ?? 'Unavailable'}.`
+        : 'Census housing context is unavailable for this location.',
       stats: [
         { label: 'Renters', value: formatComparePercent(censusProfile.rentersPct) },
         { label: 'Owner-occupied', value: formatComparePercent(censusProfile.ownerOccupiedPct) },
@@ -361,15 +370,75 @@ function getLocationLabel(item) {
   )
 }
 
+function inferCompareSuburbFromAddress(value) {
+  const text = String(value || '').trim()
+  if (!text) return ''
+
+  const commaMatch = text.match(/,\s*([^,]+?)\s+(?:VIC|Victoria)\s+\d{4}\b/i)
+  if (commaMatch?.[1]) return commaMatch[1].trim()
+
+  const streetTypes = [
+    'avenue',
+    'ave',
+    'boulevard',
+    'blvd',
+    'court',
+    'ct',
+    'drive',
+    'dr',
+    'lane',
+    'ln',
+    'parade',
+    'pde',
+    'place',
+    'pl',
+    'road',
+    'rd',
+    'street',
+    'st',
+    'terrace',
+    'tce',
+    'way',
+  ].join('|')
+  const streetMatch = text.match(new RegExp(`\\b(?:${streetTypes})\\b\\s+(.+?)\\s+(?:VIC|Victoria)\\s+\\d{4}\\b`, 'i'))
+  if (!streetMatch?.[1]) return ''
+
+  return streetMatch[1].trim()
+}
+
 function getCensusLookupLocation(area) {
   const selected = area?.selectedLocation || {}
+  const displayName = selected.displayName || area?.displayName || area?.locationName || area?.name
+  const fullAddress = selected.fullAddress || area?.fullAddress || ''
+  const placeType = selected.placeType || selected.type || area?.placeType || area?.type || 'suburb'
+  const inferredSuburb =
+    selected.suburb ||
+    selected.locality ||
+    area?.suburb ||
+    area?.locality ||
+    inferCompareSuburbFromAddress(fullAddress || displayName)
+
+  if (!['suburb', 'locality', 'postcode'].includes(placeType) && inferredSuburb) {
+    return {
+      name: inferredSuburb,
+      displayName: inferredSuburb,
+      placeType: 'suburb',
+      type: 'suburb',
+      postcode: selected.postcode || area?.postcode || null,
+      lat: selected.lat ?? area?.lat,
+      lng: selected.lng ?? area?.lng,
+    }
+  }
+
   return {
     ...selected,
     ...area,
     name: selected.name || area?.name || area?.locationName || area?.displayName,
-    displayName: selected.displayName || area?.displayName || area?.locationName || area?.name,
-    fullAddress: selected.fullAddress || area?.fullAddress || '',
-    placeType: selected.placeType || selected.type || area?.placeType || area?.type || 'suburb',
+    displayName,
+    fullAddress,
+    suburb: inferredSuburb || selected.suburb || area?.suburb || '',
+    locality: inferredSuburb || selected.locality || area?.locality || '',
+    placeType,
     type: selected.type || selected.placeType || area?.type || area?.placeType || 'suburb',
     postcode: selected.postcode || area?.postcode || null,
     lat: selected.lat ?? area?.lat,
@@ -379,6 +448,14 @@ function getCensusLookupLocation(area) {
 
 function isPostcodeQuery(value) {
   return /^\d{4}$/.test(String(value || '').trim())
+}
+
+function getSearchResultKey(item) {
+  return String(item?.displayName || item?.fullAddress || item?.name || '')
+    .toLowerCase()
+    .replace(/[.,]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 function miniProgress(score, outOf = 100, ready = true, side = 'left') {
@@ -667,10 +744,9 @@ export default function ComparePage() {
 
     const words = query.toLowerCase().split(/\s+/).filter(Boolean)
 
-    function dedupeAndFilter(arr) {
-      const seen = new Set()
+    function dedupeAndFilter(arr, seen = new Set()) {
       return arr.filter((item) => {
-        const label = (item.displayName || item.fullAddress || item.name || '').toLowerCase()
+        const label = getSearchResultKey(item)
         const key = label
         if (seen.has(key)) return false
         seen.add(key)
@@ -718,8 +794,12 @@ export default function ComparePage() {
               ? results[1].value
               : []
 
-          setSuburbResults(dedupeAndFilter(localities))
-          setAddressResults(dedupeAndFilter(addresses))
+          const seen = new Set()
+          const filteredLocalities = dedupeAndFilter(localities, seen)
+          const filteredAddresses = dedupeAndFilter(addresses, seen)
+
+          setSuburbResults(filteredLocalities)
+          setAddressResults(filteredAddresses)
         })
         .finally(() => {
           if (cancelled) return
@@ -1017,20 +1097,34 @@ export default function ComparePage() {
               <p className="nwCompareEmptyText">No area selected yet.</p>
               {isAdding && (
                 <div className="nwSearchBlock">
-                  <input
-                    className="nwInput nwSearchInput"
-                    placeholder="Search suburb, postcode or address"
-                    aria-label={`Search location for ${areaLabel}`}
-                    value={searchTerm}
-                    onChange={(e) => {
-                      setSearchTerm(e.target.value)
-                      setError('')
-                    }}
-                    autoComplete="off"
-                    // eslint-disable-next-line jsx-a11y/no-autofocus
-                    autoFocus
-                    style={{ borderColor: 'transparent', boxShadow: 'none', outline: 'none' }}
-                  />
+                  <div className="nwSearchControls">
+                    <input
+                      className="nwInput nwSearchInput"
+                      placeholder="Search suburb, postcode or address"
+                      aria-label={`Search location for ${areaLabel}`}
+                      value={searchTerm}
+                      onChange={(e) => {
+                        setSearchTerm(e.target.value)
+                        setError('')
+                      }}
+                      autoComplete="off"
+                      // eslint-disable-next-line jsx-a11y/no-autofocus
+                      autoFocus
+                      style={{ borderColor: 'transparent', boxShadow: 'none', outline: 'none' }}
+                    />
+                    <button
+                      type="button"
+                      className="nwSearchCancelButton"
+                      onClick={() => {
+                        setAddingIndex(null)
+                        setSearchTerm('')
+                        setSuburbResults([])
+                        setAddressResults([])
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
                   {searching ? (
                     <div className="nwSearchStatus" aria-live="polite" aria-atomic="true">Searching…</div>
                   ) : null}
@@ -1081,6 +1175,7 @@ export default function ComparePage() {
         </div>
 
         {/* Button row — always at the bottom of the card regardless of content state */}
+        {(!isAdding || area) && (
         <div className="nwBtnRow" style={{ flexWrap: 'wrap', gap: 8 }}>
           {area ? (
             <>
@@ -1103,20 +1198,9 @@ export default function ComparePage() {
             >
               Add Area
             </Button>
-          ) : (
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setAddingIndex(null)
-                setSearchTerm('')
-                setSuburbResults([])
-                setAddressResults([])
-              }}
-            >
-              Cancel
-            </Button>
-          )}
+          ) : null}
         </div>
+        )}
       </div>
     )
   }

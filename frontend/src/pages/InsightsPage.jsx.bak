@@ -290,7 +290,7 @@ const TARGET_COUNT_MAP = {
   hospital: 2,
   school: 3,
   park: 5,
-  dog_park: 3,
+  dog_park: 1,
 }
 
 const INDICATOR_WEIGHT_CONFIG = {
@@ -300,7 +300,7 @@ const INDICATOR_WEIGHT_CONFIG = {
   hospital: { distance: 0.7, count: 0.3 },
   school: { distance: 0.6, count: 0.4 },
   park: { distance: 0.5, count: 0.5 },
-  dog_park: { distance: 0.5, count: 0.5 },
+  dog_park: { distance: 0.3, count: 0.7 },
 }
 
 const TIME_DISTANCE_KM = { 10: 0.8, 20: 1.6, 30: 2.4 }
