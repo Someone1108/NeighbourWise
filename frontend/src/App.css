@@ -1006,6 +1006,7 @@ body {
 
 .nwComparePanel {
   min-height: 240px;
+  height: 240px;
   text-align: left;
   position: relative;
   display: flex;
@@ -1104,16 +1105,27 @@ body {
   border-color: rgba(255, 255, 255, 0.35);
 }
 
-/* Search input + label inside Area 2 panel — keep readable on orange */
+/* Search input + label inside both coloured panels — keep readable */
+.nwComparePanel--area1 .nwSearchBlock label,
 .nwComparePanel--area2 .nwSearchBlock label {
   color: rgba(255, 255, 255, 0.92) !important;
 }
 
+.nwComparePanel--area1 .nwSearchInput,
 .nwComparePanel--area2 .nwSearchInput {
   background: #ffffff;
   color: var(--text-dark);
 }
 
+/* Focus ring: use white outline instead of orange on both coloured cards */
+.nwComparePanel--area1 .nwInput:focus,
+.nwComparePanel--area2 .nwInput:focus {
+  border-color: rgba(255, 255, 255, 0.7) !important;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.25) !important;
+}
+
+/* "Searching…" text — white on both cards */
+.nwComparePanel--area1 .nwSearchStatus,
 .nwComparePanel--area2 .nwSearchStatus {
   color: rgba(255, 255, 255, 0.92);
 }

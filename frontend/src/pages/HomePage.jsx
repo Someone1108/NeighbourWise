@@ -356,9 +356,6 @@ export default function HomePage() {
               </button>
             </div>
 
-            <p className="hero-trust-line hero-fade-in hero-fade-in-3">
-              486+ Melbourne suburbs · Built on open government data · Free to use
-            </p>
           </div>
 
           <button
@@ -425,10 +422,10 @@ export default function HomePage() {
                             </section>
                             <section className="nwScoreBar" aria-label="safety score">
                               <div className="nwScoreBarTop">
-                                <div className="nwScoreBarLabel">Safety</div>
+                                <div className="nwScoreBarLabel">Safety &amp; Comfort</div>
                                 <div className="nwScoreBarValue">72 / 100</div>
                               </div>
-                              <div className="nwProgressOuter" role="progressbar" aria-valuenow={72} aria-valuemin={0} aria-valuemax={100} aria-label="Safety: 72 out of 100">
+                              <div className="nwProgressOuter" role="progressbar" aria-valuenow={72} aria-valuemin={0} aria-valuemax={100} aria-label="Safety &amp; Comfort: 72 out of 100">
                                 <div className="nwProgressInner" style={{ width: "72%" }} />
                               </div>
                             </section>

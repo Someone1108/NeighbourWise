@@ -8,7 +8,7 @@ const SCORE_CATEGORIES = [
   },
   {
     icon: '🛡',
-    title: 'Safety',
+    title: 'Safety & Comfort',
     desc: 'An indication of how safe an area feels, based on publicly available local indicators. Higher is better.',
     accent: 'rgba(244, 124, 32, 0.12)',
     accentBorder: 'rgba(244, 124, 32, 0.32)',
