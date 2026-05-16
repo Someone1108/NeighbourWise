@@ -33,6 +33,12 @@ const CATEGORY_COLORS = {
   environment:   { color: '#ea580c', soft: '#fff7ed', border: '#fed7aa' },
 }
 
+const CATEGORY_REASON_TEXT = {
+  accessibility: 'Accessibility reflects everyday access to transport, services, schools, parks and other local essentials',
+  safety: 'Safety & comfort reflects crime context, street activity, noise, transport-stop comfort and zoning safety',
+  environment: 'Environment reflects green coverage, urban heat comfort, environmental zoning comfort and air quality',
+}
+
 // Candidate pool for "Find a Better Area" recommendations
 const REC_POOL = [
   { name: 'Box Hill',       lat: -37.8195, lng: 145.1232, scores: { accessibility: 84, safety: 74, environment: 78, overall: 79 } },
@@ -82,6 +88,10 @@ function safeRangeMinutes(value) {
 
 function labelForCategory(key) {
   return CATEGORY_META[key]?.label || key
+}
+
+function reasonForCategory(key) {
+  return CATEGORY_REASON_TEXT[key] || `${labelForCategory(key)} reflects the selected score category`
 }
 
 function hasSituationProfile(profile) {
@@ -941,11 +951,13 @@ export default function ComparePage() {
     const catLabel = CATEGORY_META[recCategory].label
     const baselineName = recBaseline === 1 ? data.area1 : data.area2
     const gain = result.scores[recCategory] - baselineScores[recCategory]
+    const baselineCategoryScore = baselineScores[recCategory]
     setRecResult({
       ...result,
       baselineName,
       gain,
-      reason: `${result.name} scores ${result.scores[recCategory]} in ${catLabel.toLowerCase()}: ${gain} point${gain !== 1 ? 's' : ''} higher than ${baselineName}. The other categories stay within a comparable range.`,
+      baselineCategoryScore,
+      reason: `${result.name} is recommended because its ${catLabel.toLowerCase()} score is ${result.scores[recCategory]}, ${gain} point${gain !== 1 ? 's' : ''} higher than ${baselineName}'s ${baselineCategoryScore}. ${reasonForCategory(recCategory)}, so this is the part of the suburb profile that is stronger. The other categories stay within a comparable range.`,
     })
   }
 
