@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Button from '../components/buttons/Button.jsx'
 import LoadingOverlay from '../components/LoadingOverlay.jsx'
+import ChangeConditionsModal from '../components/ChangeConditionsModal.jsx'
 import {
   getLiveabilityScore,
   searchAddresses,
@@ -18,7 +19,7 @@ const CATEGORY_KEYS = ['accessibility', 'safety', 'environment']
 
 const CATEGORY_META = {
   accessibility: { label: 'Accessibility', icon: '🚌', tint: 'rgba(8, 145, 178, 0.12)' },
-  safety: { label: 'Safety', icon: '🛡', tint: 'rgba(244, 124, 32, 0.12)' },
+  safety: { label: 'Safety & Comfort', icon: '🛡', tint: 'rgba(244, 124, 32, 0.12)' },
   environment: { label: 'Environment', icon: '🌿', tint: 'rgba(42, 157, 143, 0.12)' },
 }
 
@@ -93,16 +94,25 @@ function isPostcodeQuery(value) {
   return /^\d{4}$/.test(String(value || '').trim())
 }
 
-function miniProgress(score, outOf = 100) {
+function miniProgress(score, outOf = 100, ready = true, side = 'left') {
   const s = Number.isFinite(score) ? score : 0
   const o = Number.isFinite(outOf) && outOf > 0 ? outOf : 100
   const percent = Math.max(0, Math.min(100, (s / o) * 100))
 
+  // Left column bars grow from right→left; right column bars grow left→right
+  const isLeft = side === 'left'
   return (
-    <div className="nwProgressOuter nwMiniProgressOuter">
+    <div className="nwProgressOuter nwMiniProgressOuter" style={{ overflow: 'hidden' }}>
       <div
         className="nwProgressInner"
-        style={{ width: `${percent}%`, height: '100%' }}
+        style={{
+          height: '100%',
+          width: `${percent}%`,
+          marginLeft: isLeft ? 'auto' : 0,
+          transform: ready ? 'scaleX(1)' : 'scaleX(0)',
+          transformOrigin: isLeft ? 'right center' : 'left center',
+          transition: 'transform 1s cubic-bezier(0.22, 1, 0.36, 1)',
+        }}
       />
     </div>
   )
@@ -127,6 +137,29 @@ export default function ComparePage() {
   const [recCategory, setRecCategory] = useState(null)
   const [recBaseline, setRecBaseline] = useState(null)
   const [recResult, setRecResult] = useState(null)
+
+  const [showConditionsModal, setShowConditionsModal] = useState(false)
+
+  // Table animation state — triggers bar animations after data loads
+  const [tableReady, setTableReady] = useState(false)
+  useEffect(() => {
+    if (data) {
+      const t = setTimeout(() => setTableReady(true), 120)
+      return () => clearTimeout(t)
+    }
+    setTableReady(false)
+  }, [data])
+
+  // Gauge animation for recommendation card
+  const [recGaugeReady, setRecGaugeReady] = useState(false)
+  useEffect(() => {
+    if (recResult && !recResult.noMatch) {
+      setRecGaugeReady(false)
+      const t = setTimeout(() => setRecGaugeReady(true), 200)
+      return () => clearTimeout(t)
+    }
+    setRecGaugeReady(false)
+  }, [recResult])
 
   const firstArea = compareList[0] || null
   const secondArea = compareList[1] || null
@@ -405,7 +438,7 @@ export default function ComparePage() {
       ...result,
       baselineName,
       gain,
-      reason: `${result.name} scores ${result.scores[recCategory]} in ${catLabel.toLowerCase()} — ${gain} point${gain !== 1 ? 's' : ''} higher than ${baselineName}. The other categories stay within a comparable range.`,
+      reason: `${result.name} scores ${result.scores[recCategory]} in ${catLabel.toLowerCase()}: ${gain} point${gain !== 1 ? 's' : ''} higher than ${baselineName}. The other categories stay within a comparable range.`,
     })
   }
 
@@ -530,9 +563,6 @@ export default function ComparePage() {
         <div className="nwBtnRow" style={{ flexWrap: 'wrap', gap: 8 }}>
           {area ? (
             <>
-              <Button variant="secondary" onClick={() => navigate('/map')}>
-                🗺 View on Map
-              </Button>
               <Button variant="secondary" onClick={() => navigateToInsights(area)}>
                 📊 Detailed Insights
               </Button>
@@ -603,6 +633,23 @@ export default function ComparePage() {
             {data ? `${shortLabel(data.area1, 24)} vs ${shortLabel(data.area2, 24)}` : 'Compare two areas side by side'}
           </p>
         </div>
+        <button
+          onClick={() => setShowConditionsModal(true)}
+          aria-label="Change conditions"
+          style={{
+            all: 'unset', cursor: 'pointer', flexShrink: 0,
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '7px 14px', borderRadius: 9,
+            border: '1px solid rgba(0,0,0,0.12)', background: '#fff',
+            fontSize: 13, fontWeight: 700, color: '#374151',
+            transition: 'border-color 0.15s, background 0.15s',
+            fontFamily: 'Figtree, sans-serif',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = '#f47c20'; e.currentTarget.style.background = '#fff7ed' }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(0,0,0,0.12)'; e.currentTarget.style.background = '#fff' }}
+        >
+          <span aria-hidden="true">⚙</span> Change Conditions
+        </button>
       </nav>
 
       <div className="nwPage" style={{ paddingTop: 24 }}>
@@ -662,9 +709,9 @@ export default function ComparePage() {
             <table className="nwCompareTable" aria-label="Comparison table">
               <thead>
                 <tr>
-                  <th style={{ width: '28%' }}>Category</th>
-                  <th style={{ width: '36%' }} title={data.area1}>{shortLabel(data.area1, 22)}</th>
-                  <th style={{ width: '36%' }} title={data.area2}>{shortLabel(data.area2, 22)}</th>
+                  <th style={{ width: '36%', textAlign: 'right' }} title={data.area1}>{shortLabel(data.area1, 22)}</th>
+                  <th style={{ width: '28%', textAlign: 'center' }}>Category</th>
+                  <th style={{ width: '36%', textAlign: 'left' }} title={data.area2}>{shortLabel(data.area2, 22)}</th>
                 </tr>
               </thead>
               <tbody>
@@ -672,29 +719,38 @@ export default function ComparePage() {
                   const s1 = data.scores[key][0]
                   const s2 = data.scores[key][1]
                   const meta = CATEGORY_META[key] || {}
+                  const cc = CATEGORY_COLORS[key] || {}
                   return (
                     <tr key={key}>
-                      <td className="nwCompareRowTitle">
-                        <span
-                          className="nwCompareCategoryIcon"
-                          style={{ background: meta.tint }}
-                          aria-hidden="true"
-                        >
-                          {meta.icon}
-                        </span>
-                        {labelForCategory(key)}
-                      </td>
-                      <td style={s1 > s2 ? { background: 'rgba(42,157,143,0.06)' } : {}}>
+                      {/* LEFT — right-aligned, bar grows right→left */}
+                      <td style={{ textAlign: 'right', ...(s1 > s2 ? { background: 'rgba(42,157,143,0.06)' } : {}) }}>
                         <div className="nwCompareCellScore" style={s1 > s2 ? { color: 'var(--accent-2)' } : {}}>
                           {s1} / 100
                         </div>
-                        {miniProgress(s1)}
+                        {miniProgress(s1, 100, tableReady, 'left')}
                       </td>
-                      <td style={s2 > s1 ? { background: 'rgba(42,157,143,0.06)' } : {}}>
+                      {/* CENTRE — icon left + bold label right, horizontal */}
+                      <td style={{ textAlign: 'center', verticalAlign: 'middle', padding: '14px 8px' }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{
+                            width: 32, height: 32, borderRadius: 9,
+                            background: meta.tint,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: 16, flexShrink: 0,
+                          }} aria-hidden="true">
+                            {meta.icon}
+                          </span>
+                          <span style={{ fontSize: 14, fontWeight: 800, color: '#1a2436', whiteSpace: 'nowrap' }}>
+                            {labelForCategory(key)}
+                          </span>
+                        </div>
+                      </td>
+                      {/* RIGHT — left-aligned, bar grows left→right */}
+                      <td style={{ textAlign: 'left', ...(s2 > s1 ? { background: 'rgba(42,157,143,0.06)' } : {}) }}>
                         <div className="nwCompareCellScore" style={s2 > s1 ? { color: 'var(--accent-2)' } : {}}>
                           {s2} / 100
                         </div>
-                        {miniProgress(s2)}
+                        {miniProgress(s2, 100, tableReady, 'right')}
                       </td>
                     </tr>
                   )
@@ -723,7 +779,7 @@ export default function ComparePage() {
                 What matters most to you?
               </h3>
               <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 20 }}>
-                Select a category — we'll find a nearby area that scores higher in it.
+                Select a category to find a nearby area that scores higher in it.
               </p>
 
               {/* Category buttons */}
@@ -794,7 +850,7 @@ export default function ComparePage() {
               )}
 
               {/* Recommend button + result — constrained width, centred */}
-              <div style={{ maxWidth: 680, margin: '0 auto', width: '100%' }}>
+              <div style={{ maxWidth: 960, margin: '0 auto', width: '100%' }}>
                 {recCategory && recBaseline && (
                   <button
                     onClick={handleFindRecommendation}
@@ -835,52 +891,79 @@ export default function ComparePage() {
                     }}>
                       <style>{`@keyframes nwRecFadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }`}</style>
 
-                      {/* Header strip */}
-                      <div style={{ background: 'linear-gradient(90deg, #1a1a2e, #0f3460)', padding: '16px 20px', textAlign: 'center' }}>
-                        <p style={{ fontSize: 10, fontWeight: 900, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)', marginBottom: 4 }}>
-                          Recommended Area
-                        </p>
-                        <p style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 26, color: '#fff', fontWeight: 400, marginBottom: 4 }}>
-                          {recResult.name}
-                        </p>
-                        <p style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 40, color: '#fff', lineHeight: 1 }}>
-                          {recResult.scores.overall}
-                        </p>
-                        <p style={{ fontSize: 10, fontWeight: 800, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.1em', marginTop: 2 }}>Overall Score</p>
+                      {/* Header strip — left: name, right: animated circle gauge */}
+                      <div style={{ background: 'linear-gradient(105deg, #1a1a2e 0%, #0f3460 100%)', padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+                        {/* Left: label + name */}
+                        <div style={{ textAlign: 'left' }}>
+                          <p style={{ fontSize: 9, fontWeight: 900, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', marginBottom: 6 }}>
+                            Recommended Area
+                          </p>
+                          <p style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 'clamp(28px, 4vw, 42px)', color: '#fff', fontWeight: 400, lineHeight: 1.05 }}>
+                            {recResult.name}
+                          </p>
+                          {recResult.dist != null && (
+                            <p style={{ fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.8)', marginTop: 8 }}>
+                              {recResult.dist.toFixed(1)} km from {recResult.baselineName}
+                            </p>
+                          )}
+                        </div>
+                        {/* Right: animated circle gauge */}
+                        {(() => {
+                          const R = 40, circ = 2 * Math.PI * R
+                          const offset = recGaugeReady ? circ * (1 - recResult.scores.overall / 100) : circ
+                          return (
+                            <svg width="108" height="108" viewBox="0 0 108 108" style={{ flexShrink: 0, overflow: 'visible' }} aria-hidden="true">
+                              <circle cx="54" cy="54" r={R} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="5" />
+                              <circle cx="54" cy="54" r={R} fill="none"
+                                stroke="#f47c20" strokeWidth="5" strokeLinecap="round"
+                                strokeDasharray={circ} strokeDashoffset={offset}
+                                transform="rotate(-90 54 54)"
+                                style={{ transition: 'stroke-dashoffset 1.4s cubic-bezier(0.22,1,0.36,1)' }}
+                              />
+                              <text x="54" y="50" textAnchor="middle" dominantBaseline="middle"
+                                fill="#fff" fontSize="30"
+                                fontFamily="'DM Serif Display', Georgia, serif">
+                                {recResult.scores.overall}
+                              </text>
+                              <text x="54" y="70" textAnchor="middle"
+                                fill="rgba(255,255,255,0.4)" fontSize="8" fontWeight="800" letterSpacing="1.5">
+                                OVERALL
+                              </text>
+                            </svg>
+                          )
+                        })()}
                       </div>
 
                       <div style={{ padding: '18px 20px', textAlign: 'center' }}>
-                        {/* Highlighted category */}
-                        {(() => {
-                          const cc = CATEGORY_COLORS[recCategory]
-                          return (
-                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: cc.soft, border: `1px solid ${cc.border}`, borderRadius: 10, padding: '7px 16px', marginBottom: 14 }}>
-                              <span style={{ fontSize: 14 }}>{CATEGORY_META[recCategory].icon}</span>
-                              <span style={{ fontSize: 13, fontWeight: 800, color: cc.color }}>
-                                {CATEGORY_META[recCategory].label}: {recResult.scores[recCategory]}
-                              </span>
-                              <span style={{ fontSize: 11, fontWeight: 700, color: '#059669', background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 999, padding: '1px 7px' }}>
-                                +{recResult.gain} pts
-                              </span>
-                            </div>
-                          )
-                        })()}
-
-                        {/* Other category scores + distance */}
-                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14, justifyContent: 'center' }}>
-                          {CATEGORY_KEYS.filter(k => k !== recCategory).map(k => {
+                        {/* All 3 categories in one row — featured is bigger */}
+                        <div style={{ display: 'flex', gap: 10, justifyContent: 'center', alignItems: 'flex-end', marginBottom: 10 }}>
+                          {CATEGORY_KEYS.map(k => {
                             const cc = CATEGORY_COLORS[k]
+                            const isFeatured = k === recCategory
                             return (
-                              <span key={k} style={{ fontSize: 11, fontWeight: 800, background: cc.soft, color: cc.color, border: `1px solid ${cc.border}`, borderRadius: 6, padding: '3px 9px' }}>
-                                {CATEGORY_META[k].label}: {recResult.scores[k]}
-                              </span>
+                              <div key={k} style={{
+                                flex: 1, minWidth: 0,
+                                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
+                                background: cc.soft, border: `1.5px solid ${isFeatured ? cc.color : cc.border}`,
+                                borderRadius: 14, padding: isFeatured ? '16px 12px' : '12px 12px',
+                                transition: 'all 0.2s',
+                                boxShadow: isFeatured ? `0 4px 16px ${cc.color}30` : 'none',
+                              }}>
+                                <span style={{ fontSize: isFeatured ? 18 : 14 }}>{CATEGORY_META[k].icon}</span>
+                                <span style={{ fontSize: isFeatured ? 18 : 15, fontWeight: 800, color: cc.color, textAlign: 'center' }}>
+                                  {CATEGORY_META[k].label}
+                                </span>
+                                <span style={{ fontSize: isFeatured ? 26 : 20, fontWeight: 900, color: cc.color, lineHeight: 1 }}>
+                                  {recResult.scores[k]}
+                                </span>
+                                {isFeatured && (
+                                  <span style={{ fontSize: 10, fontWeight: 700, color: '#059669', background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 999, padding: '2px 8px', marginTop: 2 }}>
+                                    +{recResult.gain} pts
+                                  </span>
+                                )}
+                              </div>
                             )
                           })}
-                          {recResult.dist != null && (
-                            <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af' }}>
-                              {recResult.dist.toFixed(1)} km from {recResult.baselineName}
-                            </span>
-                          )}
                         </div>
 
                         <p style={{ fontSize: 13, color: '#4b5563', lineHeight: 1.6, marginBottom: 16 }}>
@@ -912,7 +995,11 @@ export default function ComparePage() {
                             📊 See Detailed Insights
                           </button>
                           <button
-                            onClick={() => navigate('/map')}
+                            onClick={() => {
+                              import('../utils/storage.js').then(({ addToCompareList }) => {
+                                addToCompareList({ displayName: recResult.name, name: recResult.name, lat: recResult.lat, lng: recResult.lng, rangeMinutes: 20 })
+                              })
+                            }}
                             style={{
                               all: 'unset', cursor: 'pointer',
                               padding: '9px 18px', borderRadius: 9, fontSize: 13, fontWeight: 700,
@@ -924,7 +1011,7 @@ export default function ComparePage() {
                             onMouseEnter={e => { e.currentTarget.style.borderColor = '#9ca3af' }}
                             onMouseLeave={e => { e.currentTarget.style.borderColor = '#e5e7eb' }}
                           >
-                            🗺 View on Map
+                            ＋ Add to Compare
                           </button>
                         </div>
                       </div>
@@ -960,6 +1047,26 @@ export default function ComparePage() {
       </div>
 
       </div>
+
+      {/* Change Conditions modal */}
+      {showConditionsModal && (
+        <ChangeConditionsModal
+          rangeMinutes={firstArea?.rangeMinutes ?? 20}
+          profile={firstArea?.profile ?? {}}
+          onSave={({ rangeMinutes: newRange, profile: newProfile }) => {
+            // Apply the new range and profile to all compare list items
+            const updated = compareList.map(item => ({
+              ...item,
+              rangeMinutes: newRange,
+              profile: newProfile,
+            }))
+            saveCompareList(updated)
+            setCompareList(updated)
+            setShowConditionsModal(false)
+          }}
+          onClose={() => setShowConditionsModal(false)}
+        />
+      )}
 
     </div>
   )

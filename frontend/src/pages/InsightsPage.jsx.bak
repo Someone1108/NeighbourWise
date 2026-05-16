@@ -3,10 +3,8 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { LinearProgress } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import { getCensusProfileForLocation, getLiveabilityScore } from '../services/api.js'
-import { addToCompareList, replaceCompareArea, loadCompareList, loadContext, saveContext } from '../utils/storage.js'
+import { addToCompareList, loadContext } from '../utils/storage.js'
 import LoadingOverlay from '../components/LoadingOverlay.jsx'
-import CompareReplaceModal from '../components/CompareReplaceModal.jsx'
-import ChangeConditionsModal from '../components/ChangeConditionsModal.jsx'
 
 const CATEGORIES = ['accessibility', 'safety', 'environment']
 
@@ -825,7 +823,6 @@ function CompareBar({ value, avg, color, label = 'Avg' }) {
         <span>This area: <span style={{ color, fontWeight: 800 }}>{value ?? '–'}</span></span>
         <span>{label}: {hasAvg ? avg : 'loading'}</span>
       </div>
-
     </div>
   )
 }
@@ -1528,35 +1525,29 @@ function generateSimilarSuburbs(overallScore, scores) {
 function SimilarSuburbs({ overallScore, scores }) {
   const navigate = useNavigate()
   const [page, setPage] = useState(0)
-  const [addedMap, setAddedMap] = useState({}) // name → 'added' | 'duplicate'
-  const [replaceModal, setReplaceModal] = useState(null) // { pendingItem, currentList }
+  const [addedMap, setAddedMap] = useState({})
 
   const suburbs = useMemo(
     () => generateSimilarSuburbs(overallScore, scores),
     [overallScore, scores],
   )
 
-  const [cardsReady, setCardsReady] = useState(false)
-  useEffect(() => {
-    const t = setTimeout(() => setCardsReady(true), 100)
-    return () => clearTimeout(t)
-  }, [page])
-
-  const filtered = suburbs.filter(s => s.score > overallScore)
-  const visibleSuburbs = filtered.slice(0, 3)
+  const totalPages = Math.ceil(suburbs.length / 3)
+  const visibleSuburbs = suburbs.slice(page * 3, page * 3 + 3)
 
   function handleAddToCompare(s) {
-    const item = { displayName: s.name, name: s.name, rangeMinutes: 20 }
-    const result = addToCompareList(item)
-    if (result?.reason === 'ALREADY_EXISTS') {
-      setAddedMap(prev => ({ ...prev, [s.name]: 'duplicate' }))
-      setTimeout(() => setAddedMap(prev => { const n = { ...prev }; delete n[s.name]; return n }), 2000)
-    } else if (result?.reason === 'COMPARE_FULL') {
-      setReplaceModal({ pendingItem: item, currentList: result.current })
-    } else {
-      setAddedMap(prev => ({ ...prev, [s.name]: 'added' }))
-      setTimeout(() => setAddedMap(prev => { const n = { ...prev }; delete n[s.name]; return n }), 2000)
-    }
+    const result = addToCompareList({
+      displayName: s.name,
+      name: s.name,
+      rangeMinutes: 20,
+    })
+    const status = result?.success ? 'added' : 'full'
+    setAddedMap(prev => ({ ...prev, [s.name]: status }))
+    setTimeout(() => setAddedMap(prev => {
+      const next = { ...prev }
+      delete next[s.name]
+      return next
+    }), 2000)
   }
 
   return (
@@ -1576,110 +1567,144 @@ function SimilarSuburbs({ overallScore, scores }) {
 
       {/* 3-column grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
-        {visibleSuburbs.map((s, idx) => {
+        {visibleSuburbs.map((s) => {
           const sb = getScoreBand(s.score)
           const addedStatus = addedMap[s.name]
           return (
             <div
               key={s.name}
               style={{
-                background: '#fff', border: '1.5px solid #e5e7eb', borderRadius: 16,
-                padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 16,
+                background: '#fff',
+                border: '1.5px solid #e5e7eb',
+                borderRadius: 16, padding: '20px',
+                display: 'flex', flexDirection: 'column',
                 transition: 'box-shadow 0.2s, transform 0.2s',
               }}
-              onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'; e.currentTarget.style.transform = 'translateY(-2px)' }}
-              onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'none' }}
+              onMouseEnter={e => {
+                e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'
+                e.currentTarget.style.transform = 'translateY(-2px)'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.boxShadow = 'none'
+                e.currentTarget.style.transform = 'none'
+              }}
             >
-              {/* Left: animated circle gauge */}
-              {(() => {
-                const R = 28, circ = 2 * Math.PI * R
-                const offset = cardsReady ? circ * (1 - s.score / 100) : circ
-                return (
-                  <svg width="72" height="72" viewBox="0 0 72 72" style={{ flexShrink: 0, overflow: 'visible' }} aria-hidden="true">
-                    <circle cx="36" cy="36" r={R} fill="none" stroke="#f3f4f6" strokeWidth="5" />
-                    <circle cx="36" cy="36" r={R} fill="none"
-                      stroke={sb.color} strokeWidth="5" strokeLinecap="round"
-                      strokeDasharray={circ} strokeDashoffset={offset}
-                      transform="rotate(-90 36 36)"
-                      style={{ transition: `stroke-dashoffset 1.2s cubic-bezier(0.22,1,0.36,1) ${idx * 80}ms` }}
-                    />
-                    <text x="36" y="32" textAnchor="middle" dominantBaseline="middle"
-                      fill={sb.color} fontSize="21" fontFamily="'DM Serif Display', Georgia, serif" fontWeight="400">
-                      {s.score}
-                    </text>
-                    <text x="36" y="51" textAnchor="middle"
-                      fill="#9ca3af" fontSize="7" fontWeight="800" letterSpacing="1">SCORE</text>
-                  </svg>
-                )
-              })()}
+              {/* Name + match % */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+                <p style={{ fontWeight: 700, fontSize: 15, color: '#1a2436', lineHeight: 1.25, flex: 1, marginRight: 8 }}>
+                  {s.name}
+                </p>
+                <span style={{
+                  flexShrink: 0, fontSize: 11, fontWeight: 900,
+                  background: '#ecfdf5', color: '#059669',
+                  border: '1px solid #a7f3d0', borderRadius: 999,
+                  padding: '3px 9px', lineHeight: 1.4,
+                }}>
+                  {s.match}%
+                </span>
+              </div>
 
-              {/* Right: info + buttons */}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                  <p style={{ fontWeight: 800, fontSize: 15, color: '#1a2436', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {s.name}
-                  </p>
-                  <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 900, background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0', borderRadius: 999, padding: '2px 8px' }}>
-                    {s.match}%
-                  </span>
-                </div>
-                <p style={{ fontSize: 12, color: '#9ca3af', marginBottom: 10 }}>{s.dist.toFixed(1)} km away</p>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button
-                    onClick={() => handleAddToCompare(s)}
-                    style={{
-                      all: 'unset', cursor: 'pointer',
-                      padding: '6px 14px', borderRadius: 8, fontSize: 12, fontWeight: 700,
-                      border: '1.5px solid #e5e7eb', background: '#fff', color: '#374151',
-                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                      transition: 'border-color 0.15s',
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.borderColor = '#9ca3af' }}
-                    onMouseLeave={e => { e.currentTarget.style.borderColor = '#e5e7eb' }}
-                  >
-                    {addedStatus === 'added' ? '✓ Added!' : addedStatus === 'duplicate' ? '✓ Already added' : 'Add to Compare'}
-                  </button>
-                  <button
-                    onClick={() => navigate('/insights', { state: { selectedLocation: { name: s.name, displayName: s.name }, rangeMinutes: 20 } })}
-                    style={{
-                      all: 'unset', cursor: 'pointer',
-                      padding: '6px 14px', borderRadius: 8, fontSize: 12, fontWeight: 700,
-                      background: 'linear-gradient(135deg, #f59648 0%, #f47c20 100%)',
-                      color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                      transition: 'opacity 0.15s',
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.opacity = '0.88' }}
-                    onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}
-                  >
-                    View Insights →
-                  </button>
-                </div>
+              {/* Large score */}
+              <div style={{ marginBottom: 4 }}>
+                <span style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 36, fontWeight: 400, color: sb.color, lineHeight: 1 }}>
+                  {s.score}
+                </span>
+              </div>
+              <p style={{ fontSize: 11, color: '#9ca3af', fontWeight: 600, marginBottom: 12 }}>Liveability Score</p>
+
+              {/* Spacer */}
+              <div style={{ flex: 1 }} />
+
+              {/* Action buttons */}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={() => handleAddToCompare(s)}
+                  style={{
+                    flex: 1, all: 'unset', cursor: 'pointer',
+                    padding: '8px 10px', borderRadius: 9, fontSize: 12, fontWeight: 700,
+                    border: '1.5px solid #e5e7eb', background: '#fff', color: '#374151',
+                    textAlign: 'center', transition: 'border-color 0.15s',
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = '#9ca3af' }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = '#e5e7eb' }}
+                >
+                  {addedStatus === 'added' ? '✓ Added!' : addedStatus === 'full' ? 'List full' : '＋ Compare'}
+                </button>
+                <button
+                  onClick={() => navigate('/insights', { state: { selectedLocation: { name: s.name, displayName: s.name }, rangeMinutes: 20 } })}
+                  style={{
+                    flex: 1, all: 'unset', cursor: 'pointer',
+                    padding: '8px 10px', borderRadius: 9, fontSize: 12, fontWeight: 700,
+                    background: 'linear-gradient(135deg, #f59648 0%, #f47c20 100%)',
+                    color: '#fff', textAlign: 'center',
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    transition: 'opacity 0.15s',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.opacity = '0.88' }}
+                  onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}
+                >
+                  View Insights →
+                </button>
               </div>
             </div>
           )
         })}
       </div>
 
+      {/* Arrow navigation */}
+      {suburbs.length > 3 && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, marginTop: 16 }}>
+          <button
+            onClick={() => setPage(p => Math.max(0, p - 1))}
+            disabled={page === 0}
+            style={{
+              all: 'unset', cursor: page === 0 ? 'default' : 'pointer',
+              width: 36, height: 36, borderRadius: '50%',
+              border: '1.5px solid #e5e7eb', background: '#fff',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 16, color: page === 0 ? '#d1d5db' : '#374151',
+              transition: 'border-color 0.15s',
+            }}
+            onMouseEnter={e => { if (page > 0) e.currentTarget.style.borderColor = '#9ca3af' }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = '#e5e7eb' }}
+            aria-label="Previous suburbs"
+          >
+            ◀
+          </button>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {Array.from({ length: totalPages }).map((_, i) => (
+              <div
+                key={i}
+                style={{
+                  width: i === page ? 20 : 8, height: 8, borderRadius: 999,
+                  background: i === page ? '#f47c20' : '#e5e7eb',
+                  transition: 'all 0.2s',
+                }}
+              />
+            ))}
+          </div>
+          <button
+            onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+            disabled={page === totalPages - 1}
+            style={{
+              all: 'unset', cursor: page === totalPages - 1 ? 'default' : 'pointer',
+              width: 36, height: 36, borderRadius: '50%',
+              border: '1.5px solid #e5e7eb', background: '#fff',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 16, color: page === totalPages - 1 ? '#d1d5db' : '#374151',
+              transition: 'border-color 0.15s',
+            }}
+            onMouseEnter={e => { if (page < totalPages - 1) e.currentTarget.style.borderColor = '#9ca3af' }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = '#e5e7eb' }}
+            aria-label="Next suburbs"
+          >
+            ▶
+          </button>
+        </div>
+      )}
 
       <style>{`@keyframes nwSimFadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }`}</style>
-
-      {/* Replace modal for SimilarSuburbs */}
-      {replaceModal && (
-        <CompareReplaceModal
-          pendingItem={replaceModal.pendingItem}
-          currentList={replaceModal.currentList}
-          onReplace={(index) => {
-            replaceCompareArea(index, replaceModal.pendingItem)
-            const name = replaceModal.pendingItem?.displayName || replaceModal.pendingItem?.name
-            setReplaceModal(null)
-            if (name) {
-              setAddedMap(prev => ({ ...prev, [name]: 'added' }))
-              setTimeout(() => setAddedMap(prev => { const n = { ...prev }; delete n[name]; return n }), 2000)
-            }
-          }}
-          onClose={() => setReplaceModal(null)}
-        />
-      )}
     </div>
   )
 }
@@ -1703,11 +1728,9 @@ export default function InsightsPage() {
   const [censusLoading, setCensusLoading] = useState(true)
   const [censusData, setCensusData] = useState(null)
   const [activeTab, setActiveTab] = useState('accessibility')
+  const [expandedCategories, setExpandedCategories] = useState(new Set())
   const [heroBarReady, setHeroBarReady] = useState(false)
-  const [showBreakdownModal, setShowBreakdownModal] = useState(false)
-  const [heroCompareAdded, setHeroCompareAdded] = useState(null) // 'added' | 'duplicate' | 'full' | null
-  const [compareReplacePending, setCompareReplacePending] = useState(null) // { pendingItem, currentList }
-  const [showConditionsModal, setShowConditionsModal] = useState(false)
+  const [heroCompareAdded, setHeroCompareAdded] = useState(null)
 
   useEffect(() => {
     const lat = Number(selectedLocation?.lat)
@@ -1766,14 +1789,6 @@ export default function InsightsPage() {
     }
     setHeroBarReady(false)
   }, [loading])
-
-  useEffect(() => {
-    if (!showBreakdownModal) return
-    const onKey = (e) => { if (e.key === 'Escape') setShowBreakdownModal(false) }
-    document.addEventListener('keydown', onKey)
-    document.body.style.overflow = 'hidden'
-    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = '' }
-  }, [showBreakdownModal])
 
   if (!locationName) {
     return (
@@ -1835,23 +1850,6 @@ export default function InsightsPage() {
             Liveability breakdown · {rangeMinutes} min range{profileLabel ? ` · ${profileLabel}` : ''}
           </p>
         </div>
-        <button
-          onClick={() => setShowConditionsModal(true)}
-          aria-label="Change conditions"
-          style={{
-            all: 'unset', cursor: 'pointer', flexShrink: 0,
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-            padding: '7px 14px', borderRadius: 9,
-            border: '1px solid rgba(0,0,0,0.12)', background: '#fff',
-            fontSize: 13, fontWeight: 700, color: '#374151',
-            transition: 'border-color 0.15s, background 0.15s',
-            fontFamily: 'Figtree, sans-serif',
-          }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = '#f47c20'; e.currentTarget.style.background = '#fff7ed' }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(0,0,0,0.12)'; e.currentTarget.style.background = '#fff' }}
-        >
-          <span aria-hidden="true">⚙</span> Change Conditions
-        </button>
         {band && !loading && (
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: 7, flexShrink: 0,
@@ -1893,119 +1891,113 @@ export default function InsightsPage() {
               display: 'grid', gridTemplateColumns: '1fr 1.1fr', gap: 28, alignItems: 'center',
             }}>
 
-              {/* LEFT — location + animated circle gauge + metadata */}
+              {/* LEFT — location + animated circle gauge */}
               <div>
-                <p style={{ fontSize: 9, fontWeight: 900, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.6)', marginBottom: 8 }}>
+                <p style={{ fontSize: 9, fontWeight: 900, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.55)', marginBottom: 10 }}>
                   Liveability Insights · Melbourne
                 </p>
                 <h1 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 'clamp(20px, 2.8vw, 32px)', fontWeight: 400, color: '#fff', lineHeight: 1.0, margin: '0 0 1px', letterSpacing: '-0.3px' }}>
                   {locationName.split(',')[0] || locationName}
                 </h1>
-                <p style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 'clamp(13px, 1.8vw, 18px)', color: 'rgba(255,255,255,0.6)', fontStyle: 'italic', margin: '0 0 14px' }}>
+                <p style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 'clamp(13px, 1.8vw, 18px)', color: 'rgba(255,255,255,0.55)', fontStyle: 'italic', margin: '0 0 16px' }}>
                   VIC
                 </p>
 
-                {/* Gauge + metadata side by side */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+                {/* Animated circle gauge */}
+                {(() => {
+                  const R = 52
+                  const circ = 2 * Math.PI * R
+                  const offset = (heroBarReady && overallScore != null) ? circ * (1 - overallScore / 100) : circ
+                  const gaugeColor = band?.color || '#f47c20'
+                  return (
+                    <svg width="136" height="136" viewBox="0 0 136 136" style={{ display: 'block', marginBottom: 16, overflow: 'visible' }} aria-hidden="true">
+                      {/* Track */}
+                      <circle cx="68" cy="68" r={R} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="9" />
+                      {/* Glow layer */}
+                      <circle cx="68" cy="68" r={R} fill="none"
+                        stroke={gaugeColor} strokeWidth="9"
+                        strokeLinecap="round" opacity="0.22"
+                        strokeDasharray={circ}
+                        strokeDashoffset={offset}
+                        transform="rotate(-90 68 68)"
+                        style={{ filter: 'blur(4px)', transition: `stroke-dashoffset 1.5s cubic-bezier(0.22, 1, 0.36, 1)` }}
+                      />
+                      {/* Main arc */}
+                      <circle cx="68" cy="68" r={R} fill="none"
+                        stroke={gaugeColor} strokeWidth="9"
+                        strokeLinecap="round"
+                        strokeDasharray={circ}
+                        strokeDashoffset={offset}
+                        transform="rotate(-90 68 68)"
+                        style={{ transition: `stroke-dashoffset 1.5s cubic-bezier(0.22, 1, 0.36, 1)` }}
+                      />
+                      {/* Score number */}
+                      <text x="68" y="62" textAnchor="middle" dominantBaseline="middle"
+                        fill="#fff" fontSize="38"
+                        fontFamily="'DM Serif Display', Georgia, serif" fontWeight="400">
+                        {loading ? '—' : (overallScore ?? '–')}
+                      </text>
+                      {/* Label */}
+                      <text x="68" y="84" textAnchor="middle"
+                        fill="rgba(255,255,255,0.5)" fontSize="9" fontWeight="800"
+                        letterSpacing="2" style={{ textTransform: 'uppercase' }}>
+                        OVERALL
+                      </text>
+                    </svg>
+                  )
+                })()}
 
-                  {/* Animated circle gauge */}
-                  {(() => {
-                    const R = 52
-                    const circ = 2 * Math.PI * R
-                    const offset = (heroBarReady && overallScore != null) ? circ * (1 - overallScore / 100) : circ
-                    const gaugeColor = band?.color || '#f47c20'
-                    return (
-                      <svg width="136" height="136" viewBox="0 0 136 136" style={{ flexShrink: 0, overflow: 'visible' }} aria-hidden="true">
-                        <circle cx="68" cy="68" r={R} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="9" />
-                        <circle cx="68" cy="68" r={R} fill="none"
-                          stroke={gaugeColor} strokeWidth="9"
-                          strokeLinecap="round" opacity="0.22"
-                          strokeDasharray={circ} strokeDashoffset={offset}
-                          transform="rotate(-90 68 68)"
-                          style={{ filter: 'blur(4px)', transition: `stroke-dashoffset 1.5s cubic-bezier(0.22, 1, 0.36, 1)` }}
-                        />
-                        <circle cx="68" cy="68" r={R} fill="none"
-                          stroke={gaugeColor} strokeWidth="9"
-                          strokeLinecap="round"
-                          strokeDasharray={circ} strokeDashoffset={offset}
-                          transform="rotate(-90 68 68)"
-                          style={{ transition: `stroke-dashoffset 1.5s cubic-bezier(0.22, 1, 0.36, 1)` }}
-                        />
-                        <text x="68" y="62" textAnchor="middle" dominantBaseline="middle"
-                          fill="#fff" fontSize="38"
-                          fontFamily="'DM Serif Display', Georgia, serif" fontWeight="400">
-                          {loading ? '—' : (overallScore ?? '–')}
-                        </text>
-                        <text x="68" y="84" textAnchor="middle"
-                          fill="rgba(255,255,255,0.55)" fontSize="9" fontWeight="800"
-                          letterSpacing="2" style={{ textTransform: 'uppercase' }}>
-                          OVERALL
-                        </text>
-                      </svg>
-                    )
-                  })()}
-
-                  {/* Right of gauge: badge + range + profile + Add to Compare */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {/* Badge row */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      {band && !loading && (
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: band.bg, border: `1px solid ${band.border}`, borderRadius: 999, padding: '4px 11px' }}>
-                          <div style={{ width: 6, height: 6, borderRadius: '50%', background: band.color }} aria-hidden="true" />
-                          <span style={{ fontSize: 11, fontWeight: 800, color: band.color }}>{band.label}</span>
-                        </div>
-                      )}
-                      <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>·</span>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.75)', textTransform: 'uppercase', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>
-                        {rangeMinutes} min range
-                      </span>
-                      {profileLabel && (
-                        <>
-                          <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>·</span>
-                          <span style={{ background: '#eff6ff', border: '1px solid #bfdbfe', color: '#2563eb', fontSize: 10, fontWeight: 800, padding: '2px 9px', borderRadius: 999, whiteSpace: 'nowrap' }}>
-                            {profileLabel}
-                          </span>
-                        </>
-                      )}
+                {/* One row: Good · 20 min range · profile */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  {band && !loading && (
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: band.bg, border: `1px solid ${band.border}`, borderRadius: 999, padding: '4px 11px' }}>
+                      <div style={{ width: 6, height: 6, borderRadius: '50%', background: band.color }} aria-hidden="true" />
+                      <span style={{ fontSize: 11, fontWeight: 800, color: band.color }}>{band.label}</span>
                     </div>
+                  )}
+                  <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 13 }}>·</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.65)', textTransform: 'uppercase', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>
+                    {rangeMinutes} min range
+                  </span>
+                  {profileLabel && (
+                    <>
+                      <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 13 }}>·</span>
+                      <span style={{ background: '#eff6ff', border: '1px solid #bfdbfe', color: '#2563eb', fontSize: 10, fontWeight: 800, padding: '2px 9px', borderRadius: 999, whiteSpace: 'nowrap' }}>
+                        {profileLabel}
+                      </span>
+                    </>
+                  )}
+                </div>
 
-                    {/* Add to Compare */}
-                    <button
-                      onClick={() => {
-                        const item = {
-                          displayName: locationName,
-                          name: locationName,
-                          lat: selectedLocation?.lat,
-                          lng: selectedLocation?.lng,
-                          rangeMinutes,
-                          profile,
-                        }
-                        const result = addToCompareList(item)
-                        if (result?.reason === 'ALREADY_EXISTS') {
-                          setHeroCompareAdded('duplicate')
-                          setTimeout(() => setHeroCompareAdded(null), 2500)
-                        } else if (result?.reason === 'COMPARE_FULL') {
-                          setCompareReplacePending({ pendingItem: item, currentList: result.current })
-                        } else {
-                          setHeroCompareAdded('added')
-                          setTimeout(() => setHeroCompareAdded(null), 2500)
-                        }
-                      }}
-                      style={{
-                        all: 'unset', cursor: 'pointer',
-                        display: 'inline-flex', alignItems: 'center', gap: 8,
-                        padding: '8px 18px', borderRadius: 10,
-                        background: 'rgba(255,255,255,0.12)',
-                        border: '1px solid rgba(255,255,255,0.25)',
-                        color: '#fff', fontSize: 13, fontWeight: 700,
-                        transition: 'background 0.15s', alignSelf: 'flex-start',
-                      }}
-                      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.2)' }}
-                      onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.12)' }}
-                    >
-                      {heroCompareAdded === 'added' ? '✓ Added to Compare' : heroCompareAdded === 'duplicate' ? '✓ Already in list' : '＋ Add to Compare'}
-                    </button>
-                  </div>
+                {/* Add to Compare — hero CTA */}
+                <div style={{ marginTop: 14 }}>
+                  <button
+                    onClick={() => {
+                      const result = addToCompareList({
+                        displayName: locationName,
+                        name: locationName,
+                        lat: selectedLocation?.lat,
+                        lng: selectedLocation?.lng,
+                        rangeMinutes,
+                        profile,
+                      })
+                      setHeroCompareAdded(result?.success ? 'added' : 'full')
+                      setTimeout(() => setHeroCompareAdded(null), 2500)
+                    }}
+                    style={{
+                      all: 'unset', cursor: 'pointer',
+                      display: 'inline-flex', alignItems: 'center', gap: 8,
+                      padding: '8px 18px', borderRadius: 10,
+                      background: 'rgba(255,255,255,0.12)',
+                      border: '1px solid rgba(255,255,255,0.25)',
+                      color: '#fff', fontSize: 13, fontWeight: 700,
+                      transition: 'background 0.15s',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.2)' }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.12)' }}
+                  >
+                    {heroCompareAdded === 'added' ? '✓ Added to Compare' : heroCompareAdded === 'full' ? 'Compare list full' : '＋ Add to Compare'}
+                  </button>
                 </div>
               </div>
 
@@ -2016,6 +2008,7 @@ export default function InsightsPage() {
                   const score = loading ? null : (scores?.[key] ?? null)
                   const bench = STATIC_SCORE_BENCHMARK.scores[key]
                   const delta = score != null ? score - bench : null
+                  const scoreBand = score != null ? getScoreBand(score) : null
                   return (
                     <div key={key}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 7 }}>
@@ -2027,6 +2020,11 @@ export default function InsightsPage() {
                           aria-label={`${cfg.label}: ${score ?? 'loading'}`}>
                           {score ?? '—'}
                         </span>
+                        {scoreBand && (
+                          <span style={{ fontSize: 10, fontWeight: 800, background: scoreBand.bg, border: `1px solid ${scoreBand.border}`, borderRadius: 999, padding: '2px 9px', color: scoreBand.color, flexShrink: 0 }}>
+                            {scoreBand.label}
+                          </span>
+                        )}
                       </div>
                       {/* Animated bar */}
                       <div style={{ height: 7, borderRadius: 999, background: 'rgba(255,255,255,0.12)', overflow: 'hidden' }}>
@@ -2057,43 +2055,94 @@ export default function InsightsPage() {
         >
           {CATEGORIES.map(k => {
             const c = CATEGORY_CONFIG[k]
+            const score = scores?.[k]
+            const avg = benchmarkScores?.[k]
+            const delta = score != null && Number.isFinite(Number(avg)) ? score - avg : null
+            const isExpanded = expandedCategories.has(k)
             const catIndicators = indicators[k]
             const catGroups = groupIndicatorFactors(catIndicators?.factors || [], profile)
             return (
               <div key={k} style={{
-                background: '#fff', border: '1.5px solid #e5e7eb',
+                background: '#fff', border: `1.5px solid ${isExpanded ? c.color : c.border}`,
                 borderRadius: 20, padding: '20px 20px',
-                boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
+                boxShadow: isExpanded ? '0 8px 28px rgba(0,0,0,0.09)' : '0 4px 20px rgba(0,0,0,0.05)',
                 transition: 'box-shadow 0.2s, border-color 0.2s',
               }}>
-                <div style={{ marginBottom: 12 }}>
-                  <p style={{ fontSize: 14, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: c.color, marginBottom: 5 }}>
-                    <span aria-hidden="true">{c.icon}</span> {c.label}
-                  </p>
-                  <p style={{ fontSize: 13, color: '#4b5563', lineHeight: 1.5 }}>{c.description}</p>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                  <div>
+                    <p style={{ fontSize: 14, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: c.color, marginBottom: 5 }}>
+                      <span aria-hidden="true">{c.icon}</span> {c.label}
+                    </p>
+                    <p style={{ fontSize: 13, color: '#4b5563', lineHeight: 1.5, maxWidth: 180 }}>{c.description}</p>
+                  </div>
+                  <MiniGauge score={loading ? null : score} color={c.color} size={56} />
                 </div>
+                {delta != null && (
+                  <p style={{ fontSize: 12, fontWeight: 700, color: delta >= 0 ? '#059669' : '#dc2626', marginBottom: 6 }}
+                    aria-label={`${Math.abs(delta)} points ${delta >= 0 ? 'above' : 'below'} supported locality average`}>
+                    {delta >= 0 ? '↑' : '↓'} {Math.abs(delta)} pts vs supported avg
+                  </p>
+                )}
+                <CompareBar value={loading ? null : score} avg={avg} color={c.color} label={benchmarkShortLabel} />
                 {!loading && catIndicators && (
                   <p style={{ marginTop: 8, fontSize: 12, color: '#6b7280' }}>
                     {catIndicators.factors?.filter(f => f.met).length ?? 0}/{catIndicators.factors?.length ?? 0} indicators met
                   </p>
                 )}
 
+                {/* Learn more / See how it's calculated */}
                 {!loading && catIndicators && catGroups.length > 0 && (
                   <button
-                    onClick={() => setShowBreakdownModal(true)}
+                    onClick={() => setExpandedCategories(prev => {
+                      const next = new Set(prev)
+                      isExpanded ? next.delete(k) : next.add(k)
+                      return next
+                    })}
+                    aria-expanded={isExpanded}
+                    aria-controls={`indicators-${k}`}
                     style={{
-                      marginTop: 12, width: '100%', padding: '9px 14px',
-                      background: 'transparent', border: `1px solid ${c.border}`,
+                      marginTop: 12, width: '100%',
+                      padding: '9px 14px',
+                      background: isExpanded ? c.soft : 'transparent',
+                      border: `1px solid ${isExpanded ? c.color : c.border}`,
                       borderRadius: 10, cursor: 'pointer',
                       fontSize: 13, fontWeight: 700, color: c.color,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                      transition: 'all 0.18s', fontFamily: 'Figtree, sans-serif',
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      transition: 'all 0.18s',
+                      fontFamily: 'Figtree, sans-serif',
                     }}
-                    onMouseEnter={e => { e.currentTarget.style.background = c.soft }}
-                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+                    onFocus={e => { e.currentTarget.style.outline = `2px solid ${c.color}`; e.currentTarget.style.outlineOffset = '2px' }}
+                    onBlur={e => { e.currentTarget.style.outline = 'none' }}
                   >
-                    See Breakdown ↗
+                    <span>{isExpanded ? 'Hide breakdown' : "What's driving this? / How it's calculated"}</span>
+                    <span aria-hidden="true" style={{ fontSize: 11 }}>{isExpanded ? '▴' : '▾'}</span>
                   </button>
+                )}
+
+                {/* Expanded content: indicator accordion + methodology */}
+                {isExpanded && (
+                  <div id={`indicators-${k}`} style={{ marginTop: 14 }}>
+                    {catIndicators?.takeaway && (
+                      <div style={{
+                        background: c.soft, borderRadius: 10, padding: '10px 14px',
+                        border: `1px solid ${c.border}`, marginBottom: 12,
+                      }}>
+                        <p style={{ fontSize: 11, fontWeight: 900, color: c.color, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>
+                          {c.label} takeaway
+                        </p>
+                        <p style={{ fontSize: 13, color: '#374151', lineHeight: 1.6 }}>{catIndicators.takeaway}</p>
+                      </div>
+                    )}
+                    <CategoryAccordion groups={catGroups} color={c.color} soft={c.soft} border={c.border} />
+                    {catIndicators?.scoreExplanation && (
+                      <p style={{ marginTop: 12, fontSize: 12, color: '#6b7280', lineHeight: 1.55 }}>
+                        <strong style={{ color: '#4b5563' }}>How it&apos;s calculated:</strong> {catIndicators.scoreExplanation}
+                      </p>
+                    )}
+                    <p style={{ marginTop: 6, fontSize: 12, color: '#94a3b8' }}>
+                      Sources: {c.sources}
+                    </p>
+                  </div>
                 )}
               </div>
             )
@@ -2249,134 +2298,6 @@ export default function InsightsPage() {
         </div>
 
       </div>
-
-      {/* Compare replace modal — shown when list is full */}
-      {compareReplacePending && (
-        <CompareReplaceModal
-          pendingItem={compareReplacePending.pendingItem}
-          currentList={compareReplacePending.currentList}
-          onReplace={(index) => {
-            replaceCompareArea(index, compareReplacePending.pendingItem)
-            setCompareReplacePending(null)
-            setHeroCompareAdded('added')
-            setTimeout(() => setHeroCompareAdded(null), 2500)
-          }}
-          onClose={() => setCompareReplacePending(null)}
-        />
-      )}
-
-      {/* Change Conditions modal */}
-      {showConditionsModal && (
-        <ChangeConditionsModal
-          rangeMinutes={rangeMinutes}
-          profile={profile}
-          onSave={({ rangeMinutes: newRange, profile: newProfile }) => {
-            const newContext = { ...context, rangeMinutes: newRange, profile: newProfile }
-            saveContext(newContext)
-            navigate('/insights', { state: newContext, replace: true })
-            setShowConditionsModal(false)
-          }}
-          onClose={() => setShowConditionsModal(false)}
-        />
-      )}
-
-      {/* Breakdown modal — all 3 categories */}
-      {showBreakdownModal && (
-        <div
-          onClick={e => { if (e.target === e.currentTarget) setShowBreakdownModal(false) }}
-          style={{
-            position: 'fixed', inset: 0, zIndex: 200,
-            background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(3px)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            padding: '24px 16px',
-          }}
-          role="dialog" aria-modal="true" aria-label="Score breakdown"
-        >
-          <div style={{
-            background: '#fff', borderRadius: 20, width: '100%', maxWidth: 720,
-            maxHeight: '85vh', overflowY: 'auto',
-            boxShadow: '0 24px 64px rgba(0,0,0,0.22)',
-          }}>
-            {/* sticky header */}
-            <div style={{
-              position: 'sticky', top: 0, zIndex: 1,
-              background: '#fff', borderBottom: '1.5px solid #e5e7eb',
-              borderRadius: '20px 20px 0 0',
-              padding: '18px 24px',
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            }}>
-              <div>
-                <p style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#6b7280', marginBottom: 3 }}>
-                  Score Breakdown
-                </p>
-                <p style={{ fontSize: 18, fontWeight: 800, color: '#101828' }}>
-                  {locationName}
-                </p>
-              </div>
-              <button
-                onClick={() => setShowBreakdownModal(false)}
-                aria-label="Close breakdown"
-                style={{
-                  all: 'unset', cursor: 'pointer', width: 34, height: 34,
-                  borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  background: '#f3f4f6', fontSize: 18, color: '#4b5563',
-                  transition: 'background 0.15s',
-                }}
-                onMouseEnter={e => { e.currentTarget.style.background = '#e5e7eb' }}
-                onMouseLeave={e => { e.currentTarget.style.background = '#f3f4f6' }}
-              >
-                ×
-              </button>
-            </div>
-
-            {/* body: all 3 categories */}
-            <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 28 }}>
-              {CATEGORIES.map(k => {
-                const c = CATEGORY_CONFIG[k]
-                const catIndicators = indicators[k]
-                const catGroups = groupIndicatorFactors(catIndicators?.factors || [], profile)
-                const catScore = scores?.[k]
-                const band = catScore != null ? getScoreBand(catScore) : null
-                return (
-                  <div key={k}>
-                    {/* category header */}
-                    <div style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      marginBottom: 12, paddingBottom: 10, borderBottom: `2px solid ${c.border}`,
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{
-                          width: 32, height: 32, borderRadius: 9,
-                          background: c.soft, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: 16,
-                        }}>{c.icon}</span>
-                        <span style={{ fontSize: 16, fontWeight: 800, color: c.color }}>{c.label}</span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        {catScore != null && (
-                          <span style={{ fontSize: 22, fontWeight: 900, color: c.color }}>{Math.round(catScore)}</span>
-                        )}
-                        {band && (
-                          <span style={{
-                            fontSize: 11, fontWeight: 700, padding: '3px 10px',
-                            borderRadius: 20, background: c.soft, color: c.color,
-                          }}>{band.label}</span>
-                        )}
-                      </div>
-                    </div>
-                    {/* accordion breakdown */}
-                    {catGroups.length > 0
-                      ? <CategoryAccordion groups={catGroups} color={c.color} soft={c.soft} border={c.border} />
-                      : <p style={{ fontSize: 13, color: '#6b7280' }}>No breakdown data available.</p>
-                    }
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-
     </div>
   )
 }
