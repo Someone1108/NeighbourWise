@@ -509,6 +509,7 @@ export default function ComparePage() {
                     autoComplete="off"
                     // eslint-disable-next-line jsx-a11y/no-autofocus
                     autoFocus
+                    style={{ borderColor: 'transparent', boxShadow: 'none', outline: 'none' }}
                   />
                   {searching ? (
                     <div className="nwSearchStatus" aria-live="polite" aria-atomic="true">Searching…</div>
