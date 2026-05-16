@@ -7,6 +7,7 @@
     "dev": "nodemon src/server.js",
     "export:suburb-scores": "node scripts/precomputeSuburbScores.js --output-csv=exports/suburb_scores.csv",
     "precompute:suburb-scores": "node scripts/precomputeSuburbScores.js",
+    "refresh:safety-scores": "node scripts/refreshSafetyScores.js",
     "start": "node src/server.js"
   },
   "keywords": [],
