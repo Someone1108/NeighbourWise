@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { LinearProgress } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import { getCensusProfileForLocation, getLiveabilityScore } from '../services/api.js'
-import { addToCompareList, replaceCompareArea, loadCompareList, loadContext, saveContext } from '../utils/storage.js'
+import { addToCompareList, replaceCompareArea, loadCompareList, getCompareUpdatedEventName, loadContext, saveContext } from '../utils/storage.js'
 import LoadingOverlay from '../components/LoadingOverlay.jsx'
 import CompareReplaceModal from '../components/CompareReplaceModal.jsx'
 import ChangeConditionsModal from '../components/ChangeConditionsModal.jsx'
@@ -1530,8 +1530,20 @@ function generateSimilarSuburbs(overallScore, scores) {
 function SimilarSuburbs({ overallScore, scores }) {
   const navigate = useNavigate()
   const [page, setPage] = useState(0)
-  const [addedMap, setAddedMap] = useState({}) // name → 'added' | 'duplicate'
   const [replaceModal, setReplaceModal] = useState(null) // { pendingItem, currentList }
+
+  // Keep compare list in sync — listens for any add/remove/replace events
+  const [compareList, setCompareList] = useState(() => loadCompareList())
+  useEffect(() => {
+    const refresh = () => setCompareList(loadCompareList())
+    window.addEventListener(getCompareUpdatedEventName(), refresh)
+    return () => window.removeEventListener(getCompareUpdatedEventName(), refresh)
+  }, [])
+
+  const compareNames = useMemo(
+    () => new Set(compareList.map(x => (x.locationName || x.displayName || x.name || '').toLowerCase())),
+    [compareList]
+  )
 
   const suburbs = useMemo(
     () => generateSimilarSuburbs(overallScore, scores),
@@ -1550,15 +1562,10 @@ function SimilarSuburbs({ overallScore, scores }) {
   function handleAddToCompare(s) {
     const item = { displayName: s.name, name: s.name, lat: s.lat, lng: s.lng, rangeMinutes: 20 }
     const result = addToCompareList(item)
-    if (result?.reason === 'ALREADY_EXISTS') {
-      setAddedMap(prev => ({ ...prev, [s.name]: 'duplicate' }))
-      setTimeout(() => setAddedMap(prev => { const n = { ...prev }; delete n[s.name]; return n }), 2000)
-    } else if (result?.reason === 'COMPARE_FULL') {
+    if (result?.reason === 'COMPARE_FULL') {
       setReplaceModal({ pendingItem: item, currentList: result.current })
-    } else {
-      setAddedMap(prev => ({ ...prev, [s.name]: 'added' }))
-      setTimeout(() => setAddedMap(prev => { const n = { ...prev }; delete n[s.name]; return n }), 2000)
     }
+    // ALREADY_EXISTS and ADDED both update compareList via the event → UI updates automatically
   }
 
   return (
@@ -1580,7 +1587,7 @@ function SimilarSuburbs({ overallScore, scores }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
         {visibleSuburbs.map((s, idx) => {
           const sb = getScoreBand(s.score)
-          const addedStatus = addedMap[s.name]
+          const inList = compareNames.has(s.name.toLowerCase())
           return (
             <div
               key={s.name}
@@ -1628,18 +1635,21 @@ function SimilarSuburbs({ overallScore, scores }) {
                 <p style={{ fontSize: 12, color: '#9ca3af', marginBottom: 10 }}>{s.dist.toFixed(1)} km away</p>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button
-                    onClick={() => handleAddToCompare(s)}
+                    onClick={() => { if (!inList) handleAddToCompare(s) }}
+                    disabled={inList}
                     style={{
-                      all: 'unset', cursor: 'pointer',
+                      all: 'unset', cursor: inList ? 'default' : 'pointer',
                       padding: '6px 14px', borderRadius: 8, fontSize: 12, fontWeight: 700,
-                      border: '1.5px solid #e5e7eb', background: '#fff', color: '#374151',
+                      border: inList ? '1.5px solid #a7f3d0' : '1.5px solid #e5e7eb',
+                      background: inList ? '#ecfdf5' : '#fff',
+                      color: inList ? '#059669' : '#374151',
                       display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                      transition: 'border-color 0.15s',
+                      transition: 'border-color 0.15s, background 0.15s',
                     }}
-                    onMouseEnter={e => { e.currentTarget.style.borderColor = '#9ca3af' }}
-                    onMouseLeave={e => { e.currentTarget.style.borderColor = '#e5e7eb' }}
+                    onMouseEnter={e => { if (!inList) e.currentTarget.style.borderColor = '#9ca3af' }}
+                    onMouseLeave={e => { if (!inList) e.currentTarget.style.borderColor = '#e5e7eb' }}
                   >
-                    {addedStatus === 'added' ? '✓ Added!' : addedStatus === 'duplicate' ? '✓ Already added' : 'Add to Compare'}
+                    {inList ? '✓ In Compare List' : 'Add to Compare'}
                   </button>
                   <button
                     onClick={() => navigate('/insights', { state: { selectedLocation: { name: s.name, displayName: s.name, lat: s.lat, lng: s.lng }, rangeMinutes: 20 } })}
@@ -1672,12 +1682,8 @@ function SimilarSuburbs({ overallScore, scores }) {
           currentList={replaceModal.currentList}
           onReplace={(index) => {
             replaceCompareArea(index, replaceModal.pendingItem)
-            const name = replaceModal.pendingItem?.displayName || replaceModal.pendingItem?.name
+            // compareList state updates automatically via the storage event
             setReplaceModal(null)
-            if (name) {
-              setAddedMap(prev => ({ ...prev, [name]: 'added' }))
-              setTimeout(() => setAddedMap(prev => { const n = { ...prev }; delete n[name]; return n }), 2000)
-            }
           }}
           onClose={() => setReplaceModal(null)}
         />

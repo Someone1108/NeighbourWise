@@ -1,14 +1,17 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Button from '../components/buttons/Button.jsx'
 import LoadingOverlay from '../components/LoadingOverlay.jsx'
 import ChangeConditionsModal from '../components/ChangeConditionsModal.jsx'
+import CompareReplaceModal from '../components/CompareReplaceModal.jsx'
 import {
   getLiveabilityScore,
   searchAddresses,
   searchLocalities,
 } from '../services/api.js'
 import {
+  addToCompareList,
+  replaceCompareArea,
   clearCompareList,
   loadCompareList,
   removeFromCompareList,
@@ -137,6 +140,10 @@ export default function ComparePage() {
   const [recCategory, setRecCategory] = useState(null)
   const [recBaseline, setRecBaseline] = useState(null)
   const [recResult, setRecResult] = useState(null)
+  const recButtonRef = useRef(null)
+  const recResultRef = useRef(null)
+  const [recAddStatus, setRecAddStatus] = useState(null) // 'added' | 'duplicate' | null
+  const [recReplaceModal, setRecReplaceModal] = useState(null) // { pendingItem, currentList }
 
   const [showConditionsModal, setShowConditionsModal] = useState(false)
 
@@ -159,6 +166,24 @@ export default function ComparePage() {
       return () => clearTimeout(t)
     }
     setRecGaugeReady(false)
+  }, [recResult])
+
+  // Auto-scroll to recommend button when baseline area is selected
+  useEffect(() => {
+    if (!recBaseline || !recButtonRef.current) return
+    const t = setTimeout(() => {
+      recButtonRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 80)
+    return () => clearTimeout(t)
+  }, [recBaseline])
+
+  // Auto-scroll to result card after recommendation loads
+  useEffect(() => {
+    if (!recResult || !recResultRef.current) return
+    const t = setTimeout(() => {
+      recResultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 80)
+    return () => clearTimeout(t)
   }, [recResult])
 
   const firstArea = compareList[0] || null
@@ -780,7 +805,7 @@ export default function ComparePage() {
                 What matters most to you?
               </h3>
               <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 20 }}>
-                Select a category to find a nearby area that scores higher in it.
+                Choose a category to find nearby suburbs that perform better in that area while keeping other scores similar.
               </p>
 
               {/* Category buttons */}
@@ -851,7 +876,7 @@ export default function ComparePage() {
               )}
 
               {/* Recommend button + result — constrained width, centred */}
-              <div style={{ maxWidth: 960, margin: '0 auto', width: '100%' }}>
+              <div ref={recButtonRef} style={{ maxWidth: 960, margin: '0 auto', width: '100%' }}>
                 {recCategory && recBaseline && (
                   <button
                     onClick={handleFindRecommendation}
@@ -874,6 +899,7 @@ export default function ComparePage() {
                 )}
 
                 {/* Result card */}
+                {recResult && <div ref={recResultRef} />}
                 {recResult && (
                   recResult.noMatch ? (
                     <div style={{ marginTop: 14, padding: '14px 16px', background: '#fef3c7', border: '1.5px solid #fde68a', borderRadius: 14, textAlign: 'center' }}>
@@ -997,22 +1023,30 @@ export default function ComparePage() {
                           </button>
                           <button
                             onClick={() => {
-                              import('../utils/storage.js').then(({ addToCompareList }) => {
-                                addToCompareList({ displayName: recResult.name, name: recResult.name, lat: recResult.lat, lng: recResult.lng, rangeMinutes: 20 })
-                              })
+                              const item = { displayName: recResult.name, name: recResult.name, lat: recResult.lat, lng: recResult.lng, rangeMinutes: 20 }
+                              const result = addToCompareList(item)
+                              if (result?.reason === 'ALREADY_EXISTS') {
+                                setRecAddStatus('duplicate')
+                                setTimeout(() => setRecAddStatus(null), 2500)
+                              } else if (result?.reason === 'COMPARE_FULL') {
+                                setRecReplaceModal({ pendingItem: item, currentList: result.current })
+                              } else {
+                                setRecAddStatus('added')
+                                setTimeout(() => setRecAddStatus(null), 2500)
+                              }
                             }}
                             style={{
                               all: 'unset', cursor: 'pointer',
                               padding: '9px 18px', borderRadius: 9, fontSize: 13, fontWeight: 700,
-                              background: '#fff', color: '#374151',
-                              border: '1.5px solid #e5e7eb',
+                              background: '#fff', color: recAddStatus === 'added' ? '#059669' : recAddStatus === 'duplicate' ? '#6b7280' : '#374151',
+                              border: `1.5px solid ${recAddStatus === 'added' ? '#a7f3d0' : recAddStatus === 'duplicate' ? '#e5e7eb' : '#e5e7eb'}`,
                               display: 'inline-flex', alignItems: 'center', gap: 6,
-                              transition: 'border-color 0.15s',
+                              transition: 'border-color 0.15s, color 0.15s',
                             }}
-                            onMouseEnter={e => { e.currentTarget.style.borderColor = '#9ca3af' }}
-                            onMouseLeave={e => { e.currentTarget.style.borderColor = '#e5e7eb' }}
+                            onMouseEnter={e => { if (!recAddStatus) e.currentTarget.style.borderColor = '#9ca3af' }}
+                            onMouseLeave={e => { if (!recAddStatus) e.currentTarget.style.borderColor = '#e5e7eb' }}
                           >
-                            ＋ Add to Compare
+                            {recAddStatus === 'added' ? '✓ Added!' : recAddStatus === 'duplicate' ? '✓ Already in list' : '＋ Add to Compare'}
                           </button>
                         </div>
                       </div>
@@ -1048,6 +1082,21 @@ export default function ComparePage() {
       </div>
 
       </div>
+
+      {/* Replace modal for rec card */}
+      {recReplaceModal && (
+        <CompareReplaceModal
+          pendingItem={recReplaceModal.pendingItem}
+          currentList={recReplaceModal.currentList}
+          onReplace={(index) => {
+            replaceCompareArea(index, recReplaceModal.pendingItem)
+            setRecReplaceModal(null)
+            setRecAddStatus('added')
+            setTimeout(() => setRecAddStatus(null), 2500)
+          }}
+          onClose={() => setRecReplaceModal(null)}
+        />
+      )}
 
       {/* Change Conditions modal */}
       {showConditionsModal && (
