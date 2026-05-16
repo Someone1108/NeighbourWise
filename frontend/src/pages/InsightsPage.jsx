@@ -1492,18 +1492,18 @@ function CensusContextSection({ data, loading, userProfile, indicators }) {
 // ── Similar Suburbs ─────────────────────────────────────────────────────────
 
 const MELBOURNE_SUBURB_POOL = [
-  { name: 'Fitzroy',         baseDist: 1.2 },
-  { name: 'Collingwood',     baseDist: 1.5 },
-  { name: 'Abbotsford',      baseDist: 2.0 },
-  { name: 'South Yarra',     baseDist: 2.4 },
-  { name: 'Prahran',         baseDist: 2.9 },
-  { name: 'Hawthorn',        baseDist: 3.6 },
-  { name: 'Kew',             baseDist: 4.3 },
-  { name: 'Carlton',         baseDist: 0.9 },
-  { name: 'Brunswick',       baseDist: 2.7 },
-  { name: 'Northcote',       baseDist: 3.9 },
-  { name: 'Cremorne',        baseDist: 1.8 },
-  { name: 'East Melbourne',  baseDist: 1.1 },
+  { name: 'Fitzroy',        baseDist: 1.2, lat: -37.7963, lng: 144.9778 },
+  { name: 'Collingwood',    baseDist: 1.5, lat: -37.8041, lng: 144.9848 },
+  { name: 'Abbotsford',     baseDist: 2.0, lat: -37.8044, lng: 144.9935 },
+  { name: 'South Yarra',    baseDist: 2.4, lat: -37.8390, lng: 144.9947 },
+  { name: 'Prahran',        baseDist: 2.9, lat: -37.8497, lng: 144.9904 },
+  { name: 'Hawthorn',       baseDist: 3.6, lat: -37.8218, lng: 145.0266 },
+  { name: 'Kew',            baseDist: 4.3, lat: -37.8024, lng: 145.0313 },
+  { name: 'Carlton',        baseDist: 0.9, lat: -37.7983, lng: 144.9665 },
+  { name: 'Brunswick',      baseDist: 2.7, lat: -37.7671, lng: 144.9643 },
+  { name: 'Northcote',      baseDist: 3.9, lat: -37.7735, lng: 145.0098 },
+  { name: 'Cremorne',       baseDist: 1.8, lat: -37.8282, lng: 144.9969 },
+  { name: 'East Melbourne', baseDist: 1.1, lat: -37.8149, lng: 144.9847 },
 ]
 
 const SIM_DISTANCE_FILTERS = [5, 10, 15]
@@ -1515,6 +1515,8 @@ function generateSimilarSuburbs(overallScore, scores) {
     const v = (base) => clamp(base + Math.sin(i * 2.37 + 1.1) * 9, 35, 94)
     return {
       name: sub.name,
+      lat: sub.lat,
+      lng: sub.lng,
       score: v(overallScore),
       match: Math.max(72, Math.round(96 - i * 2.8)),
       dist: sub.baseDist,
@@ -1546,7 +1548,7 @@ function SimilarSuburbs({ overallScore, scores }) {
   const visibleSuburbs = filtered.slice(0, 3)
 
   function handleAddToCompare(s) {
-    const item = { displayName: s.name, name: s.name, rangeMinutes: 20 }
+    const item = { displayName: s.name, name: s.name, lat: s.lat, lng: s.lng, rangeMinutes: 20 }
     const result = addToCompareList(item)
     if (result?.reason === 'ALREADY_EXISTS') {
       setAddedMap(prev => ({ ...prev, [s.name]: 'duplicate' }))
@@ -1640,7 +1642,7 @@ function SimilarSuburbs({ overallScore, scores }) {
                     {addedStatus === 'added' ? '✓ Added!' : addedStatus === 'duplicate' ? '✓ Already added' : 'Add to Compare'}
                   </button>
                   <button
-                    onClick={() => navigate('/insights', { state: { selectedLocation: { name: s.name, displayName: s.name }, rangeMinutes: 20 } })}
+                    onClick={() => navigate('/insights', { state: { selectedLocation: { name: s.name, displayName: s.name, lat: s.lat, lng: s.lng }, rangeMinutes: 20 } })}
                     style={{
                       all: 'unset', cursor: 'pointer',
                       padding: '6px 14px', borderRadius: 8, fontSize: 12, fontWeight: 700,
