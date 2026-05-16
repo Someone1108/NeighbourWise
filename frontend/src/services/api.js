@@ -458,6 +458,50 @@ export async function getLiveabilityScore({ lat, lng, time, persona }) {
   )
 }
 
+function inferSuburbFromAddress(value) {
+  const text = String(value || '').trim()
+  if (!text) return ''
+
+  const commaMatch = text.match(/,\s*([^,]+?)\s+(?:VIC|Victoria)\s+\d{4}\b/i)
+  if (commaMatch?.[1]) {
+    return commaMatch[1]
+      .replace(/\bVIC\b|\bVictoria\b|\bAustralia\b/gi, '')
+      .replace(/\b\d{4}\b/g, '')
+      .trim()
+  }
+
+  const streetTypePattern = [
+    'avenue',
+    'ave',
+    'boulevard',
+    'blvd',
+    'court',
+    'ct',
+    'drive',
+    'dr',
+    'lane',
+    'ln',
+    'parade',
+    'pde',
+    'place',
+    'pl',
+    'road',
+    'rd',
+    'street',
+    'st',
+    'terrace',
+    'tce',
+    'way',
+  ].join('|')
+  const streetMatch = text.match(new RegExp(`\\b(?:${streetTypePattern})\\b\\s+(.+?)\\s+(?:VIC|Victoria)\\s+\\d{4}\\b`, 'i'))
+  if (!streetMatch?.[1]) return ''
+
+  return streetMatch[1]
+    .replace(/\bVIC\b|\bVictoria\b|\bAustralia\b/gi, '')
+    .replace(/\b\d{4}\b/g, '')
+    .trim()
+}
+
 export async function getCensusProfileForLocation(selectedLocation) {
   if (!selectedLocation) {
     throw new Error('Selected location is required')
@@ -465,15 +509,24 @@ export async function getCensusProfileForLocation(selectedLocation) {
 
   const placeType = selectedLocation.placeType || selectedLocation.type || ''
   const name = String(selectedLocation.name || selectedLocation.displayName || '').trim()
+  const localityName = String(
+    selectedLocation.suburb ||
+    selectedLocation.locality ||
+    inferSuburbFromAddress(selectedLocation.fullAddress || selectedLocation.displayName) ||
+    ''
+  ).trim()
   const postcode =
     selectedLocation.postcode ||
-    (placeType === 'postcode'
-      ? String(selectedLocation.name || selectedLocation.displayName || '').match(/\b\d{4}\b/)?.[0]
-      : null)
+    String(selectedLocation.fullAddress || selectedLocation.displayName || selectedLocation.name || '').match(/\b\d{4}\b/)?.[0] ||
+    null
 
   if (placeType === 'suburb' || placeType === 'locality') {
     if (!name) throw new Error('Suburb name is required')
     return fetchCachedJson(`${API_BASE_URL}/api/census/suburb/${encodeURIComponent(name)}`)
+  }
+
+  if (localityName) {
+    return fetchCachedJson(`${API_BASE_URL}/api/census/suburb/${encodeURIComponent(localityName)}`)
   }
 
   if (placeType === 'postcode' && postcode) {
