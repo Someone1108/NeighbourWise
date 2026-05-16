@@ -13,13 +13,13 @@ const CATEGORIES = ['accessibility', 'safety', 'environment']
 const STATIC_SCORE_BENCHMARK = {
   label: 'Supported locality avg',
   description:
-    'Calculated once from 274 supported Melbourne locality points using the same 20-minute default scoring model.',
-  sampleSize: 274,
+    'Calculated from 497 completed Melbourne locality scores in the latest recalibrated 20-minute default scoring export.',
+  sampleSize: 497,
   scores: {
     accessibility: 51,
-    safety: 70,
-    environment: 74,
-    liveability: 64,
+    safety: 69,
+    environment: 75,
+    liveability: 63,
   },
 }
 
@@ -326,9 +326,17 @@ function joinList(items = [], limit = 3) {
 }
 
 function formatDecimal(value, digits = 1) {
+  if (value === null || value === undefined || value === '') return 'Unavailable'
   const n = Number(value)
   if (!Number.isFinite(n)) return 'Unavailable'
   return n.toFixed(digits)
+}
+
+function formatSharePercent(value) {
+  if (value === null || value === undefined || value === '') return 'Unavailable'
+  const n = Number(value)
+  if (!Number.isFinite(n)) return 'Unavailable'
+  return `${Math.round(n * 100)}%`
 }
 
 function describeVegetationRange(minValue, maxValue) {
@@ -397,8 +405,10 @@ function getPersonaIndicatorPriority(factor, profile) {
   const name = String(factor?.name || '').toLowerCase()
 
   if (name.includes('crime context')) return 0
-  if (name.includes('zoning safety')) return 1
-  if (name.includes('combined safety')) return 2
+  if (name.includes('activity')) return 1
+  if (name.includes('noise') || name.includes('traffic')) return 2
+  if (name.includes('transport')) return 3
+  if (name.includes('zoning safety')) return 4
 
   if (profile?.familyWithChildren) {
     if (name.includes('school')) return 0
@@ -511,18 +521,34 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
   })
 
   const crimeScore = Number(safety?.scores?.crime)
+  const activityScore = Number(safety?.scores?.activity)
+  const noiseScore = Number(safety?.scores?.noise)
+  const transportComfortScore = Number(safety?.scores?.transportComfort)
   const zoningSafetyScore = Number(safety?.scores?.zoning)
-  const finalSafetyScore = Number(safety?.safetyScore)
   const rawCrimeAverage = Number(safety?.crimeDetails?.averageInRadius)
   const nearbySuburbCount = Number(safety?.crimeDetails?.suburbCount)
   const nearbySuburbs = joinList(safety?.crimeDetails?.suburbNames || [])
+  const activityDetails = safety?.activityDetails || {}
+  const activityCategories = joinList(activityDetails.categories || [], 5)
+  const noiseDetails = safety?.noiseDetails || {}
+  const noiseFeatureTypes = joinList(noiseDetails.featureTypes || [], 5)
+  const transportDetails = safety?.transportComfortDetails || {}
+  const transportModes = joinList(transportDetails.modes || [], 4)
+  const transportTagCoverage = transportDetails.tagCoverage || {}
   const zoneCount = Number(safety?.zoningDetails?.zoneCount)
   const zoneMix = (safety?.zoningDetails?.zoneMix || [])
     .map((zone) => `${zone.label} (${zone.count})`)
     .join(', ')
-  const crimeWeight = Math.round(Number(safety?.weights?.crime ?? 0.57) * 100)
-  const zoningWeight = Math.round(Number(safety?.weights?.zoning ?? 0.43) * 100)
+  const safetyWeights = safety?.effectiveWeights || safety?.weights || {}
+  const crimeWeight = Math.round(Number(safetyWeights.crime ?? 0.45) * 100)
+  const activityWeight = Math.round(Number(safetyWeights.activity ?? 0.10) * 100)
+  const noiseWeight = Math.round(Number(safetyWeights.noise ?? 0.15) * 100)
+  const transportWeight = Math.round(Number(safetyWeights.transportComfort ?? 0.10) * 100)
+  const zoningWeight = Math.round(Number(safetyWeights.zoning ?? 0.20) * 100)
   const missingCrime = safety?.missingData?.crime
+  const missingActivity = safety?.missingData?.activity
+  const missingNoise = safety?.missingData?.noise
+  const missingTransportComfort = safety?.missingData?.transportComfort
   const missingZoning = safety?.missingData?.zoning
 
   const safetyFactors = [
@@ -552,7 +578,104 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
       ],
       details: [
         `Nearby suburbs used: ${Number.isFinite(nearbySuburbCount) ? nearbySuburbCount : 0}`,
+        `This contributes ${crimeWeight}% of the safety score.`,
         missingCrime ? 'Crime data was missing, so zoning was used as the fallback.' : 'Crime data available.',
+      ],
+    },
+    {
+      name: 'Street activity and passive surveillance',
+      score: activityScore,
+      met: activityScore >= 60,
+      summary: Number.isFinite(activityScore) ? `${activityScore}/100` : 'Unavailable',
+      plainText: Number.isFinite(activityScore)
+        ? `Street activity scores ${activityScore}/100 using mapped shops, services, hospitality and community places inside the selected range. Active frontages can support safety by putting more people and informal observation on the street.`
+        : 'Street activity data is unavailable for this area.',
+      impact: getImpactText(activityScore, 'Safety'),
+      lines: [
+        describeScore(
+          activityScore,
+          'Mapped activity is strong, which can improve passive surveillance and perceived safety.',
+          'Mapped activity is reasonably supportive for day-to-day street presence.',
+          'Mapped activity is present but not a major safety strength.',
+          'Mapped activity is limited, so some streets may feel quieter or less naturally observed.',
+        ),
+        Number.isFinite(Number(activityDetails.featureCount))
+          ? `${activityDetails.featureCount} activity features were found in the selected range.`
+          : 'Activity feature count is unavailable.',
+        activityCategories
+          ? `Examples of mapped activity types include ${activityCategories}.`
+          : 'No detailed activity categories were returned for this area.',
+      ],
+      details: [
+        `Weighted activity density: ${formatDecimal(activityDetails.weightedDensity)}`,
+        `Average activity support weight: ${formatDecimal(activityDetails.averageWeight, 2)}`,
+        `This contributes ${activityWeight}% of the safety score.`,
+        missingActivity ? 'Activity data was missing, so the other safety signals were reweighted.' : 'Activity data available.',
+      ],
+    },
+    {
+      name: 'Noise and traffic comfort',
+      score: noiseScore,
+      met: noiseScore >= 60,
+      summary: Number.isFinite(noiseScore) ? `${noiseScore}/100` : 'Unavailable',
+      plainText: Number.isFinite(noiseScore)
+        ? `Noise and traffic comfort scores ${noiseScore}/100 using nearby major roads, rail, tram corridors and mapped lighting. Higher scores mean less traffic pressure and a more comfortable public realm.`
+        : 'Noise and traffic comfort data is unavailable for this area.',
+      impact: getImpactText(noiseScore, 'Safety'),
+      lines: [
+        describeScore(
+          noiseScore,
+          'Traffic and noise pressure looks low, which supports comfort when moving around.',
+          'Traffic and noise pressure looks manageable for most day-to-day trips.',
+          'Traffic and noise pressure is mixed, so comfort may vary by street.',
+          'Traffic and noise pressure may reduce comfort, especially around busier corridors.',
+        ),
+        Number.isFinite(Number(noiseDetails.totalSegmentKm))
+          ? `${formatDecimal(noiseDetails.totalSegmentKm)} km of relevant transport or traffic segments were assessed.`
+          : 'Traffic segment length is unavailable.',
+        Number.isFinite(Number(noiseDetails.litShare))
+          ? `${formatSharePercent(noiseDetails.litShare)} of mapped traffic segments with lighting tags are marked as lit.`
+          : 'Lighting coverage for traffic segments is unavailable.',
+      ],
+      details: [
+        `Traffic/noise feature types: ${noiseFeatureTypes || 'Unavailable'}`,
+        `Noise pressure: ${formatDecimal(noiseDetails.noisePressure)}`,
+        `This contributes ${noiseWeight}% of the safety score.`,
+        missingNoise ? 'Noise data was missing, so the other safety signals were reweighted.' : 'Noise data available.',
+      ],
+    },
+    {
+      name: 'Public transport stop comfort',
+      score: transportComfortScore,
+      met: transportComfortScore >= 60,
+      summary: Number.isFinite(transportComfortScore) ? `${transportComfortScore}/100` : 'Unavailable',
+      plainText: Number.isFinite(transportComfortScore)
+        ? `Public transport stop comfort scores ${transportComfortScore}/100 using nearby stops and mapped amenities such as lighting, shelters, benches, wheelchair access and tactile paving.`
+        : 'Public transport stop comfort data is unavailable for this area.',
+      impact: getImpactText(transportComfortScore, 'Safety'),
+      lines: [
+        describeScore(
+          transportComfortScore,
+          'Nearby stops look well supported, which helps trips feel safer and more comfortable.',
+          'Nearby stops have a reasonable comfort signal for everyday use.',
+          'Stop comfort is mixed, so some waits may feel better supported than others.',
+          'Stop comfort is limited, which may make waiting or transferring feel less comfortable.',
+        ),
+        Number.isFinite(Number(transportDetails.stopCount))
+          ? `${transportDetails.stopCount} public transport stops were assessed in the selected range.`
+          : 'Public transport stop count is unavailable.',
+        transportModes
+          ? `Mapped modes include ${transportModes}.`
+          : 'No transport modes were returned for this area.',
+      ],
+      details: [
+        `Lighting coverage: ${formatSharePercent(transportTagCoverage.lit)}`,
+        `Shelter coverage: ${formatSharePercent(transportTagCoverage.shelter)}`,
+        `Bench coverage: ${formatSharePercent(transportTagCoverage.bench)}`,
+        `Wheelchair coverage: ${formatSharePercent(transportTagCoverage.wheelchair)}`,
+        `Tactile paving coverage: ${formatSharePercent(transportTagCoverage.tactilePaving)}`,
+        `This contributes ${transportWeight}% of the safety score.`,
+        missingTransportComfort ? 'Transport comfort data was missing, so the other safety signals were reweighted.' : 'Transport comfort data available.',
       ],
     },
     {
@@ -579,29 +702,9 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
       ],
       details: [
         `Zoning features used: ${Number.isFinite(zoneCount) ? zoneCount : 0}`,
+        `This contributes ${zoningWeight}% of the safety score.`,
         missingZoning ? 'Zoning data was missing, so crime context was used as the fallback.' : 'Zoning data available.',
       ],
-    },
-    {
-      name: 'Combined safety output',
-      score: finalSafetyScore,
-      met: finalSafetyScore >= 60,
-      summary: Number.isFinite(finalSafetyScore) ? `${finalSafetyScore}/100` : 'Unavailable',
-      plainText: Number.isFinite(finalSafetyScore)
-        ? `The final safety score is ${finalSafetyScore}/100 after combining recorded-crime context with the surrounding land-use pattern.`
-        : 'The final safety score is unavailable for this area.',
-      impact: getImpactText(finalSafetyScore, 'Safety'),
-      lines: [
-        describeScore(
-          finalSafetyScore,
-          'Overall, the available safety signals are strong for this selected range.',
-          'Overall, the available safety signals are reasonably reassuring.',
-          'Overall, safety is mixed: some signals are supportive, but others deserve a closer look.',
-          'Overall, safety is the category to investigate most carefully before deciding.',
-        ),
-        `The model gives more weight to crime context (${crimeWeight}%) than zoning (${zoningWeight}%) because recorded incidents are the more direct safety signal.`,
-      ],
-      details: [`Final mix: crime ${crimeWeight}%, zoning ${zoningWeight}%`],
     },
   ]
 
@@ -739,7 +842,7 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
       category: 'safety',
       factors: safetyFactors,
       takeaway: summarizeCategory('safety', safetyFactors),
-      scoreExplanation: `Safety combines nearby recorded-crime context with land-use zoning in the selected ${rangeMinutes}-minute range. Zoning adds context because active commercial, mixed-use and public areas may have more lighting, foot traffic, passive surveillance and CCTV coverage; crime still has the larger influence because recorded incidents are the more direct safety signal.`,
+      scoreExplanation: `Safety combines recorded-crime context (${crimeWeight}%), street activity and passive surveillance (${activityWeight}%), noise and traffic comfort (${noiseWeight}%), public transport stop comfort (${transportWeight}%) and land-use zoning (${zoningWeight}%) in the selected ${rangeMinutes}-minute range. The mix can be reweighted automatically when a signal is unavailable.`,
     },
     environment: {
       category: 'environment',
@@ -1710,9 +1813,8 @@ export default function InsightsPage() {
   const [loading, setLoading] = useState(true)
   const [censusLoading, setCensusLoading] = useState(true)
   const [censusData, setCensusData] = useState(null)
-  const [activeTab, setActiveTab] = useState('accessibility')
   const [heroBarReady, setHeroBarReady] = useState(false)
-  const [showBreakdownModal, setShowBreakdownModal] = useState(false)
+  const [selectedBreakdownCategory, setSelectedBreakdownCategory] = useState(null)
   const [heroCompareAdded, setHeroCompareAdded] = useState(null) // 'added' | 'duplicate' | 'full' | null
   const [compareReplacePending, setCompareReplacePending] = useState(null) // { pendingItem, currentList }
   const [showConditionsModal, setShowConditionsModal] = useState(false)
@@ -1776,12 +1878,12 @@ export default function InsightsPage() {
   }, [loading])
 
   useEffect(() => {
-    if (!showBreakdownModal) return
-    const onKey = (e) => { if (e.key === 'Escape') setShowBreakdownModal(false) }
+    if (!selectedBreakdownCategory) return
+    const onKey = (e) => { if (e.key === 'Escape') setSelectedBreakdownCategory(null) }
     document.addEventListener('keydown', onKey)
     document.body.style.overflow = 'hidden'
     return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = '' }
-  }, [showBreakdownModal])
+  }, [selectedBreakdownCategory])
 
   if (!locationName) {
     return (
@@ -1804,14 +1906,12 @@ export default function InsightsPage() {
   }
 
   const band = overallScore != null ? getScoreBand(overallScore) : null
-  const activeCfg = CATEGORY_CONFIG[activeTab]
-  const activeIndicators = indicators[activeTab]
-  const activeGroups = groupIndicatorFactors(activeIndicators?.factors || [], profile)
   const situationHighlights = buildSituationHighlights(profile, scores, indicators)
   const benchmarkScores = STATIC_SCORE_BENCHMARK.scores
   const benchmarkShortLabel = STATIC_SCORE_BENCHMARK.label
   const benchmarkTextLabel = 'supported locality average'
   const interpretationSummary = buildInterpretationSummary(scores, profileLabel, rangeMinutes, benchmarkScores)
+  const breakdownCategories = selectedBreakdownCategory ? [selectedBreakdownCategory] : []
 
   return (
     <div style={{ background: '#f5f0eb', minHeight: '100%', paddingBottom: 80 }}>
@@ -2088,7 +2188,7 @@ export default function InsightsPage() {
 
                 {!loading && catIndicators && catGroups.length > 0 && (
                   <button
-                    onClick={() => setShowBreakdownModal(true)}
+                    onClick={() => setSelectedBreakdownCategory(k)}
                     style={{
                       marginTop: 12, width: '100%', padding: '9px 14px',
                       background: 'transparent', border: `1px solid ${c.border}`,
@@ -2288,10 +2388,10 @@ export default function InsightsPage() {
         />
       )}
 
-      {/* Breakdown modal — all 3 categories */}
-      {showBreakdownModal && (
+      {/* Breakdown modal */}
+      {selectedBreakdownCategory && (
         <div
-          onClick={e => { if (e.target === e.currentTarget) setShowBreakdownModal(false) }}
+          onClick={e => { if (e.target === e.currentTarget) setSelectedBreakdownCategory(null) }}
           style={{
             position: 'fixed', inset: 0, zIndex: 200,
             background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(3px)',
@@ -2322,7 +2422,7 @@ export default function InsightsPage() {
                 </p>
               </div>
               <button
-                onClick={() => setShowBreakdownModal(false)}
+                onClick={() => setSelectedBreakdownCategory(null)}
                 aria-label="Close breakdown"
                 style={{
                   all: 'unset', cursor: 'pointer', width: 34, height: 34,
@@ -2337,9 +2437,9 @@ export default function InsightsPage() {
               </button>
             </div>
 
-            {/* body: all 3 categories */}
+            {/* body */}
             <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 28 }}>
-              {CATEGORIES.map(k => {
+              {breakdownCategories.map(k => {
                 const c = CATEGORY_CONFIG[k]
                 const catIndicators = indicators[k]
                 const catGroups = groupIndicatorFactors(catIndicators?.factors || [], profile)
