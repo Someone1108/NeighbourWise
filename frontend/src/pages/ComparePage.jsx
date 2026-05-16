@@ -94,6 +94,49 @@ function reasonForCategory(key) {
   return CATEGORY_REASON_TEXT[key] || `${labelForCategory(key)} reflects the selected score category`
 }
 
+function buildOverallVerdict({ area1, area2, overall1, overall2, scores, deltas }) {
+  const overallGap = Math.abs(overall1 - overall2)
+  const sortedDeltas = [...deltas].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+  const topDelta = sortedDeltas[0]
+  const closeCategories = sortedDeltas
+    .filter((item) => Math.abs(item.delta) <= 3)
+    .map((item) => labelForCategory(item.key).toLowerCase())
+  const secondaryDifferences = sortedDeltas
+    .filter((item) => item !== topDelta && Math.abs(item.delta) > 3)
+    .map((item) => {
+      const leader = item.delta > 0 ? area1 : area2
+      const score = item.delta > 0 ? scores[item.key][0] : scores[item.key][1]
+      const trailingScore = item.delta > 0 ? scores[item.key][1] : scores[item.key][0]
+      return `${leader} is also ahead in ${labelForCategory(item.key).toLowerCase()} (${score} vs ${trailingScore})`
+    })
+
+  if (overallGap <= 2) {
+    const topLeader = topDelta?.delta > 0 ? area1 : area2
+    const topScore = topDelta?.delta > 0 ? scores[topDelta.key][0] : scores[topDelta.key][1]
+    const topTrailingScore = topDelta?.delta > 0 ? scores[topDelta.key][1] : scores[topDelta.key][0]
+
+    return topDelta && Math.abs(topDelta.delta) > 3
+      ? `Overall, these areas are closely matched (${overall1} vs ${overall2}). The clearest difference is ${labelForCategory(topDelta.key).toLowerCase()}, where ${topLeader} scores ${topScore} compared with ${topTrailingScore}, so use that category as the main tie-breaker.`
+      : `Overall, these areas are closely matched (${overall1} vs ${overall2}), and the category scores are mostly similar. This is more of a lifestyle trade-off than a clear winner.`
+  }
+
+  const winner = overall1 > overall2 ? area1 : area2
+  const loser = overall1 > overall2 ? area2 : area1
+  const winnerScore = overall1 > overall2 ? overall1 : overall2
+  const loserScore = overall1 > overall2 ? overall2 : overall1
+  const topLeader = topDelta.delta > 0 ? area1 : area2
+  const topScore = topDelta.delta > 0 ? scores[topDelta.key][0] : scores[topDelta.key][1]
+  const topTrailingScore = topDelta.delta > 0 ? scores[topDelta.key][1] : scores[topDelta.key][0]
+  const closeText = closeCategories.length
+    ? ` ${closeCategories.map((label) => `${label}`).join(' and ')} stay close, so they are less decisive in this comparison.`
+    : ''
+  const secondaryText = secondaryDifferences.length
+    ? ` ${secondaryDifferences.join('. ')}.`
+    : ''
+
+  return `${winner} looks stronger overall (${winnerScore} vs ${loserScore}), with a ${overallGap}-point lead over ${loser}. The biggest difference is ${labelForCategory(topDelta.key).toLowerCase()}: ${topLeader} scores ${topScore} compared with ${topTrailingScore}.${secondaryText}${closeText}`
+}
+
 function hasSituationProfile(profile) {
   return Boolean(profile?.familyWithChildren || profile?.elderly || profile?.petOwner)
 }
@@ -908,20 +951,20 @@ export default function ComparePage() {
           { key: 'environment', delta: scores.environment[0] - scores.environment[1] },
         ]
 
-        deltas.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
-        const topDelta = deltas[0]
-
-        let recommendation = 'Both areas are closely matched overall.'
-
-        if (overall1 > overall2) {
-          recommendation = `${firstArea.locationName} currently looks stronger overall, especially in ${labelForCategory(topDelta.key).toLowerCase()}.`
-        } else if (overall2 > overall1) {
-          recommendation = `${getLocationLabel(activeSecondArea)} currently looks stronger overall, especially in ${labelForCategory(topDelta.key).toLowerCase()}.`
-        }
+        const area1Name = firstArea.locationName
+        const area2Name = getLocationLabel(activeSecondArea)
+        const recommendation = buildOverallVerdict({
+          area1: area1Name,
+          area2: area2Name,
+          overall1,
+          overall2,
+          scores,
+          deltas,
+        })
 
         setData({
-          area1: firstArea.locationName,
-          area2: getLocationLabel(activeSecondArea),
+          area1: area1Name,
+          area2: area2Name,
           range1: firstTime,
           range2: secondTime,
           overall1,
