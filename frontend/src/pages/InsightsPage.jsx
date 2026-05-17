@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { LinearProgress } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
-import { getCensusProfileForLocation, getLiveabilityScore } from '../services/api.js'
+import { getCensusProfileForLocation, getCouncilLinksForLocation, getLiveabilityScore } from '../services/api.js'
 import { addToCompareList, replaceCompareArea, loadCompareList, getCompareUpdatedEventName, loadContext, saveContext } from '../utils/storage.js'
 import LoadingOverlay from '../components/LoadingOverlay.jsx'
 import CompareReplaceModal from '../components/CompareReplaceModal.jsx'
@@ -1752,6 +1752,143 @@ function SimilarSuburbs({ overallScore, scores }) {
   )
 }
 
+function CouncilLinksSection({ data, loading }) {
+  const links = Array.isArray(data?.links) ? data.links : []
+  const titleCouncilName = data?.councilName || data?.lgaName || 'Council'
+  const badgeLabel = data?.lgaName || data?.councilName || 'Planning sources'
+
+  if (loading) {
+    return (
+      <div style={{
+        background: '#fff', border: '1.5px solid #e5e7eb',
+        borderRadius: 20, overflow: 'hidden', marginBottom: 28,
+        boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
+      }}>
+        <div style={{ background: '#154f42', padding: '22px 26px' }}>
+          <p style={{ fontSize: 12, fontWeight: 900, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.62)', marginBottom: 7 }}>
+            Official sources
+          </p>
+          <h2 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 28, fontWeight: 400, color: '#fff' }}>
+            Council plans and development links
+          </h2>
+        </div>
+        <div style={{ padding: 26 }}>
+          <LinearProgress aria-label="Loading council links" />
+        </div>
+      </div>
+    )
+  }
+
+  if (!links.length) return null
+
+  return (
+    <section style={{
+      background: '#fff', border: '1.5px solid #e5e7eb',
+      borderRadius: 20, overflow: 'hidden', marginBottom: 28,
+      boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
+    }} aria-label="Official council and planning sources">
+      <div style={{
+        background: 'linear-gradient(90deg, #164c3f, #0f3f38)',
+        padding: '24px 26px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 18,
+        flexWrap: 'wrap',
+      }}>
+        <div>
+          <p style={{ fontSize: 12, fontWeight: 900, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.62)', marginBottom: 7 }}>
+            Official sources
+          </p>
+          <h2 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 28, fontWeight: 400, color: '#fff' }}>
+            Council plans and development links
+          </h2>
+        </div>
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          borderRadius: 999, padding: '10px 18px',
+          background: 'rgba(255,255,255,0.14)',
+          border: '1px solid rgba(255,255,255,0.18)',
+          color: '#fff', fontSize: 13, fontWeight: 900,
+          maxWidth: '100%', whiteSpace: 'normal', textAlign: 'center',
+        }}>
+          {badgeLabel}
+        </span>
+      </div>
+
+      <div style={{ padding: '26px' }}>
+        <p style={{ fontSize: 16, color: '#475569', lineHeight: 1.65, marginBottom: data?.message ? 10 : 22 }}>
+          Use these official council and Victorian Government sources to check projects, planning controls, permits, strategies and long-term local plans for this area.
+        </p>
+        {data?.message && (
+          <p style={{
+            fontSize: 13,
+            color: '#0f766e',
+            background: '#f0fdfa',
+            border: '1px solid #99f6e4',
+            borderRadius: 10,
+            padding: '10px 12px',
+            marginBottom: 18,
+            lineHeight: 1.55,
+          }}>
+            {data.message}
+          </p>
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(245px, 1fr))', gap: 14 }}>
+          {links.map((link) => (
+            <a
+              key={link.key || link.url}
+              href={link.url}
+              target="_blank"
+              rel="noreferrer"
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                minHeight: 160,
+                padding: '20px',
+                borderRadius: 14,
+                border: '1.5px solid #e5e7eb',
+                background: '#fff',
+                textDecoration: 'none',
+                color: 'inherit',
+                transition: 'border-color 0.15s, box-shadow 0.15s, transform 0.15s',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.borderColor = '#0f766e'
+                e.currentTarget.style.boxShadow = '0 10px 28px rgba(15,118,110,0.11)'
+                e.currentTarget.style.transform = 'translateY(-1px)'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.borderColor = '#e5e7eb'
+                e.currentTarget.style.boxShadow = 'none'
+                e.currentTarget.style.transform = 'translateY(0)'
+              }}
+            >
+              <p style={{ fontSize: 11, fontWeight: 900, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#0f766e', marginBottom: 14 }}>
+                {link.source || titleCouncilName}
+              </p>
+              <h3 style={{ fontSize: 18, fontWeight: 900, color: '#101828', lineHeight: 1.25, marginBottom: 10 }}>
+                {link.title}
+              </h3>
+              <p style={{ fontSize: 14, color: '#5b6678', lineHeight: 1.55, marginBottom: 18, flex: 1 }}>
+                {link.description}
+              </p>
+              <span style={{ fontSize: 14, fontWeight: 900, color: '#0f766e' }}>
+                Open official source
+              </span>
+            </a>
+          ))}
+        </div>
+
+        <p style={{ fontSize: 13, color: '#64748b', lineHeight: 1.6, marginTop: 20 }}>
+          These links are curated source pages, not a prediction or summary of future developments. Confirm property-specific details through official planning registers.
+        </p>
+      </div>
+    </section>
+  )
+}
+
 export default function InsightsPage() {
   const navigate = useNavigate()
   const routerLocation = useLocation()
@@ -1770,6 +1907,8 @@ export default function InsightsPage() {
   const [loading, setLoading] = useState(true)
   const [censusLoading, setCensusLoading] = useState(true)
   const [censusData, setCensusData] = useState(null)
+  const [councilLinksLoading, setCouncilLinksLoading] = useState(true)
+  const [councilLinksData, setCouncilLinksData] = useState(null)
   const [heroBarReady, setHeroBarReady] = useState(false)
   const [selectedBreakdownCategory, setSelectedBreakdownCategory] = useState(null)
   const [heroCompareAdded, setHeroCompareAdded] = useState(null) // 'added' | 'duplicate' | 'full' | null
@@ -1789,6 +1928,7 @@ export default function InsightsPage() {
       if (!cancelled) {
         setLoading(true)
         setCensusLoading(true)
+        setCouncilLinksLoading(true)
       }
     })
 
@@ -1805,21 +1945,27 @@ export default function InsightsPage() {
         message: 'Census information could not be loaded for this location.',
       }
     })
+    const councilLinksP = getCouncilLinksForLocation(selectedLocation).catch((err) => {
+      console.error('Council links load error:', err)
+      return null
+    })
 
-    Promise.all([scoreP, censusP])
-      .then(([scoreData, censusProfile]) => {
+    Promise.all([scoreP, censusP, councilLinksP])
+      .then(([scoreData, censusProfile, councilLinks]) => {
         if (cancelled) return
         setOverallScore(scoreData.liveabilityScore)
         setScores(scoreData.scores || null)
         setScoreWeights(scoreData.weights || null)
         setIndicators(buildIndicatorMapFromBreakdown(scoreData.breakdown || {}, rangeMinutes))
         setCensusData(censusProfile)
+        setCouncilLinksData(councilLinks)
       })
       .catch(console.error)
       .finally(() => {
         if (!cancelled) {
           setLoading(false)
           setCensusLoading(false)
+          setCouncilLinksLoading(false)
         }
       })
 
@@ -2237,6 +2383,8 @@ export default function InsightsPage() {
         {!loading && overallScore != null && scores && (
           <SimilarSuburbs overallScore={overallScore} scores={scores} />
         )}
+
+        <CouncilLinksSection data={councilLinksData} loading={councilLinksLoading} />
 
         {/* Methodology */}
         <div style={{
