@@ -4,6 +4,7 @@ import ScoreBar from "../components/ScoreBar.jsx";
 import NeighbourMap from "../components/NeighbourMap.jsx";
 import Button from "../components/buttons/Button.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
+import CompareReplaceModal from '../components/CompareReplaceModal.jsx'
 import Toast from "../components/Toast.jsx";
 import {
   getMapContext,
@@ -16,6 +17,8 @@ import {
 } from "../services/api.js";
 import {
   addToCompareList,
+  replaceCompareArea,
+  loadCompareList,
   loadContext,
   saveContext
 } from "../utils/storage.js";
@@ -58,13 +61,13 @@ export default function MapPage() {
   const [mapData, setMapData] = useState(null);
   const [suburbPolygon, setSuburbPolygon] = useState(null);
   const [rangeMinutes, setRangeMinutes] = useState(20);
-  const [compareHint, setCompareHint] = useState("");
   const [poiData, setPoiData] = useState([]);
   const [showInsights, setShowInsights] = useState(true);
   const [activeLayer, setActiveLayer] = useState("none");
   const [layerData, setLayerData] = useState(null);
   const [useSuburbBoundary, setUseSuburbBoundary] = useState(false);
-
+  const [compareHint, setCompareHint] = useState("");
+  const [recReplaceModal, setRecReplaceModal] = useState(null);
   const [scoreData, setScoreData] = useState(null);
 
   const context = useMemo(() => {
@@ -335,9 +338,13 @@ export default function MapPage() {
                 }
 
                 if (result.reason === "COMPARE_FULL") {
-                  setCompareHint(
-                    "Compare list is full. Please go to Compare page to remove or replace an area."
-                  );
+                  const currentList = result.list || loadCompareList();
+
+                  setRecReplaceModal({
+                    pendingItem: compareItem,
+                    currentList
+                  });
+
                   return;
                 }
 
@@ -585,6 +592,21 @@ export default function MapPage() {
           </div>
         </aside>
       </div>
+
+
+      {/* Replace modal for compare */}
+      {recReplaceModal && (
+        <CompareReplaceModal
+          pendingItem={recReplaceModal.pendingItem}
+          currentList={recReplaceModal.currentList}
+          onReplace={(index) => {
+            replaceCompareArea(index, recReplaceModal.pendingItem);
+            setRecReplaceModal(null);
+            setCompareHint("Compare area replaced.");
+          }}
+          onClose={() => setRecReplaceModal(null)}
+        />
+      )}
 
       <Toast
         message={compareHint}

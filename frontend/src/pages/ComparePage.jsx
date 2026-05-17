@@ -7,6 +7,7 @@ import CompareReplaceModal from '../components/CompareReplaceModal.jsx'
 import {
   getCensusProfileForLocation,
   getLiveabilityScore,
+  getCompareRecommendation,
   searchAddresses,
   searchLocalities,
 } from '../services/api.js'
@@ -39,51 +40,22 @@ const CATEGORY_REASON_TEXT = {
   environment: 'Environment reflects green coverage, urban heat comfort, environmental zoning comfort and air quality',
 }
 
-// Candidate pool for "Find a Better Area" recommendations
-const REC_POOL = [
-  { name: 'Box Hill',       lat: -37.8195, lng: 145.1232, scores: { accessibility: 84, safety: 74, environment: 78, overall: 79 } },
-  { name: 'Doncaster',      lat: -37.7831, lng: 145.1270, scores: { accessibility: 76, safety: 80, environment: 83, overall: 80 } },
-  { name: 'Camberwell',     lat: -37.8243, lng: 145.0624, scores: { accessibility: 79, safety: 78, environment: 80, overall: 79 } },
-  { name: 'Moonee Ponds',   lat: -37.7648, lng: 144.9163, scores: { accessibility: 80, safety: 73, environment: 74, overall: 76 } },
-  { name: 'Essendon',       lat: -37.7491, lng: 144.9170, scores: { accessibility: 78, safety: 76, environment: 76, overall: 77 } },
-  { name: 'Ringwood',       lat: -37.8162, lng: 145.2303, scores: { accessibility: 78, safety: 75, environment: 82, overall: 78 } },
-  { name: 'Chadstone',      lat: -37.8846, lng: 145.0899, scores: { accessibility: 85, safety: 70, environment: 72, overall: 76 } },
-  { name: 'Footscray',      lat: -37.7988, lng: 144.8997, scores: { accessibility: 82, safety: 63, environment: 67, overall: 71 } },
-  { name: 'Frankston',      lat: -38.1431, lng: 145.1264, scores: { accessibility: 72, safety: 70, environment: 85, overall: 76 } },
-  { name: 'Williamstown',   lat: -37.8570, lng: 144.8999, scores: { accessibility: 71, safety: 79, environment: 83, overall: 78 } },
-  { name: 'Werribee',       lat: -37.8962, lng: 144.6628, scores: { accessibility: 68, safety: 75, environment: 81, overall: 75 } },
-  { name: 'Glen Waverley',  lat: -37.8788, lng: 145.1634, scores: { accessibility: 80, safety: 78, environment: 82, overall: 80 } },
-  { name: 'Dandenong',      lat: -37.9874, lng: 145.2162, scores: { accessibility: 75, safety: 65, environment: 71, overall: 70 } },
-  { name: 'Heidelberg',     lat: -37.7563, lng: 145.0632, scores: { accessibility: 77, safety: 74, environment: 79, overall: 77 } },
-  { name: 'Altona',         lat: -37.8695, lng: 144.8258, scores: { accessibility: 69, safety: 77, environment: 84, overall: 77 } },
-]
-
-function haversineKm(lat1, lng1, lat2, lng2) {
-  const R = 6371
-  const toRad = (d) => (d * Math.PI) / 180
-  const dLat = toRad(lat2 - lat1)
-  const dLng = toRad(lng2 - lng1)
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-}
-
-function findRecommendation(baselineScores, baseLat, baseLng, category) {
-  const others = CATEGORY_KEYS.filter((k) => k !== category)
-  const candidates = REC_POOL.filter((sub) => {
-    if (sub.scores[category] <= baselineScores[category]) return false
-    return others.every((k) => sub.scores[k] >= baselineScores[k] - 5)
-  })
-    .map((sub) => ({ ...sub, dist: haversineKm(baseLat, baseLng, sub.lat, sub.lng) }))
-    .sort((a, b) => a.dist - b.dist)
-  return candidates[0] || null
-}
 
 function safeRangeMinutes(value) {
   const n = Number(value)
   if ([10, 20, 30].includes(n)) return n
   return 20
+}
+
+function getProfileLabel(profile) {
+  if (profile?.familyWithChildren) return 'Family with children'
+  if (profile?.elderly) return 'Older residents'
+  if (profile?.petOwner) return 'Pet owners'
+  return 'General lifestyle'
+}
+
+function getSharedRangeMinutes(firstArea, secondArea) {
+  return safeRangeMinutes(firstArea?.rangeMinutes ?? secondArea?.rangeMinutes ?? 20)
 }
 
 function labelForCategory(key) {
@@ -837,6 +809,18 @@ export default function ComparePage() {
 
   const firstArea = compareList[0] || null
   const secondArea = compareList[1] || null
+
+  const area1Label =
+  firstArea?.displayName ||
+  firstArea?.locationName ||
+  firstArea?.fullAddress ||
+  firstArea?.name ||
+  'Area 1'
+
+  const mapButtonTitle = firstArea
+  ? `View ${area1Label} Map`
+  : 'Back to Home'
+
   const activeSecondArea = secondArea
 
   const hasResults = suburbResults.length > 0 || addressResults.length > 0
@@ -1123,42 +1107,95 @@ export default function ComparePage() {
     })
   }
 
-  function handleFindRecommendation() {
-    if (!recCategory || !recBaseline || !data) return
-    const idx = recBaseline === 1 ? 0 : 1
-    const baselineScores = {
-      accessibility: data.scores.accessibility[idx],
-      safety: data.scores.safety[idx],
-      environment: data.scores.environment[idx],
-    }
-    const baselineArea = recBaseline === 1 ? firstArea : secondArea
-    const baseLat = Number(baselineArea?.lat ?? baselineArea?.selectedLocation?.lat)
-    const baseLng = Number(baselineArea?.lng ?? baselineArea?.selectedLocation?.lng)
+async function handleFindRecommendation() {
+  if (!recCategory || !recBaseline || !data) return
 
-    if (!Number.isFinite(baseLat) || !Number.isFinite(baseLng)) {
-      setRecResult({ noMatch: true })
-      return
-    }
+  setRecResult(null)
+  setRecAddStatus(null)
 
-    const result = findRecommendation(baselineScores, baseLat, baseLng, recCategory)
-    if (!result) {
-      setRecResult({ noMatch: true })
-      return
-    }
+  const benchmarkArea = recBaseline === 1 ? firstArea : secondArea
+  const baselineName = recBaseline === 1 ? data.area1 : data.area2
 
-    const catLabel = CATEGORY_META[recCategory].label
-    const baselineName = recBaseline === 1 ? data.area1 : data.area2
-    const gain = result.scores[recCategory] - baselineScores[recCategory]
-    const baselineCategoryScore = baselineScores[recCategory]
-    setRecResult({
-      ...result,
-      baselineName,
-      gain,
-      baselineCategoryScore,
-      reason: `${result.name} is recommended because its ${catLabel.toLowerCase()} score is ${result.scores[recCategory]}, ${gain} point${gain !== 1 ? 's' : ''} higher than ${baselineName}'s ${baselineCategoryScore}. ${reasonForCategory(recCategory)}, so this is the part of the suburb profile that is stronger. The other categories stay within a comparable range.`,
-    })
+  const area1Lat = Number(firstArea?.lat ?? firstArea?.selectedLocation?.lat)
+  const area1Lng = Number(firstArea?.lng ?? firstArea?.selectedLocation?.lng)
+
+  const area2Lat = Number(secondArea?.lat ?? secondArea?.selectedLocation?.lat)
+  const area2Lng = Number(secondArea?.lng ?? secondArea?.selectedLocation?.lng)
+
+  if (
+    !Number.isFinite(area1Lat) ||
+    !Number.isFinite(area1Lng) ||
+    !Number.isFinite(area2Lat) ||
+    !Number.isFinite(area2Lng)
+  ) {
+    setRecResult({ noMatch: true })
+    return
   }
 
+  try {
+    const result = await getCompareRecommendation({
+      benchmarkArea: recBaseline === 1 ? 'area1' : 'area2',
+      category: recCategory,
+      time: safeRangeMinutes(benchmarkArea?.rangeMinutes ?? 20),
+      persona: getSharedCompareProfile(firstArea, activeSecondArea),
+
+      area1: {
+        name: data.area1,
+        lat: area1Lat,
+        lng: area1Lng,
+        scores: {
+          accessibility: data.scores.accessibility[0],
+          safety: data.scores.safety[0],
+          environment: data.scores.environment[0],
+          liveability: data.overall1,
+        },
+      },
+
+      area2: {
+        name: data.area2,
+        lat: area2Lat,
+        lng: area2Lng,
+        scores: {
+          accessibility: data.scores.accessibility[1],
+          safety: data.scores.safety[1],
+          environment: data.scores.environment[1],
+          liveability: data.overall2,
+        },
+      },
+    })
+
+    const recommendations = result?.recommendations || []
+
+    if (!recommendations.length) {
+      setRecResult({ noMatch: true })
+      return
+    }
+
+    const top = recommendations[0]
+
+    setRecResult({
+      name: top.suburbLabel || top.suburbName,
+      lat: top.latitude,
+      lng: top.longitude,
+      dist: top.distanceKm,
+      scores: {
+        accessibility: Math.round(top.scores?.accessibility ?? 0),
+        safety: Math.round(top.scores?.safety ?? 0),
+        environment: Math.round(top.scores?.environment ?? 0),
+        overall: Math.round(top.scores?.liveability ?? top.scores?.overall ?? 0),
+      },
+      baselineName,
+      gain: Math.round(top.improvement ?? 0),
+      baselineCategoryScore: result?.benchmarkSuburb?.scores?.[recCategory],
+      reason:
+        top.reason ||
+        `${top.suburbLabel || top.suburbName} is recommended because it performs better in ${CATEGORY_META[recCategory]?.label.toLowerCase()} while keeping other scores comparable.`,
+    })
+  } catch (err) {
+    console.error('Compare recommendation failed:', err)
+    setRecResult({ noMatch: true })
+  }
+}
 
 
   const compareSubtitle = useMemo(() => {
@@ -1182,7 +1219,32 @@ export default function ComparePage() {
         : 0
     : 0
   const sharedCompareProfile = getSharedCompareProfile(firstArea, activeSecondArea)
+  const sharedRangeMinutes = safeRangeMinutes(firstArea?.rangeMinutes ?? activeSecondArea?.rangeMinutes ?? 20)
+  
+  const handleViewArea1Map = () => {
+    if (!firstArea) {
+      navigate('/')
+      return
+    }
 
+    navigate('/map', {
+      state: {
+        selectedLocation: firstArea.selectedLocation || {
+          lat: firstArea.lat,
+          lng: firstArea.lng,
+          displayName:
+            firstArea.displayName ||
+            firstArea.locationName ||
+            firstArea.fullAddress ||
+            firstArea.name,
+          name: firstArea.name,
+          fullAddress: firstArea.fullAddress,
+        },
+        profile: firstArea.profile || sharedCompareProfile || 'default',
+        rangeMinutes: firstArea.rangeMinutes || 20,
+      },
+    })
+  }
 
   function renderAreaPanel(area, index) {
     const isAdding = addingIndex === index
@@ -1203,9 +1265,25 @@ export default function ComparePage() {
               <h2 className="nwCompareAreaTitle" title={getLocationLabel(area)}>
                 {shortLabel(getLocationLabel(area))}
               </h2>
-              <p className="nwCompareAreaMeta">
-                {safeRangeMinutes(area.rangeMinutes)}-minute travel range
-              </p>
+              <div
+                className="nwCompareAreaMeta"
+                style={{
+                  display: 'grid',
+                  gap: 3,
+                  fontSize: 14,
+                  fontWeight: 600,
+                  color: 'rgba(255,255,255,0.88)',
+                  marginTop: 10,
+                  lineHeight: 1.35,
+                }}
+              >
+                <p style={{ margin: 0 }}>
+                  Travel range: {sharedRangeMinutes} minutes
+                </p>
+                <p style={{ margin: 0 }}>
+                  Situation: {getProfileLabel(sharedCompareProfile)}
+                </p>
+              </div>
               <p style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.7)', marginTop: 6 }}>
                 ✓ Area selected
               </p>
@@ -1323,6 +1401,7 @@ export default function ComparePage() {
     )
   }
   return (
+
     <div style={{ background: '#f5f0eb', minHeight: '100%', paddingBottom: 56 }}>
       {/* Sticky back-to-map nav — full viewport width, mirrors InsightsPage exactly */}
       <nav aria-label="Page navigation" style={{
@@ -1333,8 +1412,8 @@ export default function ComparePage() {
         padding: '12px 40px', display: 'flex', alignItems: 'center', gap: 14,
       }}>
         <button
-          onClick={() => navigate('/map')}
-          aria-label="Go back to map"
+          onClick={handleViewArea1Map}
+          aria-label="Go back to Area 1 map"
           style={{
             width: 38, height: 38, borderRadius: 9,
             border: '1px solid rgba(0,0,0,0.12)', background: '#fff',
@@ -1350,7 +1429,7 @@ export default function ComparePage() {
         </button>
         <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{ fontWeight: 800, fontSize: 16, color: '#1a2436', lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            Back to Map
+            {mapButtonTitle}
           </p>
           <p style={{ fontSize: 13, color: '#4b5563', marginTop: 3 }}>
             {data ? `${shortLabel(data.area1, 24)} vs ${shortLabel(data.area2, 24)}` : 'Compare two areas side by side'}
@@ -1576,7 +1655,7 @@ export default function ComparePage() {
 
               {/* Recommend button + result — constrained width, centred */}
               <div ref={recButtonRef} style={{ maxWidth: 960, margin: '0 auto', width: '100%' }}>
-                {recCategory && recBaseline && (
+                {recCategory && recBaseline && !recResult && (
                   <button
                     onClick={handleFindRecommendation}
                     style={{
@@ -1789,8 +1868,17 @@ export default function ComparePage() {
           currentList={recReplaceModal.currentList}
           onReplace={(index) => {
             replaceCompareArea(index, recReplaceModal.pendingItem)
+
+            const updated = loadCompareList()
+            setCompareList(updated)
+
             setRecReplaceModal(null)
             setRecAddStatus('added')
+
+            setRecResult(null)
+            setRecCategory(null)
+            setRecBaseline(null)
+
             setTimeout(() => setRecAddStatus(null), 2500)
           }}
           onClose={() => setRecReplaceModal(null)}
@@ -1812,6 +1900,11 @@ export default function ComparePage() {
             saveCompareList(updated)
             setCompareList(updated)
             setShowConditionsModal(false)
+
+            // Clear old recommendation because the scoring conditions changed
+            setRecResult(null)
+            setRecCategory(null)
+            setRecBaseline(null)
           }}
           onClose={() => setShowConditionsModal(false)}
         />

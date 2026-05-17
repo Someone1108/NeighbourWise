@@ -2,11 +2,16 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { LinearProgress } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
-import { getCensusProfileForLocation, getCouncilLinksForLocation, getLiveabilityScore } from '../services/api.js'
 import { addToCompareList, replaceCompareArea, loadCompareList, getCompareUpdatedEventName, loadContext, saveContext } from '../utils/storage.js'
 import LoadingOverlay from '../components/LoadingOverlay.jsx'
 import CompareReplaceModal from '../components/CompareReplaceModal.jsx'
 import ChangeConditionsModal from '../components/ChangeConditionsModal.jsx'
+import {
+  getCensusProfileForLocation,
+  getCouncilLinksForLocation,
+  getLiveabilityScore,
+  getInsightRecommendations,
+} from '../services/api.js'
 
 const CATEGORIES = ['accessibility', 'safety', 'environment']
 
@@ -1783,49 +1788,27 @@ function CouncilLinksSection({ data, loading }) {
   )
 }
 
-const MELBOURNE_SUBURB_POOL = [
-  { name: 'Fitzroy',        baseDist: 1.2, lat: -37.7963, lng: 144.9778 },
-  { name: 'Collingwood',    baseDist: 1.5, lat: -37.8041, lng: 144.9848 },
-  { name: 'Abbotsford',     baseDist: 2.0, lat: -37.8044, lng: 144.9935 },
-  { name: 'South Yarra',    baseDist: 2.4, lat: -37.8390, lng: 144.9947 },
-  { name: 'Prahran',        baseDist: 2.9, lat: -37.8497, lng: 144.9904 },
-  { name: 'Hawthorn',       baseDist: 3.6, lat: -37.8218, lng: 145.0266 },
-  { name: 'Kew',            baseDist: 4.3, lat: -37.8024, lng: 145.0313 },
-  { name: 'Carlton',        baseDist: 0.9, lat: -37.7983, lng: 144.9665 },
-  { name: 'Brunswick',      baseDist: 2.7, lat: -37.7671, lng: 144.9643 },
-  { name: 'Northcote',      baseDist: 3.9, lat: -37.7735, lng: 145.0098 },
-  { name: 'Cremorne',       baseDist: 1.8, lat: -37.8282, lng: 144.9969 },
-  { name: 'East Melbourne', baseDist: 1.1, lat: -37.8149, lng: 144.9847 },
-]
+
 
 const SIM_DISTANCE_FILTERS = [5, 10, 15]
 
-function generateSimilarSuburbs(overallScore, scores) {
-  if (!overallScore || !scores) return []
-  const clamp = (n, lo, hi) => Math.round(Math.max(lo, Math.min(hi, n)))
-  return MELBOURNE_SUBURB_POOL.map((sub, i) => {
-    const v = (base) => clamp(base + Math.sin(i * 2.37 + 1.1) * 9, 35, 94)
-    return {
-      name: sub.name,
-      lat: sub.lat,
-      lng: sub.lng,
-      score: v(overallScore),
-      match: Math.max(72, Math.round(96 - i * 2.8)),
-      dist: sub.baseDist,
-      a: v(scores.accessibility ?? 60),
-      s: v(scores.safety ?? 60),
-      e: v(scores.environment ?? 60),
-    }
-  })
-}
 
-function SimilarSuburbs({ overallScore, scores }) {
+
+function SimilarSuburbs({
+  recommendations,
+  loading,
+  error,
+  rangeMinutes,
+  profile,
+  selectedLocation,
+  returnContext,
+}) {
   const navigate = useNavigate()
-  const [page, setPage] = useState(0)
-  const [replaceModal, setReplaceModal] = useState(null) // { pendingItem, currentList }
+  const [recReplaceModal, setRecReplaceModal] = useState(null)
+  const [compareHint, setCompareHint] = useState(null)
 
-  // Keep compare list in sync — listens for any add/remove/replace events
   const [compareList, setCompareList] = useState(() => loadCompareList())
+
   useEffect(() => {
     const refresh = () => setCompareList(loadCompareList())
     window.addEventListener(getCompareUpdatedEventName(), refresh)
@@ -1833,151 +1816,310 @@ function SimilarSuburbs({ overallScore, scores }) {
   }, [])
 
   const compareNames = useMemo(
-    () => new Set(compareList.map(x => (x.locationName || x.displayName || x.name || '').toLowerCase())),
+    () =>
+      new Set(
+        compareList.map((x) =>
+          String(x.locationName || x.displayName || x.name || '').toLowerCase()
+        )
+      ),
     [compareList]
   )
 
-  const suburbs = useMemo(
-    () => generateSimilarSuburbs(overallScore, scores),
-    [overallScore, scores],
-  )
+  const visibleSuburbs = useMemo(() => {
+    return (recommendations || []).slice(0, 3).map((item) => {
+      const name =
+        item.suburbLabel ||
+        item.suburbName ||
+        item.name ||
+        item.suburb ||
+        item.displayName ||
+        'Unknown suburb'
 
-  const [cardsReady, setCardsReady] = useState(false)
-  useEffect(() => {
-    const t = setTimeout(() => setCardsReady(true), 100)
-    return () => clearTimeout(t)
-  }, [page])
+      const score =
+        item.scores?.liveability ??
+        item.liveabilityScore ??
+        item.score ??
+        item.overallScore ??
+        item.scores?.overall ??
+        null
 
-  const filtered = suburbs.filter(s => s.score > overallScore)
-  const visibleSuburbs = filtered.slice(0, 3)
+      return {
+        ...item,
+        name,
+        displayName: name,
+        lat: Number(item.latitude ?? item.lat),
+        lng: Number(item.longitude ?? item.lng),
+        score: Number(score),
+        match: Number(item.recommendationScore ?? item.match ?? item.matchScore ?? 0),
+        dist: Number(item.distanceKm ?? item.dist ?? item.distance ?? 0),
+        reason: item.reason || '',
+      }
+    }).filter((item) => Number.isFinite(item.lat) && Number.isFinite(item.lng))
+  }, [recommendations])
 
   function handleAddToCompare(s) {
-    const item = { displayName: s.name, name: s.name, lat: s.lat, lng: s.lng, rangeMinutes: 20 }
-    const result = addToCompareList(item)
-    if (result?.reason === 'COMPARE_FULL') {
-      setReplaceModal({ pendingItem: item, currentList: result.current })
+    const item = {
+      displayName: s.displayName || s.name,
+      name: s.name,
+      lat: s.lat,
+      lng: s.lng,
+      rangeMinutes,
+      profile,
     }
-    // ALREADY_EXISTS and ADDED both update compareList via the event → UI updates automatically
+
+    const result = addToCompareList(item)
+
+    if (result?.reason === 'ALREADY_EXISTS') {
+      setCompareHint('Already in compare list.')
+      setTimeout(() => setCompareHint(null), 2500)
+      return
+    }
+
+    if (result?.reason === 'COMPARE_FULL') {
+      setRecReplaceModal({
+        pendingItem: item,
+        currentList: result.current,
+      })
+      return
+    }
+
+    setCompareHint('Added to compare.')
+    setTimeout(() => setCompareHint(null), 2500)
+  }
+
+  function handleViewInsights(s) {
+    const selectedRecommendedLocation = {
+      name: s.name || s.suburbName,
+      displayName: s.displayName || s.suburbLabel || s.name || s.suburbName,
+      lat: s.lat ?? s.latitude,
+      lng: s.lng ?? s.longitude,
+      type: 'suburb',
+      placeType: 'suburb',
+    }
+
+    const nextContext = {
+      selectedLocation: selectedRecommendedLocation,
+      rangeMinutes,
+      profile,
+
+      // This tells the next Insight page to go back to the current Insight page
+      returnContext: {
+        type: 'insight',
+        selectedLocation,
+        rangeMinutes,
+        profile,
+
+        // Keep the previous back path, e.g. current Insight can still go back to Map
+        returnContext: returnContext || null,
+      },
+    }
+
+    saveContext(nextContext)
+    navigate('/insights', { state: nextContext })
   }
 
   return (
     <div style={{ marginBottom: 28 }}>
-      {/* Header */}
       <div style={{ marginBottom: 14 }}>
         <p style={{ fontSize: 10, fontWeight: 900, letterSpacing: '0.16em', textTransform: 'uppercase', color: '#9ca3af', marginBottom: 5 }}>
           Similar Suburbs
         </p>
+
         <h2 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 'clamp(18px, 2.8vw, 24px)', fontWeight: 400, color: '#1a2436', margin: '0 0 3px', lineHeight: 1.2 }}>
           Suburbs with a similar profile
         </h2>
+
         <p style={{ fontSize: 12, color: '#9ca3af', margin: 0 }}>
-          Based on overall score and category balance
+          Based on backend recommendation results
         </p>
+
+        {compareHint && (
+          <p style={{ marginTop: 8, fontSize: 12, fontWeight: 700, color: '#059669' }}>
+            {compareHint}
+          </p>
+        )}
       </div>
 
-      {/* 3-column grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
-        {visibleSuburbs.map((s, idx) => {
-          const sb = getScoreBand(s.score)
-          const inList = compareNames.has(s.name.toLowerCase())
-          return (
-            <div
-              key={s.name}
-              style={{
-                background: '#fff', border: '1.5px solid #e5e7eb', borderRadius: 16,
-                padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 16,
-                transition: 'box-shadow 0.2s, transform 0.2s',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'; e.currentTarget.style.transform = 'translateY(-2px)' }}
-              onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'none' }}
-            >
-              {/* Left: animated circle gauge */}
-              {(() => {
-                const R = 28, circ = 2 * Math.PI * R
-                const offset = cardsReady ? circ * (1 - s.score / 100) : circ
-                return (
-                  <svg width="72" height="72" viewBox="0 0 72 72" style={{ flexShrink: 0, overflow: 'visible' }} aria-hidden="true">
-                    <circle cx="36" cy="36" r={R} fill="none" stroke="#f3f4f6" strokeWidth="5" />
-                    <circle cx="36" cy="36" r={R} fill="none"
-                      stroke={sb.color} strokeWidth="5" strokeLinecap="round"
-                      strokeDasharray={circ} strokeDashoffset={offset}
-                      transform="rotate(-90 36 36)"
-                      style={{ transition: `stroke-dashoffset 1.2s cubic-bezier(0.22,1,0.36,1) ${idx * 80}ms` }}
-                    />
-                    <text x="36" y="32" textAnchor="middle" dominantBaseline="middle"
-                      fill={sb.color} fontSize="21" fontFamily="'DM Serif Display', Georgia, serif" fontWeight="400">
-                      {s.score}
-                    </text>
-                    <text x="36" y="51" textAnchor="middle"
-                      fill="#9ca3af" fontSize="7" fontWeight="800" letterSpacing="1">SCORE</text>
-                  </svg>
-                )
-              })()}
+      {loading && (
+        <div style={{
+          background: '#fff',
+          border: '1.5px solid #e5e7eb',
+          borderRadius: 16,
+          padding: 18,
+        }}>
+          <p style={{ fontSize: 13, color: '#6b7280', fontWeight: 700 }}>
+            Loading recommendations...
+          </p>
+        </div>
+      )}
 
-              {/* Right: info + buttons */}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                  <p style={{ fontWeight: 800, fontSize: 15, color: '#1a2436', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {s.name}
-                  </p>
-                  <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 900, background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0', borderRadius: 999, padding: '2px 8px' }}>
-                    {s.match}%
-                  </span>
-                </div>
-                <p style={{ fontSize: 12, color: '#9ca3af', marginBottom: 10 }}>{s.dist.toFixed(1)} km away</p>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button
-                    onClick={() => { if (!inList) handleAddToCompare(s) }}
-                    disabled={inList}
-                    style={{
-                      all: 'unset', cursor: inList ? 'default' : 'pointer',
-                      padding: '6px 14px', borderRadius: 8, fontSize: 12, fontWeight: 700,
-                      border: inList ? '1.5px solid #a7f3d0' : '1.5px solid #e5e7eb',
-                      background: inList ? '#ecfdf5' : '#fff',
-                      color: inList ? '#059669' : '#374151',
-                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                      transition: 'border-color 0.15s, background 0.15s',
-                    }}
-                    onMouseEnter={e => { if (!inList) e.currentTarget.style.borderColor = '#9ca3af' }}
-                    onMouseLeave={e => { if (!inList) e.currentTarget.style.borderColor = '#e5e7eb' }}
+      {!loading && error && (
+        <div style={{
+          background: '#fff7ed',
+          border: '1.5px solid #fed7aa',
+          borderRadius: 16,
+          padding: 18,
+        }}>
+          <p style={{ fontSize: 13, color: '#9a3412', fontWeight: 700 }}>
+            {error}
+          </p>
+        </div>
+      )}
+
+      {!loading && !error && visibleSuburbs.length === 0 && (
+        <div style={{
+          background: '#fff',
+          border: '1.5px solid #e5e7eb',
+          borderRadius: 16,
+          padding: 18,
+        }}>
+          <p style={{ fontSize: 13, color: '#6b7280', fontWeight: 700 }}>
+            No recommended suburbs found for this area.
+          </p>
+        </div>
+      )}
+
+      {!loading && !error && visibleSuburbs.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
+          {visibleSuburbs.map((s) => {
+            const sb = getScoreBand(s.score)
+            const inList = compareNames.has(String(s.name).toLowerCase())
+
+            return (
+              <div
+                key={`${s.name}-${s.lat}-${s.lng}`}
+                style={{
+                  background: '#fff',
+                  border: '1.5px solid #e5e7eb',
+                  borderRadius: 16,
+                  padding: '16px 20px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 16,
+                  transition: 'box-shadow 0.2s, transform 0.2s',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'
+                  e.currentTarget.style.transform = 'translateY(-2px)'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.boxShadow = 'none'
+                  e.currentTarget.style.transform = 'none'
+                }}
+              >
+                <svg width="72" height="72" viewBox="0 0 72 72" style={{ flexShrink: 0 }}>
+                  <circle cx="36" cy="36" r="30" fill="none" stroke="#e5e7eb" strokeWidth="5" />
+                  <circle
+                    cx="36"
+                    cy="36"
+                    r="30"
+                    fill="none"
+                    stroke={sb.color}
+                    strokeWidth="5"
+                    strokeLinecap="round"
+                    strokeDasharray={2 * Math.PI * 30}
+                    strokeDashoffset={
+                      Number.isFinite(s.score)
+                        ? 2 * Math.PI * 30 - (s.score / 100) * 2 * Math.PI * 30
+                        : 2 * Math.PI * 30
+                    }
+                    transform="rotate(-90 36 36)"
+                  />
+                  <text
+                    x="36"
+                    y="32"
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    fill={sb.color}
+                    fontSize="21"
+                    fontFamily="'DM Serif Display', Georgia, serif"
+                    fontWeight="400"
                   >
-                    {inList ? '✓ In Compare List' : 'Add to Compare'}
-                  </button>
-                  <button
-                    onClick={() => navigate('/insights', { state: { selectedLocation: { name: s.name, displayName: s.name, lat: s.lat, lng: s.lng }, rangeMinutes: 20 } })}
-                    style={{
-                      all: 'unset', cursor: 'pointer',
-                      padding: '6px 14px', borderRadius: 8, fontSize: 12, fontWeight: 700,
-                      background: 'linear-gradient(135deg, #f59648 0%, #f47c20 100%)',
-                      color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                      transition: 'opacity 0.15s',
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.opacity = '0.88' }}
-                    onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}
-                  >
-                    View Insights →
-                  </button>
+                    {Number.isFinite(s.score) ? Math.round(s.score) : '–'}
+                  </text>
+                  <text x="36" y="51" textAnchor="middle" fill="#9ca3af" fontSize="7" fontWeight="800" letterSpacing="1">
+                    SCORE
+                  </text>
+                </svg>
+
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <p style={{ fontWeight: 800, fontSize: 15, color: '#1a2436', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {s.name}
+                    </p>
+
+                    {Number.isFinite(s.match) && s.match > 0 && (
+                      <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 900, background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0', borderRadius: 999, padding: '2px 8px' }}>
+                        {Math.round(s.match)}%
+                      </span>
+                    )}
+                  </div>
+
+                  {Number.isFinite(s.dist) && s.dist > 0 && (
+                    <p style={{ fontSize: 12, color: '#9ca3af', marginBottom: 10 }}>
+                      {s.dist.toFixed(1)} km away
+                    </p>
+                  )}
+
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      onClick={() => {
+                        if (!inList) handleAddToCompare(s)
+                      }}
+                      disabled={inList}
+                      style={{
+                        all: 'unset',
+                        cursor: inList ? 'default' : 'pointer',
+                        padding: '6px 14px',
+                        borderRadius: 8,
+                        fontSize: 12,
+                        fontWeight: 700,
+                        border: inList ? '1.5px solid #a7f3d0' : '1.5px solid #e5e7eb',
+                        background: inList ? '#ecfdf5' : '#fff',
+                        color: inList ? '#059669' : '#374151',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      {inList ? '✓ In Compare List' : 'Add to Compare'}
+                    </button>
+
+                    <button
+                      onClick={() => handleViewInsights(s)}
+                      style={{
+                        all: 'unset',
+                        cursor: 'pointer',
+                        padding: '6px 14px',
+                        borderRadius: 8,
+                        fontSize: 12,
+                        fontWeight: 700,
+                        background: 'linear-gradient(135deg, #f59648 0%, #f47c20 100%)',
+                        color: '#fff',
+                      }}
+                    >
+                      View Insights →
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          )
-        })}
-      </div>
+            )
+          })}
+        </div>
+      )}
 
-
-      <style>{`@keyframes nwSimFadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }`}</style>
-
-      {/* Replace modal for SimilarSuburbs */}
-      {replaceModal && (
+      {/* Replace modal for compare */}
+      {recReplaceModal && (
         <CompareReplaceModal
-          pendingItem={replaceModal.pendingItem}
-          currentList={replaceModal.currentList}
+          pendingItem={recReplaceModal.pendingItem}
+          currentList={recReplaceModal.currentList}
           onReplace={(index) => {
-            replaceCompareArea(index, replaceModal.pendingItem)
-            // compareList state updates automatically via the storage event
-            setReplaceModal(null)
+            replaceCompareArea(index, recReplaceModal.pendingItem)
+            setRecReplaceModal(null)
+            setCompareHint('Compare area replaced.')
+            setTimeout(() => setCompareHint(null), 2500)
           }}
-          onClose={() => setReplaceModal(null)}
+          onClose={() => setRecReplaceModal(null)}
         />
       )}
     </div>
@@ -1987,13 +2129,13 @@ function SimilarSuburbs({ overallScore, scores }) {
 export default function InsightsPage() {
   const navigate = useNavigate()
   const routerLocation = useLocation()
-
   const context = useMemo(() => routerLocation.state || loadContext() || null, [routerLocation.state])
   const selectedLocation = context?.selectedLocation
   const locationName = selectedLocation?.displayName || selectedLocation?.fullAddress || selectedLocation?.name || ''
   const profile = context?.profile
   const rangeMinutes = context?.rangeMinutes || 20
   const profileLabel = getProfileLabel(profile)
+  const returnContext = context?.returnContext
 
   const [overallScore, setOverallScore] = useState(null)
   const [scores, setScores] = useState(null)
@@ -2009,6 +2151,9 @@ export default function InsightsPage() {
   const [heroCompareAdded, setHeroCompareAdded] = useState(null) // 'added' | 'duplicate' | 'full' | null
   const [compareReplacePending, setCompareReplacePending] = useState(null) // { pendingItem, currentList }
   const [showConditionsModal, setShowConditionsModal] = useState(false)
+  const [recommendations, setRecommendations] = useState([])
+  const [recommendationsLoading, setRecommendationsLoading] = useState(true)
+  const [recommendationsError, setRecommendationsError] = useState(null)
 
   useEffect(() => {
     const lat = Number(selectedLocation?.lat)
@@ -2017,6 +2162,7 @@ export default function InsightsPage() {
     if (!locationName || !Number.isFinite(lat) || !Number.isFinite(lng)) {
       return
     }
+
     let cancelled = false
 
     Promise.resolve().then(() => {
@@ -2024,6 +2170,8 @@ export default function InsightsPage() {
         setLoading(true)
         setCensusLoading(true)
         setCouncilLinksLoading(true)
+        setRecommendationsLoading(true)
+        setRecommendationsError(null)
       }
     })
 
@@ -2033,6 +2181,7 @@ export default function InsightsPage() {
       time: rangeMinutes,
       persona: profile || 'default',
     })
+
     const censusP = getCensusProfileForLocation(selectedLocation).catch((err) => {
       console.error('Census profile load error:', err)
       return {
@@ -2040,6 +2189,7 @@ export default function InsightsPage() {
         message: 'Census information could not be loaded for this location.',
       }
     })
+
     const councilLinksP = getCouncilLinksForLocation(selectedLocation).catch((err) => {
       console.error('Council links load error:', err)
       return {
@@ -2049,15 +2199,35 @@ export default function InsightsPage() {
       }
     })
 
-    Promise.all([scoreP, censusP, councilLinksP])
-      .then(([scoreData, censusProfile, councilLinks]) => {
+    const recommendationsP = getInsightRecommendations({
+      lat,
+      lng,
+      time: rangeMinutes,
+      persona: profile || 'default',
+    }).catch((err) => {
+      console.error('Insight recommendations load error:', err)
+      setRecommendationsError('Recommendations could not be loaded.')
+      return {
+        recommendations: [],
+      }
+    })
+
+    Promise.all([scoreP, censusP, councilLinksP, recommendationsP])
+      .then(([scoreData, censusProfile, councilLinks, recommendationsData]) => {
         if (cancelled) return
+
         setOverallScore(scoreData.liveabilityScore)
         setScores(scoreData.scores || null)
         setScoreWeights(scoreData.weights || null)
         setIndicators(buildIndicatorMapFromBreakdown(scoreData.breakdown || {}, rangeMinutes))
         setCensusData(censusProfile)
         setCouncilLinksData(councilLinks)
+
+        setRecommendations(
+          recommendationsData?.recommendations ||
+          recommendationsData?.data ||
+          []
+        )
       })
       .catch(console.error)
       .finally(() => {
@@ -2065,10 +2235,13 @@ export default function InsightsPage() {
           setLoading(false)
           setCensusLoading(false)
           setCouncilLinksLoading(false)
+          setRecommendationsLoading(false)
         }
       })
 
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [locationName, rangeMinutes, profile, selectedLocation])
 
   useEffect(() => {
@@ -2115,6 +2288,70 @@ export default function InsightsPage() {
   const interpretationSummary = buildInterpretationSummary(scores, profileLabel, rangeMinutes, benchmarkScores)
   const breakdownCategories = selectedBreakdownCategory ? [selectedBreakdownCategory] : []
 
+  function handleBack() {
+    // Case 1: Insight → Insight
+    // Example: South Wharf Insight → Melbourne 3000 Insight
+    if (returnContext?.type === 'insight' && returnContext?.selectedLocation) {
+      const previousContext = {
+        selectedLocation: returnContext.selectedLocation,
+        rangeMinutes: returnContext.rangeMinutes || rangeMinutes || 20,
+        profile: returnContext.profile || profile || 'default',
+
+        // Keep the earlier return context.
+        // After going back to Melbourne 3000, Melbourne 3000 still needs to know
+        // that its previous page was the Map page.
+        returnContext: returnContext.returnContext || null,
+      }
+
+      saveContext(previousContext)
+
+      navigate('/insights', {
+        state: previousContext,
+      })
+
+      return
+    }
+
+    // Case 2: Map → Insight
+    // Example: Melbourne 3000 Insight → Map
+    if (returnContext?.type === 'map' && returnContext?.selectedLocation) {
+      navigate('/map', {
+        state: {
+          selectedLocation: returnContext.selectedLocation,
+          rangeMinutes: returnContext.rangeMinutes || rangeMinutes || 20,
+          profile: returnContext.profile || profile || 'default',
+        },
+      })
+
+      return
+    }
+
+    // Fallback:
+    // If there is no returnContext but the current page still has a selected location,
+    // go back to the Map page using the current selected location.
+    if (selectedLocation) {
+      navigate('/map', {
+        state: {
+          selectedLocation,
+          rangeMinutes: rangeMinutes || 20,
+          profile: profile || 'default',
+        },
+      })
+
+      return
+    }
+
+    // Final fallback:
+    // If there is no location or return context, go back to the Home page.
+    navigate('/')
+  }
+
+  const previousLocationName =
+      returnContext?.selectedLocation?.displayName ||
+      returnContext?.selectedLocation?.locationName ||
+      returnContext?.selectedLocation?.name ||
+      null
+
   return (
     <div style={{ background: '#f5f0eb', minHeight: '100%', paddingBottom: 80 }}>
       <LoadingOverlay fixed={true} show={loading} label="Loading neighbourhood insights…" />
@@ -2127,7 +2364,7 @@ export default function InsightsPage() {
         padding: '12px 40px', display: 'flex', alignItems: 'center', gap: 14,
       }}>
         <button
-          onClick={() => navigate('/map')}
+          onClick= {handleBack}
           aria-label="Go back to map"
           onFocus={e => { e.currentTarget.style.outline = '2px solid #2563eb'; e.currentTarget.style.outlineOffset = '2px' }}
           onBlur={e => { e.currentTarget.style.outline = 'none' }}
@@ -2140,7 +2377,29 @@ export default function InsightsPage() {
           <ArrowBackIcon style={{ fontSize: 20 }} />
         </button>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ fontWeight: 800, fontSize: 16, color: '#1a2436', lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{locationName}</p>
+          <p style={{
+            fontWeight: 800,
+            fontSize: 16,
+            color: '#1a2436',
+            lineHeight: 1.1,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis'
+          }}>
+            {locationName}
+          </p>
+
+          {previousLocationName && (
+            <p style={{
+              fontSize: 12,
+              color: '#6b7280',
+              marginTop: 4,
+              fontWeight: 600
+            }}>
+              Back to {previousLocationName}
+            </p>
+          )}
+
           <p style={{ fontSize: 13, color: '#4b5563', marginTop: 3 }}>
             Liveability breakdown · {rangeMinutes} min range{profileLabel ? ` · ${profileLabel}` : ''}
           </p>
@@ -2481,8 +2740,16 @@ export default function InsightsPage() {
         )}
 
         {/* Similar Suburbs — above methodology */}
-        {!loading && overallScore != null && scores && (
-          <SimilarSuburbs overallScore={overallScore} scores={scores} />
+        {!loading && (
+          <SimilarSuburbs
+            recommendations={recommendations}
+            loading={recommendationsLoading}
+            error={recommendationsError}
+            rangeMinutes={rangeMinutes}
+            profile={profile}
+            selectedLocation={selectedLocation}
+            returnContext={returnContext}
+          />
         )}
 
         {/* Methodology */}
