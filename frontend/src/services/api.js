@@ -559,3 +559,78 @@ export async function prefetchInsightPageData({ selectedLocation, rangeMinutes, 
 
   return { scoreData, censusProfile }
 }
+
+
+/**
+ * Fetch compare recommendations from the backend.
+ *
+ * Sends the selected benchmark area, improvement category,
+ * area1, area2, time range, and persona to the backend.
+ *
+ * The backend calculates and returns recommended suburbs based on these inputs.
+ */
+
+export async function getCompareRecommendation({
+  benchmarkArea,
+  category,
+  area1,
+  area2,
+  time,
+  persona,
+}) {
+  const res = await fetch(`${API_BASE_URL}/api/recommendations/compare`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      benchmarkArea,
+      category,
+      area1,
+      area2,
+      time,
+      persona,
+    }),
+  })
+
+  if (!res.ok) {
+    const errorText = await res.text()
+    console.error('Compare recommendation API error:', errorText)
+    throw new Error('Failed to load compare recommendation')
+  }
+
+  return res.json()
+}
+
+
+/**
+ * Fetch insight recommendations from the backend.
+ *
+ * This function sends the current selected area to the backend.
+ * The backend will return similar nearby suburbs based on the selected area,
+ * range, persona, and liveability profile.
+ */
+export async function getInsightRecommendations({
+  lat,
+  lng,
+  time,
+  persona,
+}) {
+  const params = new URLSearchParams({
+    lat: String(lat),
+    lng: String(lng),
+    time: String(time || 20),
+  })
+
+  if (persona) {
+    params.set('persona', typeof persona === 'string' ? persona : JSON.stringify(persona))
+  }
+
+  const res = await fetch(`${API_BASE_URL}/api/recommendations/insight?${params.toString()}`)
+
+  if (!res.ok) {
+    throw new Error('Failed to fetch insight recommendations')
+  }
+
+  return res.json()
+}
