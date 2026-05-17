@@ -342,34 +342,71 @@ body {
   to { transform: rotate(360deg); }
 }
 
-/* Live-region toast pop-up — used for "Added to compare" etc. */
+/* Live-region toast pop-up */
 .nwToast {
   position: fixed;
-  top: 96px;
+  top: 50%;
   left: 50%;
-  transform: translateX(-50%) translateY(-8px);
+  transform: translate(-50%, calc(-50% - 8px));
   background: #10213d;
   color: #ffffff;
   font-weight: 700;
   font-size: 15px;
-  padding: 12px 22px;
-  border-radius: 999px;
-  box-shadow: 0 20px 45px rgba(15, 23, 42, 0.3);
+  padding: 14px 22px;
+  border-radius: 16px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.38);
   border: 1px solid rgba(255, 255, 255, 0.12);
   opacity: 0;
   pointer-events: none;
   z-index: 3000;
   transition: opacity 0.22s ease, transform 0.22s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+  white-space: nowrap;
+  min-width: 220px;
 }
 
 .nwToast.is-visible {
   opacity: 1;
-  transform: translateX(-50%) translateY(0);
+  transform: translate(-50%, -50%);
   pointer-events: auto;
 }
 
+.nwToast__msg {
+  width: 100%;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* Row containing action button + close ×, shown below the message */
+.nwToast__actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+}
+
+/* CTA button inside the toast */
+.nwToast__action {
+  background: #f47c20;
+  border: none;
+  color: #fff;
+  font-weight: 800;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 8px 20px;
+  border-radius: 999px;
+  line-height: 1;
+  font-family: Figtree, sans-serif;
+  transition: opacity 0.15s;
+}
+.nwToast__action:hover { opacity: 0.88; }
+
 .nwToast__close {
-  margin-left: 14px;
   background: transparent;
   border: none;
   color: rgba(255, 255, 255, 0.7);
@@ -381,6 +418,21 @@ body {
 }
 
 .nwToast__close:hover { color: #ffffff; }
+
+/* Home-page search spinner (inline inside search input wrap) */
+@keyframes nwSpin {
+  to { transform: rotate(360deg); }
+}
+.nwSearchSpinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(0,0,0,0.15);
+  border-top-color: #f47c20;
+  border-radius: 50%;
+  animation: nwSpin 0.7s linear infinite;
+  flex-shrink: 0;
+}
 
 .nwError {
   color: var(--danger);
@@ -1964,11 +2016,11 @@ body {
 
 /* PROFILE */
 .profile-label {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--muted-dark);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-dark);
   margin: 22px 0 12px;
 }
 
@@ -2813,6 +2865,7 @@ body {
 
 .nwAboutPage {
   padding-top: 0;
+  padding-bottom: 0;
 }
 
 .nwAboutHero {

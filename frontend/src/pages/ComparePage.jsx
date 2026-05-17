@@ -4,6 +4,7 @@ import Button from '../components/buttons/Button.jsx'
 import LoadingOverlay from '../components/LoadingOverlay.jsx'
 import ChangeConditionsModal from '../components/ChangeConditionsModal.jsx'
 import CompareReplaceModal from '../components/CompareReplaceModal.jsx'
+import Toast from '../components/Toast.jsx'
 import {
   getCensusProfileForLocation,
   getLiveabilityScore,
@@ -763,8 +764,10 @@ export default function ComparePage() {
   const [recResult, setRecResult] = useState(null)
   const recButtonRef = useRef(null)
   const recResultRef = useRef(null)
-  const [recAddStatus, setRecAddStatus] = useState(null) // 'added' | 'duplicate' | null
+  const [recToastMsg, setRecToastMsg] = useState(null)
+  const [recToastAction, setRecToastAction] = useState(null)
   const [recReplaceModal, setRecReplaceModal] = useState(null) // { pendingItem, currentList }
+  const [recFinding, setRecFinding] = useState(false)
 
   const [showConditionsModal, setShowConditionsModal] = useState(false)
 
@@ -1111,7 +1114,7 @@ async function handleFindRecommendation() {
   if (!recCategory || !recBaseline || !data) return
 
   setRecResult(null)
-  setRecAddStatus(null)
+  setRecFinding(true)
 
   const benchmarkArea = recBaseline === 1 ? firstArea : secondArea
   const baselineName = recBaseline === 1 ? data.area1 : data.area2
@@ -1194,6 +1197,8 @@ async function handleFindRecommendation() {
   } catch (err) {
     console.error('Compare recommendation failed:', err)
     setRecResult({ noMatch: true })
+  } finally {
+    setRecFinding(false)
   }
 }
 
@@ -1272,15 +1277,14 @@ async function handleFindRecommendation() {
                   gap: 3,
                   fontSize: 14,
                   fontWeight: 600,
-                  color: 'rgba(255,255,255,0.88)',
                   marginTop: 10,
                   lineHeight: 1.35,
                 }}
               >
-                <p style={{ margin: 0 }}>
+                <p style={{ margin: 0, color: '#ffffff' }}>
                   Travel range: {sharedRangeMinutes} minutes
                 </p>
-                <p style={{ margin: 0 }}>
+                <p style={{ margin: 0, color: '#ffffff' }}>
                   Situation: {getProfileLabel(sharedCompareProfile)}
                 </p>
               </div>
@@ -1401,8 +1405,14 @@ async function handleFindRecommendation() {
     )
   }
   return (
-
     <div style={{ background: '#f5f0eb', minHeight: '100%', paddingBottom: 56 }}>
+      <Toast
+        message={recToastMsg}
+        action={recToastAction}
+        duration={recToastAction ? 0 : 2500}
+        onClose={() => { setRecToastMsg(null); setRecToastAction(null) }}
+      />
+
       {/* Sticky back-to-map nav — full viewport width, mirrors InsightsPage exactly */}
       <nav aria-label="Page navigation" style={{
         position: 'sticky', top: 64, zIndex: 50,
@@ -1574,16 +1584,21 @@ async function handleFindRecommendation() {
               </p>
             </div>
 
-            {/* ── Find a Better Area ─────────────────────────── */}
+            {/* Find a Better Area */}
             <div style={{ marginTop: 28, paddingTop: 24, borderTop: '1.5px solid #e5e7eb', textAlign: 'center' }}>
-              <p style={{ fontSize: 10, fontWeight: 900, letterSpacing: '0.16em', textTransform: 'uppercase', color: '#9ca3af', marginBottom: 8 }}>
-                Explore Further
+              <p style={{ fontSize: 10, fontWeight: 900, letterSpacing: '0.16em', textTransform: 'uppercase', color: '#6b7280', marginBottom: 8 }}>
+                Find a Better Match
               </p>
-              <h3 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 'clamp(24px, 3.5vw, 32px)', fontWeight: 400, color: '#1a2436', margin: '0 0 6px', lineHeight: 1.15 }}>
-                What matters most to you?
+              <h3 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 'clamp(22px, 3vw, 30px)', fontWeight: 400, color: '#1a2436', margin: '0 0 8px', lineHeight: 1.15 }}>
+                Not satisfied? Find a suburb that does better.
               </h3>
-              <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 20 }}>
-                Choose a category to find nearby suburbs that perform better in that area while keeping other scores similar.
+              <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 6, lineHeight: 1.6 }}>
+                Pick a score category below, then choose which area to use as a starting point. We'll find a nearby suburb that scores higher in that category while keeping its other scores comparable.
+              </p>
+
+              {/* Step 1: Category */}
+              <p style={{ fontSize: 11, fontWeight: 800, color: '#374151', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 10 }}>
+                Step 1: Choose a priority
               </p>
 
               {/* Category buttons */}
@@ -1620,8 +1635,11 @@ async function handleFindRecommendation() {
                   borderRadius: 12, padding: '14px 16px', marginBottom: 16,
                   textAlign: 'center',
                 }}>
-                  <p style={{ fontSize: 12, fontWeight: 800, color: '#374151', marginBottom: 10 }}>
-                    Compare against which area?
+                  <p style={{ fontSize: 11, fontWeight: 800, color: '#374151', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6 }}>
+                    Step 2: Which area should we improve on?
+                  </p>
+                  <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 10 }}>
+                    We'll search near the area you pick.
                   </p>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
                     {[
@@ -1655,7 +1673,7 @@ async function handleFindRecommendation() {
 
               {/* Recommend button + result — constrained width, centred */}
               <div ref={recButtonRef} style={{ maxWidth: 960, margin: '0 auto', width: '100%' }}>
-                {recCategory && recBaseline && !recResult && (
+                {recCategory && recBaseline && !recResult && !recFinding && (
                   <button
                     onClick={handleFindRecommendation}
                     style={{
@@ -1674,6 +1692,25 @@ async function handleFindRecommendation() {
                   >
                     Recommend another suburb
                   </button>
+                )}
+
+                {/* Loading state while searching */}
+                {recFinding && (
+                  <div style={{
+                    width: '100%', boxSizing: 'border-box', padding: '14px 20px', borderRadius: 12,
+                    background: 'rgba(244,124,32,0.08)', border: '1.5px solid #fed7aa',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
+                    marginBottom: 4,
+                  }}>
+                    <span style={{
+                      display: 'inline-block', width: 18, height: 18, flexShrink: 0,
+                      border: '2.5px solid rgba(244,124,32,0.25)', borderTopColor: '#f47c20',
+                      borderRadius: '50%', animation: 'nwSpin 0.7s linear infinite',
+                    }} aria-hidden="true" />
+                    <span style={{ fontSize: 15, fontWeight: 700, color: '#f47c20' }}>
+                      Searching for a better suburb…
+                    </span>
+                  </div>
                 )}
 
                 {/* Result card */}
@@ -1804,27 +1841,27 @@ async function handleFindRecommendation() {
                               const item = { displayName: recResult.name, name: recResult.name, lat: recResult.lat, lng: recResult.lng, rangeMinutes: 20 }
                               const result = addToCompareList(item)
                               if (result?.reason === 'ALREADY_EXISTS') {
-                                setRecAddStatus('duplicate')
-                                setTimeout(() => setRecAddStatus(null), 2500)
+                                setRecToastMsg('Already in your compare list.')
+                                setRecToastAction(null)
                               } else if (result?.reason === 'COMPARE_FULL') {
                                 setRecReplaceModal({ pendingItem: item, currentList: result.current })
                               } else {
-                                setRecAddStatus('added')
-                                setTimeout(() => setRecAddStatus(null), 2500)
+                                setRecToastMsg('Added to compare list.')
+                                setRecToastAction(null)
                               }
                             }}
                             style={{
                               all: 'unset', cursor: 'pointer',
                               padding: '9px 18px', borderRadius: 9, fontSize: 13, fontWeight: 700,
-                              background: '#fff', color: recAddStatus === 'added' ? '#059669' : recAddStatus === 'duplicate' ? '#6b7280' : '#374151',
-                              border: `1.5px solid ${recAddStatus === 'added' ? '#a7f3d0' : recAddStatus === 'duplicate' ? '#e5e7eb' : '#e5e7eb'}`,
+                              background: '#fff', color: '#374151',
+                              border: '1.5px solid #e5e7eb',
                               display: 'inline-flex', alignItems: 'center', gap: 6,
-                              transition: 'border-color 0.15s, color 0.15s',
+                              transition: 'border-color 0.15s',
                             }}
-                            onMouseEnter={e => { if (!recAddStatus) e.currentTarget.style.borderColor = '#9ca3af' }}
-                            onMouseLeave={e => { if (!recAddStatus) e.currentTarget.style.borderColor = '#e5e7eb' }}
+                            onMouseEnter={e => { e.currentTarget.style.borderColor = '#9ca3af' }}
+                            onMouseLeave={e => { e.currentTarget.style.borderColor = '#e5e7eb' }}
                           >
-                            {recAddStatus === 'added' ? '✓ Added!' : recAddStatus === 'duplicate' ? '✓ Already in list' : '＋ Add to Compare'}
+                            ＋ Add to Compare
                           </button>
                         </div>
                       </div>
@@ -1873,13 +1910,12 @@ async function handleFindRecommendation() {
             setCompareList(updated)
 
             setRecReplaceModal(null)
-            setRecAddStatus('added')
+            setRecToastMsg('Compare area replaced.')
+            setRecToastAction(null)
 
             setRecResult(null)
             setRecCategory(null)
             setRecBaseline(null)
-
-            setTimeout(() => setRecAddStatus(null), 2500)
           }}
           onClose={() => setRecReplaceModal(null)}
         />
