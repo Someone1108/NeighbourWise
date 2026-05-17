@@ -22,8 +22,8 @@ const clamp = (value, min, max) => {
   return Math.max(min, Math.min(value, max));
 };
 
-// avgHeat 越高 → 越熱 → 分數越低
-// uhi18_m 原始資料範圍大約是 -8.6 ~ 16.9
+// Higher avgHeat means hotter conditions, resulting in a lower score
+// The raw uhi18_m data range is approximately -8.6 to 16.9
 const calculateHeatScore = (avgHeat) => {
   if (avgHeat === null || avgHeat === undefined) return null;
 
@@ -36,7 +36,7 @@ const calculateHeatScore = (avgHeat) => {
   return round2(clamp(score, 0, 100));
 };
 
-// avgGreen 越高 → 越綠 → 分數越高
+// Higher avgGreen means greener conditions, resulting in a higher score
 const calculateGreenScore = (avgGreen) => {
   if (avgGreen === null || avgGreen === undefined) return null;
 
@@ -47,7 +47,7 @@ const calculateGreenScore = (avgGreen) => {
   return round2(clamp(score, 0, 100));
 };
 
-// 把 zoning 類別轉成「環境舒適度分數」
+// Convert zoning categories into environmental comfort scores
 const getZoningComfortScore = (zoneCode = '', zoneDesc = '') => {
   const code = String(zoneCode || '').toUpperCase();
   const desc = String(zoneDesc || '').toUpperCase();
@@ -151,7 +151,6 @@ const getEnvironmentScore = async ({
   FROM public.vegetation_features;
   `);
 
-
   const avgGreen = greenResult.rows[0]?.avg_green;
   const greenScore = calculateGreenScore(avgGreen);
 
@@ -222,10 +221,12 @@ const getEnvironmentScore = async ({
 
   const zoningScore = calculateAverage(zoningScores);
   const zoningCounts = new Map();
+
   zoningResult.rows.forEach((row) => {
     const label = row.zone_desc || row.zone_code || 'Unknown zoning';
     zoningCounts.set(label, (zoningCounts.get(label) || 0) + 1);
   });
+
   const zoneMix = [...zoningCounts.entries()]
     .map(([label, count]) => ({ label, count }))
     .sort((a, b) => b.count - a.count)
@@ -251,24 +252,23 @@ const getEnvironmentScore = async ({
 
   // 5. Missing data fallback
   const missingData = {
-  green: greenScore === null,
-  heat: heatScore === null,
-  zoning: zoningScore === null,
-  airQuality: airQualityScore === null
+    green: greenScore === null,
+    heat: heatScore === null,
+    zoning: zoningScore === null,
+    airQuality: airQualityScore === null
   };
 
   const finalGreenScore = greenScore ?? 50;
   const finalHeatScore = heatScore ?? 50;
   const finalZoningScore = zoningScore ?? 60;
   const finalAirQualityScore = airQualityScore ?? 50;
-  
-  // 5. Final Environment score
+
+  // 6. Final Environment score
   const rawEnvironmentScore =
     finalGreenScore * ENVIRONMENT_WEIGHTS.green +
     finalHeatScore * ENVIRONMENT_WEIGHTS.heat +
     finalZoningScore * ENVIRONMENT_WEIGHTS.zoning +
     finalAirQualityScore * ENVIRONMENT_WEIGHTS.airQuality;
-
 
   function calibrateEnvironmentScore(score) {
     return 25 + score * 0.75;
