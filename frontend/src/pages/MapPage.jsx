@@ -4,7 +4,6 @@ import ScoreBar from "../components/ScoreBar.jsx";
 import NeighbourMap from "../components/NeighbourMap.jsx";
 import Button from "../components/buttons/Button.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
-import CompareReplaceModal from '../components/CompareReplaceModal.jsx'
 import Toast from "../components/Toast.jsx";
 import {
   getMapContext,
@@ -17,8 +16,6 @@ import {
 } from "../services/api.js";
 import {
   addToCompareList,
-  replaceCompareArea,
-  loadCompareList,
   loadContext,
   saveContext
 } from "../utils/storage.js";
@@ -66,8 +63,8 @@ export default function MapPage() {
   const [activeLayer, setActiveLayer] = useState("none");
   const [layerData, setLayerData] = useState(null);
   const [useSuburbBoundary, setUseSuburbBoundary] = useState(false);
-  const [compareHint, setCompareHint] = useState("");
-  const [recReplaceModal, setRecReplaceModal] = useState(null);
+  const [toastMsg, setToastMsg] = useState("");
+  const [toastAction, setToastAction] = useState(null);
   const [scoreData, setScoreData] = useState(null);
 
   const context = useMemo(() => {
@@ -328,27 +325,23 @@ export default function MapPage() {
                 };
 
                 const result = addToCompareList(compareItem);
-                if (result.success) {
-                  setCompareHint(
-                    result.reason === "ALREADY_EXISTS"
-                      ? "This area is already in compare."
-                      : `Added to compare (${result.list.length}/2).`
-                  );
+                if (result.reason === "ALREADY_EXISTS") {
+                  setToastMsg("Already in your compare list.");
+                  setToastAction(null);
                   return;
                 }
-
                 if (result.reason === "COMPARE_FULL") {
-                  const currentList = result.list || loadCompareList();
-
-                  setRecReplaceModal({
-                    pendingItem: compareItem,
-                    currentList
-                  });
-
+                  setToastMsg("Your compare list is full.");
+                  setToastAction({ label: "Go to Compare", onClick: () => navigate("/compare") });
                   return;
                 }
-
-                setCompareHint("Unable to add this area to compare.");
+                if (result.success) {
+                  setToastMsg(`Added to compare (${result.list.length}/2).`);
+                  setToastAction(null);
+                  return;
+                }
+                setToastMsg("Unable to add this area to compare.");
+                setToastAction(null);
               }}
             >
               Add to Compare
@@ -388,7 +381,7 @@ export default function MapPage() {
                   </h2>
                   {(() => {
                     const s = overallScore;
-                    let tier = { label: "—", className: "is-na" };
+                    let tier = { label: "–", className: "is-na" };
                     if (Number.isFinite(s)) {
                       if (s >= 80) tier = { label: "Excellent", className: "is-excellent" };
                       else if (s >= 65) tier = { label: "Good", className: "is-good" };
@@ -594,24 +587,11 @@ export default function MapPage() {
       </div>
 
 
-      {/* Replace modal for compare */}
-      {recReplaceModal && (
-        <CompareReplaceModal
-          pendingItem={recReplaceModal.pendingItem}
-          currentList={recReplaceModal.currentList}
-          onReplace={(index) => {
-            replaceCompareArea(index, recReplaceModal.pendingItem);
-            setRecReplaceModal(null);
-            setCompareHint("Compare area replaced.");
-          }}
-          onClose={() => setRecReplaceModal(null)}
-        />
-      )}
-
       <Toast
-        message={compareHint}
-        duration={2400}
-        onClose={() => setCompareHint("")}
+        message={toastMsg}
+        duration={toastAction ? 0 : 2400}
+        action={toastAction}
+        onClose={() => { setToastMsg(""); setToastAction(null); }}
       />
     </div>
   );

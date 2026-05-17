@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { LinearProgress } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
-import { addToCompareList, replaceCompareArea, loadCompareList, getCompareUpdatedEventName, loadContext, saveContext } from '../utils/storage.js'
+import { addToCompareList, loadCompareList, getCompareUpdatedEventName, loadContext, saveContext } from '../utils/storage.js'
 import LoadingOverlay from '../components/LoadingOverlay.jsx'
-import CompareReplaceModal from '../components/CompareReplaceModal.jsx'
 import ChangeConditionsModal from '../components/ChangeConditionsModal.jsx'
+import Toast from '../components/Toast.jsx'
 import {
   getCensusProfileForLocation,
   getCouncilLinksForLocation,
@@ -1804,8 +1804,17 @@ function SimilarSuburbs({
   returnContext,
 }) {
   const navigate = useNavigate()
-  const [recReplaceModal, setRecReplaceModal] = useState(null)
-  const [compareHint, setCompareHint] = useState(null)
+  const [toastMsg, setToastMsg] = useState(null)
+  const [toastAction, setToastAction] = useState(null)
+
+  function showToast(message, action = null) {
+    setToastMsg(message)
+    setToastAction(action)
+  }
+  function clearToast() {
+    setToastMsg(null)
+    setToastAction(null)
+  }
 
   const [compareList, setCompareList] = useState(() => loadCompareList())
 
@@ -1870,21 +1879,19 @@ function SimilarSuburbs({
     const result = addToCompareList(item)
 
     if (result?.reason === 'ALREADY_EXISTS') {
-      setCompareHint('Already in compare list.')
-      setTimeout(() => setCompareHint(null), 2500)
+      showToast('Already in your compare list.')
       return
     }
 
     if (result?.reason === 'COMPARE_FULL') {
-      setRecReplaceModal({
-        pendingItem: item,
-        currentList: result.current,
+      showToast('Your compare list is full.', {
+        label: 'Go to Compare',
+        onClick: () => navigate('/compare'),
       })
       return
     }
 
-    setCompareHint('Added to compare.')
-    setTimeout(() => setCompareHint(null), 2500)
+    showToast('Added to compare list.')
   }
 
   function handleViewInsights(s) {
@@ -1915,11 +1922,13 @@ function SimilarSuburbs({
     }
 
     saveContext(nextContext)
+    window.scrollTo({ top: 0, behavior: 'auto' })
     navigate('/insights', { state: nextContext })
   }
 
   return (
     <div style={{ marginBottom: 28 }}>
+      <Toast message={toastMsg} onClose={clearToast} action={toastAction} duration={toastAction ? 0 : 2500} />
       <div style={{ marginBottom: 14 }}>
         <p style={{ fontSize: 10, fontWeight: 900, letterSpacing: '0.16em', textTransform: 'uppercase', color: '#9ca3af', marginBottom: 5 }}>
           Similar Suburbs
@@ -1932,12 +1941,6 @@ function SimilarSuburbs({
         <p style={{ fontSize: 12, color: '#9ca3af', margin: 0 }}>
           Based on backend recommendation results
         </p>
-
-        {compareHint && (
-          <p style={{ marginTop: 8, fontSize: 12, fontWeight: 700, color: '#059669' }}>
-            {compareHint}
-          </p>
-        )}
       </div>
 
       {loading && (
@@ -2108,20 +2111,6 @@ function SimilarSuburbs({
         </div>
       )}
 
-      {/* Replace modal for compare */}
-      {recReplaceModal && (
-        <CompareReplaceModal
-          pendingItem={recReplaceModal.pendingItem}
-          currentList={recReplaceModal.currentList}
-          onReplace={(index) => {
-            replaceCompareArea(index, recReplaceModal.pendingItem)
-            setRecReplaceModal(null)
-            setCompareHint('Compare area replaced.')
-            setTimeout(() => setCompareHint(null), 2500)
-          }}
-          onClose={() => setRecReplaceModal(null)}
-        />
-      )}
     </div>
   )
 }
@@ -2148,8 +2137,8 @@ export default function InsightsPage() {
   const [councilLinksData, setCouncilLinksData] = useState(null)
   const [heroBarReady, setHeroBarReady] = useState(false)
   const [selectedBreakdownCategory, setSelectedBreakdownCategory] = useState(null)
-  const [heroCompareAdded, setHeroCompareAdded] = useState(null) // 'added' | 'duplicate' | 'full' | null
-  const [compareReplacePending, setCompareReplacePending] = useState(null) // { pendingItem, currentList }
+  const [heroToastMsg, setHeroToastMsg] = useState(null)
+  const [heroToastAction, setHeroToastAction] = useState(null)
   const [showConditionsModal, setShowConditionsModal] = useState(false)
   const [recommendations, setRecommendations] = useState([])
   const [recommendationsLoading, setRecommendationsLoading] = useState(true)
@@ -2244,6 +2233,11 @@ export default function InsightsPage() {
     }
   }, [locationName, rangeMinutes, profile, selectedLocation])
 
+  // Scroll to top whenever the viewed location changes
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'auto' })
+  }, [locationName])
+
   useEffect(() => {
     if (!loading) {
       const t = setTimeout(() => setHeroBarReady(true), 150)
@@ -2262,20 +2256,47 @@ export default function InsightsPage() {
 
   if (!locationName) {
     return (
-      <div style={{ padding: '48px 24px', textAlign: 'center' }}>
-        <p style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '1.4rem', color: '#101828', marginBottom: 8 }}>No suburb selected</p>
-        <p style={{ fontSize: '0.95rem', color: '#4b5563', marginBottom: 24 }}>Search for a suburb or address from the home page first.</p>
-        <button
-          onClick={() => navigate('/')}
-          onFocus={e => { e.currentTarget.style.outline = '2px solid #2563eb'; e.currentTarget.style.outlineOffset = '2px' }}
-          onBlur={e => { e.currentTarget.style.outline = 'none' }}
-          style={{
-            padding: '12px 28px', borderRadius: 12, border: 'none', cursor: 'pointer',
-            background: '#f47c20', color: '#fff', fontWeight: 800, fontSize: 15, fontFamily: 'Figtree, sans-serif',
-          }}
-        >
-          Back to Home
-        </button>
+      <div style={{ minHeight: '100vh', background: '#f5f0eb', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 24px' }}>
+        <div style={{ textAlign: 'center', maxWidth: 400 }}>
+          <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#fff7ed', border: '2px solid #fed7aa', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', fontSize: 28 }}>
+            🏘️
+          </div>
+          <p style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '1.5rem', color: '#101828', marginBottom: 8, fontWeight: 400 }}>
+            The selected suburb could not be loaded.
+          </p>
+          <p style={{ fontSize: '0.95rem', color: '#6b7280', marginBottom: 28, lineHeight: 1.6 }}>
+            This can happen if you navigated here directly. Please search for a suburb or address to get started.
+          </p>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+            <button
+              onClick={() => navigate('/')}
+              style={{
+                all: 'unset', cursor: 'pointer',
+                padding: '11px 22px', borderRadius: 10, fontSize: 14, fontWeight: 700,
+                border: '1.5px solid #e5e7eb', background: '#fff', color: '#374151',
+                fontFamily: 'Figtree, sans-serif',
+                transition: 'border-color 0.15s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = '#9ca3af' }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = '#e5e7eb' }}
+            >
+              Try another suburb
+            </button>
+            <button
+              onClick={() => navigate('/')}
+              onFocus={e => { e.currentTarget.style.outline = '2px solid #2563eb'; e.currentTarget.style.outlineOffset = '2px' }}
+              onBlur={e => { e.currentTarget.style.outline = 'none' }}
+              style={{
+                all: 'unset', cursor: 'pointer',
+                padding: '11px 22px', borderRadius: 10, fontSize: 14, fontWeight: 800,
+                background: 'linear-gradient(135deg, #f59648 0%, #f47c20 100%)', color: '#fff',
+                fontFamily: 'Figtree, sans-serif',
+              }}
+            >
+              Back to Home
+            </button>
+          </div>
+        </div>
       </div>
     )
   }
@@ -2354,6 +2375,12 @@ export default function InsightsPage() {
 
   return (
     <div style={{ background: '#f5f0eb', minHeight: '100%', paddingBottom: 80 }}>
+      <Toast
+        message={heroToastMsg}
+        action={heroToastAction}
+        duration={heroToastAction ? 0 : 2500}
+        onClose={() => { setHeroToastMsg(null); setHeroToastAction(null) }}
+      />
       <LoadingOverlay fixed={true} show={loading} label="Loading neighbourhood insights…" />
 
       <nav aria-label="Page navigation" style={{
@@ -2389,37 +2416,38 @@ export default function InsightsPage() {
             {locationName}
           </p>
 
-          {previousLocationName && (
-            <p style={{
-              fontSize: 12,
-              color: '#6b7280',
-              marginTop: 4,
-              fontWeight: 600
-            }}>
-              Back to {previousLocationName}
-            </p>
-          )}
+          <p style={{ fontSize: 12, color: '#6b7280', marginTop: 3, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {returnContext?.type === 'insight' && previousLocationName
+              ? `← Back to ${previousLocationName}`
+              : `← Back to map${previousLocationName && previousLocationName !== locationName ? ` · ${previousLocationName}` : ''}`
+            }
+          </p>
 
-          <p style={{ fontSize: 13, color: '#4b5563', marginTop: 3 }}>
-            Liveability breakdown · {rangeMinutes} min range{profileLabel ? ` · ${profileLabel}` : ''}
+          <p style={{ fontSize: 12, color: '#9ca3af', marginTop: 2 }}>
+            {rangeMinutes} min range{profileLabel ? ` · ${profileLabel}` : ''}
           </p>
         </div>
         <button
-          onClick={() => setShowConditionsModal(true)}
+          onClick={() => { if (!loading) setShowConditionsModal(true) }}
+          disabled={loading}
           aria-label="Change conditions"
           style={{
-            all: 'unset', cursor: 'pointer', flexShrink: 0,
+            all: 'unset', cursor: loading ? 'default' : 'pointer', flexShrink: 0,
             display: 'inline-flex', alignItems: 'center', gap: 6,
             padding: '7px 14px', borderRadius: 9,
             border: '1px solid rgba(0,0,0,0.12)', background: '#fff',
-            fontSize: 13, fontWeight: 700, color: '#374151',
-            transition: 'border-color 0.15s, background 0.15s',
+            fontSize: 13, fontWeight: 700, color: loading ? '#9ca3af' : '#374151',
+            transition: 'border-color 0.15s, background 0.15s, color 0.15s',
             fontFamily: 'Figtree, sans-serif',
+            opacity: loading ? 0.7 : 1,
           }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = '#f47c20'; e.currentTarget.style.background = '#fff7ed' }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(0,0,0,0.12)'; e.currentTarget.style.background = '#fff' }}
+          onMouseEnter={e => { if (!loading) { e.currentTarget.style.borderColor = '#f47c20'; e.currentTarget.style.background = '#fff7ed' } }}
+          onMouseLeave={e => { if (!loading) { e.currentTarget.style.borderColor = 'rgba(0,0,0,0.12)'; e.currentTarget.style.background = '#fff' } }}
         >
-          <span aria-hidden="true">⚙</span> Change Conditions
+          {loading
+            ? <><span className="nwSearchSpinner" style={{ borderTopColor: '#f47c20', width: 12, height: 12 }} aria-hidden="true" /> Loading...</>
+            : <><span aria-hidden="true">⚙</span> Change Conditions</>
+          }
         </button>
         {band && !loading && (
           <div style={{
@@ -2503,7 +2531,7 @@ export default function InsightsPage() {
                         <text x="68" y="62" textAnchor="middle" dominantBaseline="middle"
                           fill="#fff" fontSize="38"
                           fontFamily="'DM Serif Display', Georgia, serif" fontWeight="400">
-                          {loading ? '—' : (overallScore ?? '–')}
+                          {loading ? '–' : (overallScore ?? '–')}
                         </text>
                         <text x="68" y="84" textAnchor="middle"
                           fill="rgba(255,255,255,0.55)" fontSize="9" fontWeight="800"
@@ -2551,13 +2579,14 @@ export default function InsightsPage() {
                         }
                         const result = addToCompareList(item)
                         if (result?.reason === 'ALREADY_EXISTS') {
-                          setHeroCompareAdded('duplicate')
-                          setTimeout(() => setHeroCompareAdded(null), 2500)
+                          setHeroToastMsg('Already in your compare list.')
+                          setHeroToastAction(null)
                         } else if (result?.reason === 'COMPARE_FULL') {
-                          setCompareReplacePending({ pendingItem: item, currentList: result.current })
+                          setHeroToastMsg('Your compare list is full.')
+                          setHeroToastAction({ label: 'Go to Compare', onClick: () => navigate('/compare') })
                         } else {
-                          setHeroCompareAdded('added')
-                          setTimeout(() => setHeroCompareAdded(null), 2500)
+                          setHeroToastMsg('Added to compare list.')
+                          setHeroToastAction(null)
                         }
                       }}
                       style={{
@@ -2572,7 +2601,7 @@ export default function InsightsPage() {
                       onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.2)' }}
                       onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.12)' }}
                     >
-                      {heroCompareAdded === 'added' ? '✓ Added to Compare' : heroCompareAdded === 'duplicate' ? '✓ Already in list' : '＋ Add to Compare'}
+                      ＋ Add to Compare
                     </button>
                   </div>
                 </div>
@@ -2594,7 +2623,7 @@ export default function InsightsPage() {
                         </span>
                         <span style={{ fontSize: 23, fontWeight: 900, color: cfg.color, lineHeight: 1, letterSpacing: '-0.5px' }}
                           aria-label={`${cfg.label}: ${score ?? 'loading'}`}>
-                          {score ?? '—'}
+                          {score ?? '–'}
                         </span>
                       </div>
                       {/* Animated bar */}
@@ -2752,97 +2781,7 @@ export default function InsightsPage() {
           />
         )}
 
-        {/* Methodology */}
-        <div style={{
-          background: '#fff', border: '1.5px solid #e5e7eb',
-          borderRadius: 20, padding: '28px',
-          boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
-          marginBottom: 16,
-        }}>
-          <p style={{ fontSize: 13, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#4b5563', marginBottom: 6 }}>Methodology</p>
-          <h2 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 26, fontWeight: 400, color: '#1a2436', marginBottom: 20 }}>
-            How this score is calculated
-          </h2>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }} aria-label="Score calculation methodology">
-            <thead>
-              <tr>
-                {['Category', 'Weight', 'Data sources'].map(h => (
-                  <th key={h} scope="col" style={{
-                    textAlign: 'left', paddingBottom: 14,
-                    fontSize: 13, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#4b5563',
-                    borderBottom: '1px solid #e5e7eb',
-                  }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {CATEGORIES.map((k, idx) => {
-                const c = CATEGORY_CONFIG[k]
-                const dynamicWeight =
-                  k === 'accessibility'
-                    ? scoreWeights?.A
-                    : k === 'safety'
-                      ? scoreWeights?.S
-                      : scoreWeights?.E
-                const displayWeight = Number.isFinite(dynamicWeight)
-                  ? Math.round(dynamicWeight * 100)
-                  : c.weight
-                return (
-                  <tr key={k}>
-                    <td style={{ padding: '16px 18px 16px 0', borderBottom: idx < 2 ? '1px solid #f3f4f6' : 'none' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <span aria-hidden="true" style={{ fontSize: 18 }}>{c.icon}</span>
-                        <span style={{ fontWeight: 700, fontSize: 16, color: '#1a2436' }}>{c.label}</span>
-                      </div>
-                    </td>
-                    <td style={{ padding: '16px 18px 16px 0', borderBottom: idx < 2 ? '1px solid #f3f4f6' : 'none' }}>
-                      <span style={{
-                        display: 'inline-block', background: c.soft, border: `1px solid ${c.border}`,
-                        borderRadius: 999, padding: '4px 14px',
-                        fontSize: 14, fontWeight: 800, color: c.color,
-                      }} aria-label={`${displayWeight} percent`}>{displayWeight}%</span>
-                    </td>
-                    <td style={{ padding: '16px 0', borderBottom: idx < 2 ? '1px solid #f3f4f6' : 'none' }}>
-                      <span style={{ fontSize: 14, color: '#4b5563' }}>{c.sources}</span>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-
-        <div style={{
-          background: '#fff',
-          border: '1.5px solid #e5e7eb',
-          borderRadius: 16,
-          padding: '16px 18px',
-          boxShadow: '0 4px 20px rgba(0,0,0,0.035)',
-        }} role="note" aria-label="Benchmark explanation">
-          <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#4b5563', marginBottom: 5 }}>
-            Benchmark
-          </p>
-          <p style={{ fontSize: 12, color: '#4b5563', lineHeight: 1.65 }}>
-            {STATIC_SCORE_BENCHMARK.description} The benchmark values are accessibility {STATIC_SCORE_BENCHMARK.scores.accessibility}, safety {STATIC_SCORE_BENCHMARK.scores.safety}, environment {STATIC_SCORE_BENCHMARK.scores.environment}, and overall liveability {STATIC_SCORE_BENCHMARK.scores.liveability}. They are used only as a comparison guide.
-          </p>
-        </div>
-
       </div>
-
-      {/* Compare replace modal — shown when list is full */}
-      {compareReplacePending && (
-        <CompareReplaceModal
-          pendingItem={compareReplacePending.pendingItem}
-          currentList={compareReplacePending.currentList}
-          onReplace={(index) => {
-            replaceCompareArea(index, compareReplacePending.pendingItem)
-            setCompareReplacePending(null)
-            setHeroCompareAdded('added')
-            setTimeout(() => setHeroCompareAdded(null), 2500)
-          }}
-          onClose={() => setCompareReplacePending(null)}
-        />
-      )}
 
       {/* Change Conditions modal */}
       {showConditionsModal && (

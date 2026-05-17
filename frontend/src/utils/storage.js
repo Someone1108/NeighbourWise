@@ -151,10 +151,16 @@ export function addToCompareList(item) {
     }
   }
 
-  // If the same area already exists, do not add it again
+  // If the same area already exists, do not add it again.
+  // Cross-check by name as well to catch cases where one item has an id and
+  // the other was built without one (e.g. added from MapPage vs InsightsPage).
   const alreadyExists = current.some((x) => {
     const existingKey = getSafeCompareKey(x)
-    return existingKey === compareKey
+    if (existingKey === compareKey) return true
+    // Fallback: match by normalised display name
+    const existingName = getSafeLocationName(x).toLowerCase()
+    const incomingName = locationName.toLowerCase()
+    return existingName.length > 0 && incomingName.length > 0 && existingName === incomingName
   })
 
   if (alreadyExists) {
