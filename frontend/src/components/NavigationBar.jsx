@@ -11,26 +11,43 @@ export default function NavigationBar() {
   const navigate = useNavigate()
   const [compareCount, setCompareCount] = useState(() => loadCompareList().length)
   const [scrolled, setScrolled] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
 
   const isHome = location.pathname === '/'
   const isActive = (path) => location.pathname === path
 
+  // Close mobile menu on route change
+  useEffect(() => {
+    const closeMenuTimer = setTimeout(() => setMenuOpen(false), 0)
+    return () => clearTimeout(closeMenuTimer)
+  }, [location.pathname])
+
+  // Close on Escape
+  useEffect(() => {
+    if (!menuOpen) return
+    function onKey(e) {
+      if (e.key === 'Escape') setMenuOpen(false)
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [menuOpen])
+
   function hasEnteredAddress() {
-    const ctx = loadContext()
-    const sel = ctx?.selectedLocation
-    if (!sel) return false
-    return Boolean(sel.displayName || sel.fullAddress || sel.name)
+    const savedContext = loadContext()
+    const selectedLocation = savedContext?.selectedLocation
+    if (!selectedLocation) return false
+    return Boolean(selectedLocation.displayName || selectedLocation.fullAddress || selectedLocation.name)
   }
 
   function scrollHomeToSearch() {
     // Wait a frame so HomePage has mounted if we just navigated.
     requestAnimationFrame(() => {
-      const el = document.getElementById('home-search-input')
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      const searchInput = document.getElementById('home-search-input')
+      if (searchInput) {
+        searchInput.scrollIntoView({ behavior: 'smooth', block: 'center' })
         // Slight delay before focusing so the smooth scroll isn't interrupted.
         setTimeout(() => {
-          try { el.focus({ preventScroll: true }) } catch { el.focus() }
+          try { searchInput.focus({ preventScroll: true }) } catch { searchInput.focus() }
         }, 350)
       }
     })
@@ -38,6 +55,7 @@ export default function NavigationBar() {
 
   function handleMapClick(e) {
     e.preventDefault()
+    setMenuOpen(false)
     if (hasEnteredAddress()) {
       navigate('/map')
       return
@@ -60,8 +78,8 @@ export default function NavigationBar() {
 
   useEffect(() => {
     if (!isHome) {
-      setScrolled(false)
-      return
+      const resetScrollTimer = setTimeout(() => setScrolled(false), 0)
+      return () => clearTimeout(resetScrollTimer)
     }
     const onScroll = () => setScrolled(window.scrollY > 20)
     onScroll()
@@ -120,7 +138,63 @@ export default function NavigationBar() {
             About
           </Link>
         </nav>
+
+        <button
+          className="nwNavHamburger"
+          onClick={() => setMenuOpen(v => !v)}
+          aria-expanded={menuOpen}
+          aria-label={menuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+        >
+          <span className="nwHamburgerBar" />
+          <span className="nwHamburgerBar" />
+          <span className="nwHamburgerBar" />
+        </button>
       </div>
+
+      {menuOpen && (
+        <nav className="nwNavMobileMenu" aria-label="Mobile navigation">
+          <Link
+            to="/"
+            className={isActive('/') ? 'active' : ''}
+            aria-current={isActive('/') ? 'page' : undefined}
+            onClick={() => setMenuOpen(false)}
+          >
+            Home
+          </Link>
+
+          <Link
+            to="/map"
+            onClick={handleMapClick}
+            className={isActive('/map') ? 'active' : ''}
+            aria-current={isActive('/map') ? 'page' : undefined}
+          >
+            Map
+          </Link>
+
+          <Link
+            to="/compare"
+            className={isActive('/compare') ? 'active' : ''}
+            aria-current={isActive('/compare') ? 'page' : undefined}
+            onClick={() => setMenuOpen(false)}
+          >
+            Compare
+            {compareCount > 0 && (
+              <span className="nwCompareBadge" aria-label={`${compareCount} areas saved for comparison`}>
+                {compareCount}
+              </span>
+            )}
+          </Link>
+
+          <Link
+            to="/about"
+            className={isActive('/about') ? 'active' : ''}
+            aria-current={isActive('/about') ? 'page' : undefined}
+            onClick={() => setMenuOpen(false)}
+          >
+            About
+          </Link>
+        </nav>
+      )}
     </header>
   )
 }

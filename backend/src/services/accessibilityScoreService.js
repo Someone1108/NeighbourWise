@@ -1,8 +1,8 @@
-//(A) Accessibility score
+// (A) Accessibility score
 const { fetchPoiInsights } = require('./insightService');
 const { MAX_DISTANCE_MAP } = require('../utils/distanceConfig');
 
-// 🎯 每種 POI 的理想數量
+// Ideal target count for each POI type
 const TARGET_COUNT_MAP = {
   bus_stop: 8,
   train_station: 1,
@@ -10,10 +10,10 @@ const TARGET_COUNT_MAP = {
   hospital: 2,
   school: 3,
   park: 5,
-  dog_park: 3
+  dog_park: 1
 };
 
-// 🎯 distance vs count 權重
+// Distance vs count weights
 const INDICATOR_WEIGHT_CONFIG = {
   bus_stop: { distance: 0.3, count: 0.7 },
   train_station: { distance: 0.8, count: 0.2 },
@@ -21,10 +21,10 @@ const INDICATOR_WEIGHT_CONFIG = {
   hospital: { distance: 0.7, count: 0.3 },
   school: { distance: 0.6, count: 0.4 },
   park: { distance: 0.5, count: 0.5 },
-  dog_park: { distance: 0.5, count: 0.5 }
+  dog_park: { distance: 0.3, count: 0.7 }
 };
 
-// 🎯 persona 權重（Accessibility內）
+// Persona-based weights within Accessibility
 const ACCESSIBILITY_WEIGHTS = {
   default: {
     bus_stop: 0.2,
@@ -64,20 +64,35 @@ const ACCESSIBILITY_WEIGHTS = {
   }
 };
 
-// ---------- 基本計算 ----------
+// ---------- Basic calculations ----------
 
-// 距離分數（越近越高）
+// Distance score: closer POIs receive higher scores
 function calculateDistanceScore(nearestDistanceKm, maxDistanceKm) {
   if (nearestDistanceKm == null || nearestDistanceKm > maxDistanceKm) return 0;
   return 100 * (1 - nearestDistanceKm / maxDistanceKm);
 }
 
-// 數量分數（達標就滿分）
+// Count score: full score is given once the target count is reached
 function calculateCountScore(count, target) {
   return 100 * Math.min(count / target, 1);
 }
 
-// 單一指標分數
+// Build the nearest POI object for a single indicator
+function buildNearestPoi(pois) {
+  const nearest = pois
+    .filter((poi) => Number.isFinite(Number(poi.distanceKm)))
+    .sort((a, b) => Number(a.distanceKm) - Number(b.distanceKm))[0];
+
+  if (!nearest) return null;
+
+  return {
+    name: nearest.name || null,
+    address: nearest.address || '',
+    distanceKm: Number(Number(nearest.distanceKm).toFixed(2)),
+    type: nearest.type || null
+  };
+}
+
 function calculateIndicatorScore({
   nearestDistanceKm,
   count,
@@ -95,15 +110,17 @@ function calculateIndicatorScore({
   return distanceScore * distanceWeight + countScore * countWeight;
 }
 
-// ---------- 主功能 ----------
+// ---------- Main function ----------
 
 const getAccessibilityScore = async ({
   lat,
   lng,
   time = 20,
-  persona = 'default'
+  persona = 'default',
+  sequentialPois = false,
+  requestDelayMs = 0
 }) => {
-  // 🔥 注意：這裡要轉成 km（因為你的 insight 是 distanceKm）
+  // Convert meters to kilometers because POI insights use distanceKm
   const maxDistanceMeters = MAX_DISTANCE_MAP[time];
   const maxDistanceKm = maxDistanceMeters / 1000;
 
@@ -113,8 +130,14 @@ const getAccessibilityScore = async ({
   let totalScore = 0;
   const breakdown = {};
 
-  // 🔥 一次拿全部 POI（你現在的架構）
-  const response = await fetchPoiInsights({ lat, lng, time });
+  // Fetch all POIs in one request based on the current architecture
+  const response = await fetchPoiInsights({
+    lat,
+    lng,
+    time,
+    sequential: sequentialPois,
+    requestDelayMs
+  });
   const allPois = response.results || [];
 
   const indicators = Object.keys(weights);
@@ -123,10 +146,11 @@ const getAccessibilityScore = async ({
     const pois = allPois.filter((p) => p.type === type);
 
     const count = pois.length;
+    const nearestPoi = buildNearestPoi(pois);
 
     const nearestDistanceKm =
-      pois.length > 0
-        ? Math.min(...pois.map((p) => p.distanceKm))
+      nearestPoi
+        ? nearestPoi.distanceKm
         : null;
 
     const target = TARGET_COUNT_MAP[type] || 3;
@@ -148,7 +172,8 @@ const getAccessibilityScore = async ({
     breakdown[type] = {
       score: Number(score.toFixed(2)),
       count,
-      nearestDistanceKm
+      nearestDistanceKm,
+      nearestPoi
     };
   }
 
@@ -163,8 +188,3 @@ const getAccessibilityScore = async ({
 module.exports = {
   getAccessibilityScore
 };
-
-
-
-
-

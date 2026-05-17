@@ -5,14 +5,14 @@ function normalizeName(name) {
 }
 
 function normalizeNumber(value) {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue : null;
 }
 
 function normalizeRadius(radiusMeters) {
-  const n = normalizeNumber(radiusMeters);
-  if (!n || n <= 0) return 2200;
-  return n;
+  const radius = normalizeNumber(radiusMeters);
+  if (!radius || radius <= 0) return 2200;
+  return radius;
 }
 
 async function getLayersForSuburb(suburbName) {

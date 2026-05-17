@@ -1,0 +1,333 @@
+/*
+ * responsive.css
+ * Site-wide mobile responsive overrides for NeighbourWise.
+ * Breakpoints: 1024 / 768 / 480 / 380
+ */
+
+@media (max-width: 768px) {
+  .nwMapLeft {
+    height: 420px;
+  }
+}
+
+@media (max-width: 480px) {
+  .nwMapLeft {
+    height: 360px;
+  }
+
+  /* Floating action bar: switch from 3-col to 2-col for the 2 buttons */
+  .nwMapFloatingBar {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  /* Allow button text to wrap so "See Detailed Insights" doesn't truncate */
+  .nwMapFloatingBar .nwBtn {
+    white-space: normal;
+    line-height: 1.25;
+  }
+}
+
+@media (max-width: 380px) {
+  .nwMapLeft {
+    height: 300px;
+  }
+
+  /* Shrink the score donut so it fits in the sidebar on very small screens */
+  .nwScoreDonut {
+    width: 78px;
+    height: 78px;
+    flex-shrink: 0;
+  }
+
+  .nwScoreDonutInner {
+    width: 60px;
+    height: 60px;
+  }
+
+  .nwScoreDonutValue {
+    font-size: 20px;
+  }
+
+  /* Tighten the sidebar card padding */
+  .nwMapSidebarCard {
+    padding: 12px 14px;
+  }
+}
+
+/* ── InsightsPage ───── */
+
+/* Narrow the sticky top-nav padding on tablet/mobile */
+@media (max-width: 768px) {
+  nav[aria-label="Page navigation"] {
+    padding: 10px 20px !important;
+  }
+}
+
+/* On small screens, shrink the main container side-padding */
+@media (max-width: 600px) {
+  nav[aria-label="Page navigation"] {
+    padding: 10px 16px !important;
+    gap: 10px !important;
+  }
+
+  /* Main content container directly after the sticky nav */
+  nav[aria-label="Page navigation"] + div {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+    padding-top: 20px !important;
+  }
+
+ 
+  nav[aria-label="Page navigation"] + div > div:first-child > div:first-child {
+    grid-template-columns: 1fr !important;
+    padding: 24px 20px !important;
+    gap: 20px !important;
+  }
+
+  /* Wrap tab buttons so all three fit without overflowing */
+  div[role="tablist"] {
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+  }
+
+  /* Shrink each category tab button */
+  button[role="tab"] {
+    padding: 8px 12px !important;
+    font-size: 13px !important;
+    gap: 4px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  nav[aria-label="Page navigation"] + div {
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+    padding-top: 16px !important;
+  }
+
+  button[role="tab"] {
+    padding: 7px 10px !important;
+    font-size: 12px !important;
+  }
+}
+
+@media (max-width: 380px) {
+  nav[aria-label="Page navigation"] {
+    padding: 8px 12px !important;
+    gap: 8px !important;
+  }
+
+  nav[aria-label="Page navigation"] + div {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+
+  nav[aria-label="Page navigation"] + div > div:first-child > div:first-child {
+    padding: 18px 14px !important;
+    gap: 14px !important;
+  }
+
+  button[role="tab"] {
+    font-size: 11px !important;
+    padding: 6px 8px !important;
+  }
+}
+
+/* ── ComparePage ──── */
+
+/* The top grid and score summary already go single-column at 1100px (App.css).
+   Below we fix the comparison table and tighten panel text on smaller screens. */
+
+@media (max-width: 768px) {
+  .nwCompareAreaTitle {
+    font-size: 22px;
+  }
+
+  .nwCompareScoreValue {
+    font-size: 26px;
+  }
+
+  /* Allow the table to scroll horizontally rather than squish */
+  .nwCompareResultsCard {
+    overflow-x: auto;
+  }
+
+  .nwCompareTable {
+    min-width: 380px;
+    font-size: 13px;
+  }
+
+  .nwCompareTable th,
+  .nwCompareTable td {
+    padding: 10px 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .nwCompareAreaTitle {
+    font-size: 18px;
+  }
+
+  .nwCompareScoreValue {
+    font-size: 22px;
+  }
+
+  .nwCompareTable {
+    font-size: 12px;
+  }
+
+  .nwCompareTable th,
+  .nwCompareTable td {
+    padding: 8px 8px;
+  }
+
+  .nwCompareRecommendation {
+    padding: 14px;
+  }
+
+  .nwCompareRecommendationText {
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 380px) {
+  .nwCompareAreaTitle {
+    font-size: 16px;
+  }
+
+  .nwCompareScoreValue {
+    font-size: 20px;
+  }
+
+  .nwCompareCategoryIcon {
+    width: 22px;
+    height: 22px;
+    font-size: 12px;
+    margin-right: 6px;
+  }
+}
+
+/* ── AboutPage ────── */
+
+
+@media (max-width: 480px) {
+  /* Banner: tighter padding, smaller title */
+  .nwAboutBanner {
+    margin: -12px -14px 0;
+    padding: 52px 16px 44px;
+  }
+
+  .nwAboutBannerTitle {
+    font-size: clamp(28px, 9vw, 40px);
+  }
+
+  .nwAboutBannerLead {
+    font-size: 15px;
+  }
+
+  .nwAboutBannerStat {
+    font-size: 13px;
+    padding: 8px 14px;
+  }
+
+  /* Teal / orange color blocks: bleed matches the nwPage 14 px side-padding */
+  .nwAboutBlock {
+    margin: 24px -14px;
+    padding: 44px 14px;
+  }
+
+  /* Standard content sections */
+  .nwAboutSection {
+    padding: 44px 0;
+  }
+
+  .nwAboutSectionLead {
+    font-size: 15px;
+  }
+
+  /* Category cards: no fixed min-height on mobile */
+  .nwAboutCategoryCard {
+    min-height: unset;
+    padding: 20px;
+  }
+
+  .nwAboutCategoryIcon {
+    font-size: 30px;
+  }
+
+  .nwAboutCategoryTitle {
+    font-size: 18px;
+  }
+
+  .nwAboutCategoryDesc {
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 380px) {
+  .nwAboutBanner {
+    padding: 44px 14px 36px;
+  }
+
+  .nwAboutBannerTitle {
+    font-size: 26px;
+  }
+
+  .nwAboutBlock {
+    margin: 20px -14px;
+    padding: 36px 14px;
+  }
+
+  .nwAboutSection {
+    padding: 36px 0;
+  }
+
+  .nwAboutBlockHeading {
+    font-size: clamp(20px, 6vw, 28px);
+  }
+}
+
+/* ── AccessPage ───── */
+
+@media (max-width: 380px) {
+  .nwAccessCard {
+    padding: 26px 18px 20px;
+    border-radius: 20px;
+  }
+
+  .nwAccessTitle {
+    font-size: 1.75rem;
+  }
+
+  .nwAccessPage {
+    padding: 20px 14px;
+  }
+}
+
+/* ScoreBar is used on MapPage sidebar and InsightsPage — both already responsive.
+   No additional overrides needed. */
+
+/* The CoverageMap appears inline on HomePage (coverage section) and in the
+   coverage modal. Both are already handled by App.css responsive rules. */
+
+@media (max-width: 480px) {
+  .coverageRealMapWrap {
+    height: 320px;
+    border-radius: 18px;
+  }
+
+  .coverageRealMapState {
+    height: 320px;
+    border-radius: 18px;
+  }
+}
+
+@media (max-width: 380px) {
+  .coverageRealMapWrap {
+    height: 260px;
+  }
+
+  .coverageRealMapState {
+    height: 260px;
+  }
+}

@@ -3,6 +3,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import ScoreBar from "../components/ScoreBar.jsx";
 import NeighbourMap from "../components/NeighbourMap.jsx";
 import Button from "../components/buttons/Button.jsx";
+import LoadingOverlay from "../components/LoadingOverlay.jsx";
+import Toast from "../components/Toast.jsx";
 import {
   getMapContext,
   getLocalityPolygon,
@@ -14,7 +16,6 @@ import {
 } from "../services/api.js";
 import {
   addToCompareList,
-  loadCompareList,
   loadContext,
   saveContext
 } from "../utils/storage.js";
@@ -57,12 +58,13 @@ export default function MapPage() {
   const [mapData, setMapData] = useState(null);
   const [suburbPolygon, setSuburbPolygon] = useState(null);
   const [rangeMinutes, setRangeMinutes] = useState(20);
-  const [compareHint, setCompareHint] = useState("");
   const [poiData, setPoiData] = useState([]);
   const [showInsights, setShowInsights] = useState(true);
   const [activeLayer, setActiveLayer] = useState("none");
   const [layerData, setLayerData] = useState(null);
-
+  const [useSuburbBoundary, setUseSuburbBoundary] = useState(false);
+  const [toastMsg, setToastMsg] = useState("");
+  const [toastAction, setToastAction] = useState(null);
   const [scoreData, setScoreData] = useState(null);
 
   const context = useMemo(() => {
@@ -112,6 +114,9 @@ export default function MapPage() {
 
     setLoading(true);
     setError("");
+    setSuburbPolygon(null);
+    setLayerData(null);
+    setUseSuburbBoundary(false);
 
     saveContext({ selectedLocation, profile, rangeMinutes });
 
@@ -125,7 +130,10 @@ export default function MapPage() {
     });
 
     const polygonPromise = isSuburb
-      ? getLocalityPolygon(selectedLocation.name)
+      ? getLocalityPolygon(selectedLocation.name).catch((err) => {
+          console.warn("Suburb polygon unavailable; using point radius instead:", err);
+          return null;
+        })
       : Promise.resolve(null);
 
     const poiPromise = getPoiInsights({
@@ -134,14 +142,19 @@ export default function MapPage() {
       time: Number(rangeMinutes)
     });
 
+    const addressLayerPromise = () => getLayerDataForAddress(
+      Number(selectedLocation.lat),
+      Number(selectedLocation.lng),
+      rangeMinutes
+    );
+
     const layerPromise = isSuburb
-      ? getLayerDataForSuburb(selectedLocation.name)
+      ? getLayerDataForSuburb(selectedLocation.name).catch((err) => {
+          console.warn("Suburb layers unavailable; using point radius layers instead:", err);
+          return addressLayerPromise();
+        })
       : isAddress
-        ? getLayerDataForAddress(
-            Number(selectedLocation.lat),
-            Number(selectedLocation.lng),
-            rangeMinutes
-          )
+        ? addressLayerPromise()
         : Promise.resolve(null);
 
     const scorePromise = getLiveabilityScore({
@@ -163,6 +176,7 @@ export default function MapPage() {
 
         setMapData(data);
         setSuburbPolygon(polygon);
+        setUseSuburbBoundary(Boolean(polygon && isSuburb && layers?.suburb));
         setPoiData(poiResponse?.results || []);
         setLayerData(layers);
         setScoreData(scores);
@@ -254,9 +268,9 @@ export default function MapPage() {
           className="nwMapLeft"
           aria-label="Interactive neighbourhood map"
         >
-          <div aria-live="polite" aria-atomic="true" className="nwSrOnly">
-            {loading ? "Loading map data, please wait…" : ""}
-          </div>
+          {loading && (
+            <LoadingOverlay label="Loading map data…" />
+          )}
 
           <NeighbourMap
             coordinates={
@@ -269,7 +283,7 @@ export default function MapPage() {
             }
             radiusMeters={mapData?.radiusMeters}
             pointsOfInterest={showInsights ? poiData : []}
-            suburbPolygon={isSuburb ? suburbPolygon : null}
+            suburbPolygon={useSuburbBoundary ? suburbPolygon : null}
             selectedLabel={locationName}
             heatLayer={activeLayer === "heat" ? layerData?.heat : null}
             vegetationLayer={
@@ -310,9 +324,24 @@ export default function MapPage() {
                   selectedLocation
                 };
 
-                const list = addToCompareList(compareItem);
-                setCompareHint(`Added to compare (${list.length}/2).`);
-                navigate("/compare");
+                const result = addToCompareList(compareItem);
+                if (result.reason === "ALREADY_EXISTS") {
+                  setToastMsg("Already in your compare list.");
+                  setToastAction(null);
+                  return;
+                }
+                if (result.reason === "COMPARE_FULL") {
+                  setToastMsg("Your compare list is full.");
+                  setToastAction({ label: "Go to Compare", onClick: () => navigate("/compare") });
+                  return;
+                }
+                if (result.success) {
+                  setToastMsg(`Added to compare (${result.list.length}/2).`);
+                  setToastAction(null);
+                  return;
+                }
+                setToastMsg("Unable to add this area to compare.");
+                setToastAction(null);
               }}
             >
               Add to Compare
@@ -332,22 +361,7 @@ export default function MapPage() {
                 See Detailed Insights
               </Button>
             )}
-
-            <Button
-              variant="dark"
-              onClick={() => {
-                const count = loadCompareList().length;
-                if (count < 2) {
-                  setCompareHint(
-                    "Please add two areas before opening Compare."
-                  );
-                  return;
-                }
-                navigate("/compare");
-              }}
-            >
-              Compare Areas
-            </Button>
+            
           </div>
         </section>
 
@@ -367,7 +381,7 @@ export default function MapPage() {
                   </h2>
                   {(() => {
                     const s = overallScore;
-                    let tier = { label: "—", className: "is-na" };
+                    let tier = { label: "–", className: "is-na" };
                     if (Number.isFinite(s)) {
                       if (s >= 80) tier = { label: "Excellent", className: "is-excellent" };
                       else if (s >= 65) tier = { label: "Good", className: "is-good" };
@@ -572,9 +586,13 @@ export default function MapPage() {
         </aside>
       </div>
 
-      <div role="status" aria-live="polite" className="nwMapActionsHint">
-        {compareHint || ""}
-      </div>
+
+      <Toast
+        message={toastMsg}
+        duration={toastAction ? 0 : 2400}
+        action={toastAction}
+        onClose={() => { setToastMsg(""); setToastAction(null); }}
+      />
     </div>
   );
 }

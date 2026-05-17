@@ -15,12 +15,15 @@ const categoryMap = {
   dog_park: 'dog_park'
 };
 
+const delay = (ms = 0) =>
+  new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
 
-// Haversine formula：計算兩點距離（公里）
+
+// Haversine formula: calculate the distance between two points in kilometers.
 const calculateDistanceKm = (lat1, lng1, lat2, lng2) => {
   const toRad = (value) => (value * Math.PI) / 180;
 
-  const R = 6371;
+  const earthRadiusKm = 6371;
   const dLat = toRad(lat2 - lat1);
   const dLng = toRad(lng2 - lng1);
 
@@ -33,10 +36,10 @@ const calculateDistanceKm = (lat1, lng1, lat2, lng2) => {
 
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
-  return R * c;
+  return earthRadiusKm * c;
 };
 
-// 將名稱標準化，方便判斷是否為同一個 POI
+// Normalize POI names to make it easier to identify the same POI
 const normalizePoiName = (name) => {
   return String(name || '')
     .toLowerCase()
@@ -45,7 +48,7 @@ const normalizePoiName = (name) => {
     .trim();
 };
 
-// 根據「名稱 + 很接近的座標」去重
+// Remove duplicate POIs based on name and very close coordinates
 const dedupePois = (pois) => {
   const unique = [];
   const DUPLICATE_DISTANCE_KM = 0.12;
@@ -79,7 +82,7 @@ const dedupePois = (pois) => {
   return unique;
 };
 
-// 從 Mapbox 抓單一 category
+// Fetch a single POI category from Mapbox
 const fetchSingleCategory = async ({ lat, lng, type }) => {
   const category = categoryMap[type];
 
@@ -126,7 +129,7 @@ const fetchSingleCategory = async ({ lat, lng, type }) => {
   });
 };
 
-// 從資料庫抓 dog park
+// Fetch dog park data from the database
 const fetchDogParksFromDB = async ({ lat, lng }) => {
   const sql = `
     select
@@ -158,7 +161,7 @@ const fetchDogParksFromDB = async ({ lat, lng }) => {
   }));
 };
 
-// 統一判斷資料來源
+// Determine the data source based on POI type
 const fetchCategoryByType = async ({ lat, lng, type }) => {
   if (type === 'dog_park') {
     return fetchDogParksFromDB({ lat, lng });
@@ -167,20 +170,37 @@ const fetchCategoryByType = async ({ lat, lng, type }) => {
   return fetchSingleCategory({ lat, lng, type });
 };
 
-// 抓所有 POI insights
-const fetchPoiInsights = async ({ lat, lng, time }) => {
+// Fetch all POI insights
+const fetchPoiInsights = async ({
+  lat,
+  lng,
+  time,
+  sequential = false,
+  requestDelayMs = 0
+}) => {
   const allTypes = Object.keys(categoryMap);
 
-  const allResults = await Promise.all(
-    allTypes.map((poiType) =>
-      fetchCategoryByType({ lat, lng, type: poiType })
-    )
-  );
+  let allResults;
+
+  if (sequential) {
+    allResults = [];
+
+    for (const poiType of allTypes) {
+      allResults.push(await fetchCategoryByType({ lat, lng, type: poiType }));
+      await delay(requestDelayMs);
+    }
+  } else {
+    allResults = await Promise.all(
+      allTypes.map((poiType) =>
+        fetchCategoryByType({ lat, lng, type: poiType })
+      )
+    );
+  }
 
   let results = allResults.flat();
 
   if (time && MAX_DISTANCE_MAP[time]) {
-    // ⭐ distanceConfig 是「公尺」，這裡轉成公里
+    // distanceConfig uses meters, so convert it to kilometers here
     const maxDistanceKm = MAX_DISTANCE_MAP[time] / 1000;
 
     results = results.filter(

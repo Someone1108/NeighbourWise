@@ -597,6 +597,73 @@ create index if not exists idx_poa_to_sa2_sa2_name
     on public.poa_to_sa2 (sa2_name_2021);
 
 
+-- 12) Reproducible suburb score runs
+-- Batch-generated recommendation scores. Keep runs immutable so score changes
+-- caused by refreshed crime, AQI, POI, or spatial data can be compared later.
+
+create table if not exists public.score_runs (
+    id bigserial primary key,
+    scoring_version text not null,
+    persona text not null default 'default',
+    time_minutes integer not null default 20,
+    delay_ms integer not null default 0,
+    status text not null default 'running'
+        check (status in ('running', 'completed', 'completed_with_errors', 'failed')),
+    source_metadata jsonb not null default '{}'::jsonb,
+    started_at timestamp with time zone not null default now(),
+    completed_at timestamp with time zone,
+    error_message text
+);
+
+create index if not exists idx_score_runs_started_at
+    on public.score_runs (started_at desc);
+
+create index if not exists idx_score_runs_version_persona_time
+    on public.score_runs (scoring_version, persona, time_minutes);
+
+create table if not exists public.suburb_scores (
+    id bigserial primary key,
+    score_run_id bigint not null
+        references public.score_runs(id)
+        on delete cascade,
+    locality_point_id bigint,
+    suburb_name text not null,
+    suburb_label text,
+    postcode text,
+    latitude double precision not null,
+    longitude double precision not null,
+    accessibility_score integer,
+    safety_score integer,
+    environment_score integer,
+    liveability_score integer,
+    status text not null default 'completed'
+        check (status in ('completed', 'failed')),
+    error_message text,
+    breakdown jsonb not null default '{}'::jsonb,
+    calculated_at timestamp with time zone not null default now(),
+    unique (score_run_id, suburb_name, postcode)
+);
+
+create index if not exists idx_suburb_scores_run
+    on public.suburb_scores (score_run_id);
+
+create index if not exists idx_suburb_scores_suburb_name
+    on public.suburb_scores (suburb_name);
+
+create index if not exists idx_suburb_scores_liveability
+    on public.suburb_scores (liveability_score desc);
+
+create or replace view public.latest_suburb_scores as
+select distinct on (ss.suburb_name, ss.postcode)
+    ss.*
+from public.suburb_scores ss
+join public.score_runs sr
+    on sr.id = ss.score_run_id
+where sr.status in ('completed', 'completed_with_errors')
+  and ss.status = 'completed'
+order by ss.suburb_name, ss.postcode, sr.started_at desc, ss.calculated_at desc;
+
+
 
 -- Quick check view for geometry types
 create or replace view public.spatial_table_summary as

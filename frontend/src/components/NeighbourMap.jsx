@@ -609,7 +609,7 @@ export default function NeighbourMap({
           style={{
             position: "absolute",
             right: 12,
-            bottom: 28,
+            top: 12,
             zIndex: 1000,
             background: "rgba(255,255,255,0.96)",
             borderRadius: 12,
@@ -661,7 +661,7 @@ export default function NeighbourMap({
           style={{
             position: "absolute",
             right: 12,
-            bottom: 28,
+            top: 12,
             zIndex: 1000,
             background: "rgba(255,255,255,0.96)",
             borderRadius: 12,
@@ -699,7 +699,7 @@ export default function NeighbourMap({
           style={{
             position: "absolute",
             right: 12,
-            bottom: 28,
+            top: 12,
             zIndex: 1000,
             background: "rgba(255,255,255,0.96)",
             borderRadius: 12,

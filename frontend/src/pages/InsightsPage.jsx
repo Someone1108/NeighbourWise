@@ -2,21 +2,29 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { LinearProgress } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
-import { getCensusProfileForLocation, getLiveabilityScore } from '../services/api.js'
-import { loadContext } from '../utils/storage.js'
+import { addToCompareList, loadCompareList, getCompareUpdatedEventName, loadContext, saveContext } from '../utils/storage.js'
+import LoadingOverlay from '../components/LoadingOverlay.jsx'
+import ChangeConditionsModal from '../components/ChangeConditionsModal.jsx'
+import Toast from '../components/Toast.jsx'
+import {
+  getCensusProfileForLocation,
+  getCouncilLinksForLocation,
+  getLiveabilityScore,
+  getInsightRecommendations,
+} from '../services/api.js'
 
 const CATEGORIES = ['accessibility', 'safety', 'environment']
 
 const STATIC_SCORE_BENCHMARK = {
   label: 'Supported locality avg',
   description:
-    'Calculated once from 274 supported Melbourne locality points using the same 20-minute default scoring model.',
-  sampleSize: 274,
+    'Calculated from 497 completed Melbourne locality scores in the latest recalibrated 20-minute default scoring export.',
+  sampleSize: 497,
   scores: {
     accessibility: 51,
-    safety: 70,
-    environment: 74,
-    liveability: 64,
+    safety: 69,
+    environment: 75,
+    liveability: 63,
   },
 }
 
@@ -32,7 +40,7 @@ const CATEGORY_CONFIG = {
     sources: 'GTFS + OpenStreetMap',
   },
   safety: {
-    label: 'Safety',
+    label: 'Safety & Comfort',
     color: '#059669',
     soft: '#ecfdf5',
     border: '#a7f3d0',
@@ -185,25 +193,44 @@ function buildSituationHighlights(profile, scores, indicators) {
     const park = findIndicator(indicators, 'accessibility', 'park')
     const schoolScore = Number(school?.score)
     const parkScore = Number(park?.score)
+    const strongestFamilySignal = [
+      {
+        key: 'environment',
+        value: environment,
+        text: 'This area works best for a family through outdoor comfort: green space, heat and air-quality signals are the most supportive part of the result, which helps with parks, walking and time outside',
+      },
+      {
+        key: 'safety',
+        value: safety,
+        text: 'This area works well for a family through its safety and comfort signal, which helps everyday trips feel more manageable',
+      },
+      {
+        key: 'accessibility',
+        value: accessibility,
+        text: 'This area works well for a family through everyday access, with local services, schools and parks doing more of the practical work',
+      },
+    ]
+      .filter((signal) => Number.isFinite(signal.value))
+      .sort((a, b) => b.value - a.value)[0]
     const accessPhrase =
       Number.isFinite(schoolScore) && Number.isFinite(parkScore)
         ? schoolScore >= 65 && parkScore >= 65
-          ? 'school and park access both look supportive for everyday family routines'
+          ? 'School and park access both look supportive for everyday family routines'
           : schoolScore >= 65
-            ? 'school access looks supportive, while park access is worth checking in more detail'
+            ? 'School access looks supportive, while park access is worth checking in more detail'
             : parkScore >= 65
-              ? 'park access looks supportive, while school access is worth checking in more detail'
-              : 'school and park access may need extra checking for everyday routines'
-        : 'school and park access are useful to check for everyday family routines'
+              ? 'Park access looks supportive, while school access is worth checking in more detail'
+              : 'School and park access look like the main everyday routine checks to verify'
+        : 'School and park access are useful checks for everyday family routines'
     const safetyPhrase = Number.isFinite(safety)
       ? safety >= 65
-        ? 'The safety signal also looks reassuring enough to keep this area in consideration.'
-        : 'The safety signal is the part to look at more carefully before deciding.'
-      : 'Safety context is unavailable for this area.'
+        ? 'The safety signal also looks reassuring enough to keep this area in consideration'
+        : 'The safety signal is the part to inspect more closely before deciding'
+      : 'Safety context is unavailable for this area'
 
     return {
       title: 'For a family household',
-      summary: 'For a family household, the key checks are school access, parks and safety.',
+      summary: strongestFamilySignal?.text || 'This area has some useful signals for family routines, especially when you compare schools, parks and safety together.',
       points: [
         accessPhrase,
         safetyPhrase,
@@ -270,7 +297,7 @@ const TARGET_COUNT_MAP = {
   hospital: 2,
   school: 3,
   park: 5,
-  dog_park: 3,
+  dog_park: 1,
 }
 
 const INDICATOR_WEIGHT_CONFIG = {
@@ -280,7 +307,7 @@ const INDICATOR_WEIGHT_CONFIG = {
   hospital: { distance: 0.7, count: 0.3 },
   school: { distance: 0.6, count: 0.4 },
   park: { distance: 0.5, count: 0.5 },
-  dog_park: { distance: 0.5, count: 0.5 },
+  dog_park: { distance: 0.3, count: 0.7 },
 }
 
 const TIME_DISTANCE_KM = { 10: 0.8, 20: 1.6, 30: 2.4 }
@@ -323,9 +350,37 @@ function joinList(items = [], limit = 3) {
 }
 
 function formatDecimal(value, digits = 1) {
+  if (value === null || value === undefined || value === '') return 'Unavailable'
   const n = Number(value)
   if (!Number.isFinite(n)) return 'Unavailable'
   return n.toFixed(digits)
+}
+
+function formatSharePercent(value) {
+  if (value === null || value === undefined || value === '') return 'Unavailable'
+  const n = Number(value)
+  if (!Number.isFinite(n)) return 'Unavailable'
+  return `${Math.round(n * 100)}%`
+}
+
+function validPlaceName(value) {
+  const name = String(value || '').trim()
+  if (!name || name.toLowerCase() === 'unknown') return ''
+  return name
+}
+
+function formatDistanceKm(value) {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return ''
+  if (n < 1) return `${Math.round(n * 1000)} m`
+  return `${Math.round(n * 10) / 10} km`
+}
+
+function formatDistanceMeters(value) {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return ''
+  if (n < 1000) return `${Math.round(n)} m`
+  return `${Math.round((n / 1000) * 10) / 10} km`
 }
 
 function describeVegetationRange(minValue, maxValue) {
@@ -394,8 +449,10 @@ function getPersonaIndicatorPriority(factor, profile) {
   const name = String(factor?.name || '').toLowerCase()
 
   if (name.includes('crime context')) return 0
-  if (name.includes('zoning safety')) return 1
-  if (name.includes('combined safety')) return 2
+  if (name.includes('activity')) return 1
+  if (name.includes('noise') || name.includes('traffic')) return 2
+  if (name.includes('transport')) return 3
+  if (name.includes('zoning safety')) return 4
 
   if (profile?.familyWithChildren) {
     if (name.includes('school')) return 0
@@ -467,6 +524,8 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
     const score = Number(item?.score) || 0
     const count = Number(item?.count) || 0
     const nearestDistanceKm = Number(item?.nearestDistanceKm)
+    const nearestPoi = item?.nearestPoi || null
+    const nearestPoiName = validPlaceName(nearestPoi?.name)
     const target = TARGET_COUNT_MAP[type] || 3
     const indicatorWeights = INDICATOR_WEIGHT_CONFIG[type] || { distance: 0.5, count: 0.5 }
     const distanceScore =
@@ -475,10 +534,11 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
         : 0
     const countScore = 100 * Math.min(count / target, 1)
     const distanceText = Number.isFinite(nearestDistanceKm)
-      ? nearestDistanceKm < 1
-        ? `${(nearestDistanceKm * 1000).toFixed(0)} m`
-        : `${nearestDistanceKm.toFixed(2)} km`
+      ? formatDistanceKm(nearestDistanceKm)
       : 'No nearby result'
+    const nearestPlaceText = nearestPoiName
+      ? `${nearestPoiName}${distanceText !== 'No nearby result' ? ` (${distanceText} away)` : ''}`
+      : distanceText
 
     const convenienceHint =
       score >= 80
@@ -492,13 +552,14 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
       score,
       met: score >= 60,
       summary: `${score.toFixed(1)}/100`,
-      plainText: `${ACCESSIBILITY_FACTOR_LABELS[type] || type.replaceAll('_', ' ')} scores ${score.toFixed(1)}/100. The nearest result is ${distanceText}, with ${count} found in the selected range.`,
+      preview: nearestPoiName ? `Nearest: ${nearestPlaceText}` : '',
+      plainText: `${ACCESSIBILITY_FACTOR_LABELS[type] || type.replaceAll('_', ' ')} scores ${score.toFixed(1)}/100. ${nearestPoiName ? `Nearest named place: ${nearestPlaceText}.` : `The nearest result is ${distanceText}.`} ${count} found in the selected range.`,
       impact: getImpactText(score, 'Accessibility'),
       lines: [
         convenienceHint,
       ],
       details: [
-        `Nearest place: ${distanceText}`,
+        `Nearest place: ${nearestPlaceText}`,
         `Availability: ${count} found, target ${target}`,
         `Distance score: ${distanceScore.toFixed(1)}/100`,
         `Availability score: ${countScore.toFixed(1)}/100`,
@@ -508,18 +569,40 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
   })
 
   const crimeScore = Number(safety?.scores?.crime)
+  const activityScore = Number(safety?.scores?.activity)
+  const noiseScore = Number(safety?.scores?.noise)
+  const transportComfortScore = Number(safety?.scores?.transportComfort)
   const zoningSafetyScore = Number(safety?.scores?.zoning)
-  const finalSafetyScore = Number(safety?.safetyScore)
   const rawCrimeAverage = Number(safety?.crimeDetails?.averageInRadius)
   const nearbySuburbCount = Number(safety?.crimeDetails?.suburbCount)
   const nearbySuburbs = joinList(safety?.crimeDetails?.suburbNames || [])
+  const activityDetails = safety?.activityDetails || {}
+  const activityCategories = joinList(activityDetails.categories || [], 5)
+  const noiseDetails = safety?.noiseDetails || {}
+  const noiseFeatureTypes = joinList(noiseDetails.featureTypes || [], 5)
+  const transportDetails = safety?.transportComfortDetails || {}
+  const transportModes = joinList(transportDetails.modes || [], 4)
+  const transportTagCoverage = transportDetails.tagCoverage || {}
+  const nearestTransportStop = transportDetails.nearestStop || null
+  const nearestTransportStopName = validPlaceName(nearestTransportStop?.name)
+  const nearestTransportStopDistance = formatDistanceMeters(nearestTransportStop?.distanceMeters)
+  const nearestTransportStopText = nearestTransportStopName
+    ? `${nearestTransportStopName}${nearestTransportStopDistance ? ` (${nearestTransportStopDistance} away)` : ''}`
+    : ''
   const zoneCount = Number(safety?.zoningDetails?.zoneCount)
   const zoneMix = (safety?.zoningDetails?.zoneMix || [])
     .map((zone) => `${zone.label} (${zone.count})`)
     .join(', ')
-  const crimeWeight = Math.round(Number(safety?.weights?.crime ?? 0.57) * 100)
-  const zoningWeight = Math.round(Number(safety?.weights?.zoning ?? 0.43) * 100)
+  const safetyWeights = safety?.effectiveWeights || safety?.weights || {}
+  const crimeWeight = Math.round(Number(safetyWeights.crime ?? 0.45) * 100)
+  const activityWeight = Math.round(Number(safetyWeights.activity ?? 0.10) * 100)
+  const noiseWeight = Math.round(Number(safetyWeights.noise ?? 0.15) * 100)
+  const transportWeight = Math.round(Number(safetyWeights.transportComfort ?? 0.10) * 100)
+  const zoningWeight = Math.round(Number(safetyWeights.zoning ?? 0.20) * 100)
   const missingCrime = safety?.missingData?.crime
+  const missingActivity = safety?.missingData?.activity
+  const missingNoise = safety?.missingData?.noise
+  const missingTransportComfort = safety?.missingData?.transportComfort
   const missingZoning = safety?.missingData?.zoning
 
   const safetyFactors = [
@@ -549,7 +632,106 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
       ],
       details: [
         `Nearby suburbs used: ${Number.isFinite(nearbySuburbCount) ? nearbySuburbCount : 0}`,
+        `This contributes ${crimeWeight}% of the safety score.`,
         missingCrime ? 'Crime data was missing, so zoning was used as the fallback.' : 'Crime data available.',
+      ],
+    },
+    {
+      name: 'Street activity and passive surveillance',
+      score: activityScore,
+      met: activityScore >= 60,
+      summary: Number.isFinite(activityScore) ? `${activityScore}/100` : 'Unavailable',
+      plainText: Number.isFinite(activityScore)
+        ? `Street activity scores ${activityScore}/100 using mapped shops, services, hospitality and community places inside the selected range. Active frontages can support safety by putting more people and informal observation on the street.`
+        : 'Street activity data is unavailable for this area.',
+      impact: getImpactText(activityScore, 'Safety'),
+      lines: [
+        describeScore(
+          activityScore,
+          'Mapped activity is strong, which can improve passive surveillance and perceived safety.',
+          'Mapped activity is reasonably supportive for day-to-day street presence.',
+          'Mapped activity is present but not a major safety strength.',
+          'Mapped activity is limited, so some streets may feel quieter or less naturally observed.',
+        ),
+        Number.isFinite(Number(activityDetails.featureCount))
+          ? `${activityDetails.featureCount} activity features were found in the selected range.`
+          : 'Activity feature count is unavailable.',
+        activityCategories
+          ? `Examples of mapped activity types include ${activityCategories}.`
+          : 'No detailed activity categories were returned for this area.',
+      ],
+      details: [
+        `Weighted activity density: ${formatDecimal(activityDetails.weightedDensity)}`,
+        `Average activity support weight: ${formatDecimal(activityDetails.averageWeight, 2)}`,
+        `This contributes ${activityWeight}% of the safety score.`,
+        missingActivity ? 'Activity data was missing, so the other safety signals were reweighted.' : 'Activity data available.',
+      ],
+    },
+    {
+      name: 'Noise and traffic comfort',
+      score: noiseScore,
+      met: noiseScore >= 60,
+      summary: Number.isFinite(noiseScore) ? `${noiseScore}/100` : 'Unavailable',
+      plainText: Number.isFinite(noiseScore)
+        ? `Noise and traffic comfort scores ${noiseScore}/100 using nearby major roads, rail, tram corridors and mapped lighting. Higher scores mean less traffic pressure and a more comfortable public realm.`
+        : 'Noise and traffic comfort data is unavailable for this area.',
+      impact: getImpactText(noiseScore, 'Safety'),
+      lines: [
+        describeScore(
+          noiseScore,
+          'Traffic and noise pressure looks low, which supports comfort when moving around.',
+          'Traffic and noise pressure looks manageable for most day-to-day trips.',
+          'Traffic and noise pressure is mixed, so comfort may vary by street.',
+          'Traffic and noise pressure may reduce comfort, especially around busier corridors.',
+        ),
+        Number.isFinite(Number(noiseDetails.totalSegmentKm))
+          ? `${formatDecimal(noiseDetails.totalSegmentKm)} km of relevant transport or traffic segments were assessed.`
+          : 'Traffic segment length is unavailable.',
+        Number.isFinite(Number(noiseDetails.litShare))
+          ? `${formatSharePercent(noiseDetails.litShare)} of mapped traffic segments with lighting tags are marked as lit.`
+          : 'Lighting coverage for traffic segments is unavailable.',
+      ],
+      details: [
+        `Traffic/noise feature types: ${noiseFeatureTypes || 'Unavailable'}`,
+        `Noise pressure: ${formatDecimal(noiseDetails.noisePressure)}`,
+        `This contributes ${noiseWeight}% of the safety score.`,
+        missingNoise ? 'Noise data was missing, so the other safety signals were reweighted.' : 'Noise data available.',
+      ],
+    },
+    {
+      name: 'Public transport stop comfort',
+      score: transportComfortScore,
+      met: transportComfortScore >= 60,
+      summary: Number.isFinite(transportComfortScore) ? `${transportComfortScore}/100` : 'Unavailable',
+      preview: nearestTransportStopText ? `Nearby stop: ${nearestTransportStopText}` : '',
+      plainText: Number.isFinite(transportComfortScore)
+        ? `Public transport stop comfort scores ${transportComfortScore}/100 using nearby stops and mapped amenities such as lighting, shelters, benches, wheelchair access and tactile paving.${nearestTransportStopText ? ` A nearby stop assessed is ${nearestTransportStopText}.` : ''}`
+        : 'Public transport stop comfort data is unavailable for this area.',
+      impact: getImpactText(transportComfortScore, 'Safety'),
+      lines: [
+        describeScore(
+          transportComfortScore,
+          'Nearby stops look well supported, which helps trips feel safer and more comfortable.',
+          'Nearby stops have a reasonable comfort signal for everyday use.',
+          'Stop comfort is mixed, so some waits may feel better supported than others.',
+          'Stop comfort is limited, which may make waiting or transferring feel less comfortable.',
+        ),
+        Number.isFinite(Number(transportDetails.stopCount))
+          ? `${transportDetails.stopCount} public transport stops were assessed in the selected range.`
+          : 'Public transport stop count is unavailable.',
+        transportModes
+          ? `Mapped modes include ${transportModes}.`
+          : 'No transport modes were returned for this area.',
+      ],
+      details: [
+        nearestTransportStopText ? `Nearby public transport: ${nearestTransportStopText}` : 'Nearby public transport: Unavailable',
+        `Lighting coverage: ${formatSharePercent(transportTagCoverage.lit)}`,
+        `Shelter coverage: ${formatSharePercent(transportTagCoverage.shelter)}`,
+        `Bench coverage: ${formatSharePercent(transportTagCoverage.bench)}`,
+        `Wheelchair coverage: ${formatSharePercent(transportTagCoverage.wheelchair)}`,
+        `Tactile paving coverage: ${formatSharePercent(transportTagCoverage.tactilePaving)}`,
+        `This contributes ${transportWeight}% of the safety score.`,
+        missingTransportComfort ? 'Transport comfort data was missing, so the other safety signals were reweighted.' : 'Transport comfort data available.',
       ],
     },
     {
@@ -576,29 +758,9 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
       ],
       details: [
         `Zoning features used: ${Number.isFinite(zoneCount) ? zoneCount : 0}`,
+        `This contributes ${zoningWeight}% of the safety score.`,
         missingZoning ? 'Zoning data was missing, so crime context was used as the fallback.' : 'Zoning data available.',
       ],
-    },
-    {
-      name: 'Combined safety output',
-      score: finalSafetyScore,
-      met: finalSafetyScore >= 60,
-      summary: Number.isFinite(finalSafetyScore) ? `${finalSafetyScore}/100` : 'Unavailable',
-      plainText: Number.isFinite(finalSafetyScore)
-        ? `The final safety score is ${finalSafetyScore}/100 after combining recorded-crime context with the surrounding land-use pattern.`
-        : 'The final safety score is unavailable for this area.',
-      impact: getImpactText(finalSafetyScore, 'Safety'),
-      lines: [
-        describeScore(
-          finalSafetyScore,
-          'Overall, the available safety signals are strong for this selected range.',
-          'Overall, the available safety signals are reasonably reassuring.',
-          'Overall, safety is mixed: some signals are supportive, but others deserve a closer look.',
-          'Overall, safety is the category to investigate most carefully before deciding.',
-        ),
-        `The model gives more weight to crime context (${crimeWeight}%) than zoning (${zoningWeight}%) because recorded incidents are the more direct safety signal.`,
-      ],
-      details: [`Final mix: crime ${crimeWeight}%, zoning ${zoningWeight}%`],
     },
   ]
 
@@ -736,7 +898,7 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
       category: 'safety',
       factors: safetyFactors,
       takeaway: summarizeCategory('safety', safetyFactors),
-      scoreExplanation: `Safety combines nearby recorded-crime context with land-use zoning in the selected ${rangeMinutes}-minute range. Zoning adds context because active commercial, mixed-use and public areas may have more lighting, foot traffic, passive surveillance and CCTV coverage; crime still has the larger influence because recorded incidents are the more direct safety signal.`,
+      scoreExplanation: `Safety combines recorded-crime context (${crimeWeight}%), street activity and passive surveillance (${activityWeight}%), noise and traffic comfort (${noiseWeight}%), public transport stop comfort (${transportWeight}%) and land-use zoning (${zoningWeight}%) in the selected ${rangeMinutes}-minute range. The mix can be reweighted automatically when a signal is unavailable.`,
     },
     environment: {
       category: 'environment',
@@ -756,7 +918,7 @@ function CircularGauge({ score, color, size = 160, strokeWidth = 13, dark = fals
   useEffect(() => {
     if (score == null) return
     let start = null
-    const duration = 900
+    const duration = 1800
     const ease = t => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
     function step(ts) {
       if (!start) start = ts
@@ -779,13 +941,9 @@ function CircularGauge({ score, color, size = 160, strokeWidth = 13, dark = fals
         strokeLinecap="round"
         transform={`rotate(-90 ${size / 2} ${size / 2})`}
       />
-      <text x={size / 2} y={size / 2 - 6} textAnchor="middle" dominantBaseline="middle"
-        style={{ fontFamily: 'Figtree, sans-serif', fontSize: size * 0.22, fontWeight: 900, fill: dark ? '#fff' : '#1a2436' }}>
+      <text x={size / 2} y={size / 2} textAnchor="middle" dominantBaseline="middle"
+        style={{ fontFamily: 'Figtree, sans-serif', fontSize: size * 0.26, fontWeight: 900, fill: dark ? '#fff' : '#1a2436' }}>
         {displayed}
-      </text>
-      <text x={size / 2} y={size / 2 + size * 0.17} textAnchor="middle"
-        style={{ fontFamily: 'Figtree, sans-serif', fontSize: size * 0.09, fontWeight: 600, fill: dark ? 'rgba(255,255,255,0.5)' : '#5c6b82' }}>
-        / 100
       </text>
     </svg>
   )
@@ -826,6 +984,7 @@ function CompareBar({ value, avg, color, label = 'Avg' }) {
         <span>This area: <span style={{ color, fontWeight: 800 }}>{value ?? '–'}</span></span>
         <span>{label}: {hasAvg ? avg : 'loading'}</span>
       </div>
+
     </div>
   )
 }
@@ -892,6 +1051,11 @@ function IndicatorCard({ factor, color, soft, border }) {
           <p style={{ fontSize: 14, color: '#4b5563', marginTop: 4, lineHeight: 1.4 }}>
             Score {scoreText}
           </p>
+          {factor.preview ? (
+            <p style={{ fontSize: 13, color: '#64748b', marginTop: 4, lineHeight: 1.35 }}>
+              {factor.preview}
+            </p>
+          ) : null}
         </div>
         <span style={{ fontSize: 22, fontWeight: 800, color: isMet ? color : '#9ca3af', flexShrink: 0, lineHeight: 1 }} aria-hidden="true">
           {open ? '▴' : '▾'}
@@ -930,6 +1094,44 @@ function IndicatorCard({ factor, color, soft, border }) {
         </div>
       ) : null}
     </button>
+  )
+}
+
+function CategoryAccordion({ groups, color, soft, border }) {
+  const [openGroup, setOpenGroup] = useState(groups.length > 0 ? groups[0].title : null)
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {groups.map((group) => {
+        const isOpen = openGroup === group.title
+        return (
+          <section key={group.title} aria-label={group.title}>
+            <button
+              onClick={() => setOpenGroup(isOpen ? null : group.title)}
+              aria-expanded={isOpen}
+              style={{
+                all: 'unset', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                width: '100%', padding: '9px 0', cursor: 'pointer', boxSizing: 'border-box',
+                borderBottom: `1px solid ${isOpen ? color : 'rgba(15,23,42,0.08)'}`,
+              }}
+              onFocus={e => { e.currentTarget.style.outline = `2px solid ${color}`; e.currentTarget.style.outlineOffset = '2px' }}
+              onBlur={e => { e.currentTarget.style.outline = 'none' }}
+            >
+              <p style={{ fontSize: 12, fontWeight: 900, letterSpacing: '0.07em', textTransform: 'uppercase', color: isOpen ? color : '#6b7280' }}>
+                {group.title} <span style={{ fontWeight: 600, color: '#9ca3af', textTransform: 'none', letterSpacing: 0 }}>({group.factors.length})</span>
+              </p>
+              <span style={{ fontSize: 14, color: isOpen ? color : '#9ca3af' }} aria-hidden="true">{isOpen ? '▴' : '▾'}</span>
+            </button>
+            {isOpen && (
+              <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 6 }}>
+                {group.factors.map((f) => (
+                  <IndicatorCard key={f.name} factor={f} color={color} soft={soft} border={border} />
+                ))}
+              </div>
+            )}
+          </section>
+        )
+      })}
+    </div>
   )
 }
 
@@ -1451,16 +1653,478 @@ function CensusContextSection({ data, loading, userProfile, indicators }) {
   )
 }
 
+// ── Similar Suburbs ─────────────────────────────────────────────────────────
+
+function CouncilLinksSection({ data, loading }) {
+  const links = data?.links || []
+
+  return (
+    <div style={{
+      background: '#fff',
+      border: '1.5px solid #e5e7eb',
+      borderRadius: 20,
+      overflow: 'hidden',
+      marginBottom: 28,
+      boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
+    }} role="region" aria-label="Council plans and development sources">
+      <div style={{
+        background: 'linear-gradient(90deg, #12312c, #1f4e45)',
+        padding: '18px 24px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 16,
+      }}>
+        <div>
+          <p style={{ fontSize: 11, fontWeight: 900, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.65)', marginBottom: 4 }}>
+            Official sources
+          </p>
+          <h2 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 24, fontWeight: 400, color: '#fff', margin: 0 }}>
+            Council plans and development links
+          </h2>
+        </div>
+        {data?.lgaName && (
+          <span style={{
+            flexShrink: 0,
+            background: 'rgba(255,255,255,0.12)',
+            border: '1px solid rgba(255,255,255,0.24)',
+            borderRadius: 999,
+            padding: '6px 12px',
+            color: '#fff',
+            fontSize: 12,
+            fontWeight: 800,
+          }}>
+            {data.lgaName}
+          </span>
+        )}
+      </div>
+
+      <div style={{ padding: '22px 24px' }}>
+        {loading ? (
+          <LinearProgress sx={{ borderRadius: 2, height: 5, bgcolor: '#ccfbf1', '& .MuiLinearProgress-bar': { bgcolor: '#0f766e' } }} />
+        ) : links.length > 0 ? (
+          <>
+            {data?.available ? (
+              <p style={{ fontSize: 15, color: '#334155', lineHeight: 1.65, marginBottom: 16 }}>
+                Use these official council and Victorian Government sources to check projects, planning controls,
+                permits, strategies and long-term local plans for this area.
+              </p>
+            ) : (
+              <div style={{
+                background: '#f8fafc',
+                border: '1px solid #e5e7eb',
+                borderRadius: 14,
+                padding: '14px 16px',
+                marginBottom: 16,
+              }}>
+                <p style={{ fontSize: 15, color: '#475569', lineHeight: 1.65 }}>
+                  {data?.message || 'Council-specific links are not available for this area yet. Victorian planning sources are still available below.'}
+                </p>
+              </div>
+            )}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 14 }}>
+              {links.map((item) => (
+                <a
+                  key={`${item.key}-${item.url}`}
+                  href={item.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    display: 'block',
+                    textDecoration: 'none',
+                    color: 'inherit',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: 14,
+                    padding: '16px 18px',
+                    background: '#fff',
+                    minHeight: 145,
+                    transition: 'border-color 0.16s, box-shadow 0.16s, transform 0.16s',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.borderColor = '#0f766e'
+                    e.currentTarget.style.boxShadow = '0 8px 24px rgba(15,118,110,0.1)'
+                    e.currentTarget.style.transform = 'translateY(-2px)'
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.borderColor = '#e5e7eb'
+                    e.currentTarget.style.boxShadow = 'none'
+                    e.currentTarget.style.transform = 'none'
+                  }}
+                >
+                  <p style={{ fontSize: 11, fontWeight: 900, letterSpacing: '0.09em', textTransform: 'uppercase', color: '#0f766e', marginBottom: 7 }}>
+                    {item.source}
+                  </p>
+                  <p style={{ fontSize: 16, fontWeight: 900, color: '#0f172a', lineHeight: 1.3, marginBottom: 8 }}>
+                    {item.title}
+                  </p>
+                  <p style={{ fontSize: 13, color: '#475569', lineHeight: 1.55, marginBottom: 12 }}>
+                    {item.description}
+                  </p>
+                  <span style={{ fontSize: 13, color: '#0f766e', fontWeight: 900 }}>
+                    Open official source
+                  </span>
+                </a>
+              ))}
+            </div>
+            <p style={{ marginTop: 16, fontSize: 13, color: '#64748b', lineHeight: 1.55 }}>
+              These links are curated source pages, not a prediction or summary of future developments.
+              Confirm property-specific details through official planning registers.
+            </p>
+          </>
+        ) : (
+          <div style={{
+            background: '#f8fafc',
+            border: '1px solid #e5e7eb',
+            borderRadius: 14,
+            padding: '16px 18px',
+          }}>
+            <p style={{ fontSize: 15, color: '#475569', lineHeight: 1.65 }}>
+              {data?.message || 'Council-specific links are not available for this area yet.'}
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+
+
+const SIM_DISTANCE_FILTERS = [5, 10, 15]
+
+
+
+function SimilarSuburbs({
+  recommendations,
+  loading,
+  error,
+  rangeMinutes,
+  profile,
+  selectedLocation,
+  returnContext,
+}) {
+  const navigate = useNavigate()
+  const [toastMsg, setToastMsg] = useState(null)
+  const [toastAction, setToastAction] = useState(null)
+
+  function showToast(message, action = null) {
+    setToastMsg(message)
+    setToastAction(action)
+  }
+  function clearToast() {
+    setToastMsg(null)
+    setToastAction(null)
+  }
+
+  const [compareList, setCompareList] = useState(() => loadCompareList())
+
+  useEffect(() => {
+    const refresh = () => setCompareList(loadCompareList())
+    window.addEventListener(getCompareUpdatedEventName(), refresh)
+    return () => window.removeEventListener(getCompareUpdatedEventName(), refresh)
+  }, [])
+
+  const compareNames = useMemo(
+    () =>
+      new Set(
+        compareList.map((x) =>
+          String(x.locationName || x.displayName || x.name || '').toLowerCase()
+        )
+      ),
+    [compareList]
+  )
+
+  const visibleSuburbs = useMemo(() => {
+    return (recommendations || []).slice(0, 3).map((item) => {
+      const name =
+        item.suburbLabel ||
+        item.suburbName ||
+        item.name ||
+        item.suburb ||
+        item.displayName ||
+        'Unknown suburb'
+
+      const score =
+        item.scores?.liveability ??
+        item.liveabilityScore ??
+        item.score ??
+        item.overallScore ??
+        item.scores?.overall ??
+        null
+
+      return {
+        ...item,
+        name,
+        displayName: name,
+        lat: Number(item.latitude ?? item.lat),
+        lng: Number(item.longitude ?? item.lng),
+        score: Number(score),
+        match: Number(item.recommendationScore ?? item.match ?? item.matchScore ?? 0),
+        dist: Number(item.distanceKm ?? item.dist ?? item.distance ?? 0),
+        reason: item.reason || '',
+      }
+    }).filter((item) => Number.isFinite(item.lat) && Number.isFinite(item.lng))
+  }, [recommendations])
+
+  function handleAddToCompare(s) {
+    const item = {
+      displayName: s.displayName || s.name,
+      name: s.name,
+      lat: s.lat,
+      lng: s.lng,
+      rangeMinutes,
+      profile,
+    }
+
+    const result = addToCompareList(item)
+
+    if (result?.reason === 'ALREADY_EXISTS') {
+      showToast('Already in your compare list.')
+      return
+    }
+
+    if (result?.reason === 'COMPARE_FULL') {
+      showToast('Your compare list is full.', {
+        label: 'Go to Compare',
+        onClick: () => navigate('/compare'),
+      })
+      return
+    }
+
+    showToast('Added to compare list.')
+  }
+
+  function handleViewInsights(s) {
+    const selectedRecommendedLocation = {
+      name: s.name || s.suburbName,
+      displayName: s.displayName || s.suburbLabel || s.name || s.suburbName,
+      lat: s.lat ?? s.latitude,
+      lng: s.lng ?? s.longitude,
+      type: 'suburb',
+      placeType: 'suburb',
+    }
+
+    const nextContext = {
+      selectedLocation: selectedRecommendedLocation,
+      rangeMinutes,
+      profile,
+
+      // This tells the next Insight page to go back to the current Insight page
+      returnContext: {
+        type: 'insight',
+        selectedLocation,
+        rangeMinutes,
+        profile,
+
+        // Keep the previous back path, e.g. current Insight can still go back to Map
+        returnContext: returnContext || null,
+      },
+    }
+
+    saveContext(nextContext)
+    window.scrollTo({ top: 0, behavior: 'auto' })
+    navigate('/insights', { state: nextContext })
+  }
+
+  return (
+    <div style={{ marginBottom: 28 }}>
+      <Toast message={toastMsg} onClose={clearToast} action={toastAction} duration={toastAction ? 0 : 2500} />
+      <div style={{ marginBottom: 14 }}>
+        <p style={{ fontSize: 10, fontWeight: 900, letterSpacing: '0.16em', textTransform: 'uppercase', color: '#9ca3af', marginBottom: 5 }}>
+          Similar Suburbs
+        </p>
+
+        <h2 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 'clamp(18px, 2.8vw, 24px)', fontWeight: 400, color: '#1a2436', margin: '0 0 3px', lineHeight: 1.2 }}>
+          Suburbs with a similar profile
+        </h2>
+
+        <p style={{ fontSize: 12, color: '#9ca3af', margin: 0 }}>
+          Based on backend recommendation results
+        </p>
+      </div>
+
+      {loading && (
+        <div style={{
+          background: '#fff',
+          border: '1.5px solid #e5e7eb',
+          borderRadius: 16,
+          padding: 18,
+        }}>
+          <p style={{ fontSize: 13, color: '#6b7280', fontWeight: 700 }}>
+            Loading recommendations...
+          </p>
+        </div>
+      )}
+
+      {!loading && error && (
+        <div style={{
+          background: '#fff7ed',
+          border: '1.5px solid #fed7aa',
+          borderRadius: 16,
+          padding: 18,
+        }}>
+          <p style={{ fontSize: 13, color: '#9a3412', fontWeight: 700 }}>
+            {error}
+          </p>
+        </div>
+      )}
+
+      {!loading && !error && visibleSuburbs.length === 0 && (
+        <div style={{
+          background: '#fff',
+          border: '1.5px solid #e5e7eb',
+          borderRadius: 16,
+          padding: 18,
+        }}>
+          <p style={{ fontSize: 13, color: '#6b7280', fontWeight: 700 }}>
+            No recommended suburbs found for this area.
+          </p>
+        </div>
+      )}
+
+      {!loading && !error && visibleSuburbs.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
+          {visibleSuburbs.map((s) => {
+            const sb = getScoreBand(s.score)
+            const inList = compareNames.has(String(s.name).toLowerCase())
+
+            return (
+              <div
+                key={`${s.name}-${s.lat}-${s.lng}`}
+                style={{
+                  background: '#fff',
+                  border: '1.5px solid #e5e7eb',
+                  borderRadius: 16,
+                  padding: '16px 20px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 16,
+                  transition: 'box-shadow 0.2s, transform 0.2s',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'
+                  e.currentTarget.style.transform = 'translateY(-2px)'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.boxShadow = 'none'
+                  e.currentTarget.style.transform = 'none'
+                }}
+              >
+                <svg width="72" height="72" viewBox="0 0 72 72" style={{ flexShrink: 0 }}>
+                  <circle cx="36" cy="36" r="30" fill="none" stroke="#e5e7eb" strokeWidth="5" />
+                  <circle
+                    cx="36"
+                    cy="36"
+                    r="30"
+                    fill="none"
+                    stroke={sb.color}
+                    strokeWidth="5"
+                    strokeLinecap="round"
+                    strokeDasharray={2 * Math.PI * 30}
+                    strokeDashoffset={
+                      Number.isFinite(s.score)
+                        ? 2 * Math.PI * 30 - (s.score / 100) * 2 * Math.PI * 30
+                        : 2 * Math.PI * 30
+                    }
+                    transform="rotate(-90 36 36)"
+                  />
+                  <text
+                    x="36"
+                    y="32"
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    fill={sb.color}
+                    fontSize="21"
+                    fontFamily="'DM Serif Display', Georgia, serif"
+                    fontWeight="400"
+                  >
+                    {Number.isFinite(s.score) ? Math.round(s.score) : '–'}
+                  </text>
+                  <text x="36" y="51" textAnchor="middle" fill="#9ca3af" fontSize="7" fontWeight="800" letterSpacing="1">
+                    SCORE
+                  </text>
+                </svg>
+
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <p style={{ fontWeight: 800, fontSize: 15, color: '#1a2436', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {s.name}
+                    </p>
+
+                    {Number.isFinite(s.match) && s.match > 0 && (
+                      <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 900, background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0', borderRadius: 999, padding: '2px 8px' }}>
+                        {Math.round(s.match)}%
+                      </span>
+                    )}
+                  </div>
+
+                  {Number.isFinite(s.dist) && s.dist > 0 && (
+                    <p style={{ fontSize: 12, color: '#9ca3af', marginBottom: 10 }}>
+                      {s.dist.toFixed(1)} km away
+                    </p>
+                  )}
+
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      onClick={() => {
+                        if (!inList) handleAddToCompare(s)
+                      }}
+                      disabled={inList}
+                      style={{
+                        all: 'unset',
+                        cursor: inList ? 'default' : 'pointer',
+                        padding: '6px 14px',
+                        borderRadius: 8,
+                        fontSize: 12,
+                        fontWeight: 700,
+                        border: inList ? '1.5px solid #a7f3d0' : '1.5px solid #e5e7eb',
+                        background: inList ? '#ecfdf5' : '#fff',
+                        color: inList ? '#059669' : '#374151',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      {inList ? '✓ In Compare List' : 'Add to Compare'}
+                    </button>
+
+                    <button
+                      onClick={() => handleViewInsights(s)}
+                      style={{
+                        all: 'unset',
+                        cursor: 'pointer',
+                        padding: '6px 14px',
+                        borderRadius: 8,
+                        fontSize: 12,
+                        fontWeight: 700,
+                        background: 'linear-gradient(135deg, #f59648 0%, #f47c20 100%)',
+                        color: '#fff',
+                      }}
+                    >
+                      View Insights →
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+    </div>
+  )
+}
+
 export default function InsightsPage() {
   const navigate = useNavigate()
   const routerLocation = useLocation()
-
   const context = useMemo(() => routerLocation.state || loadContext() || null, [routerLocation.state])
   const selectedLocation = context?.selectedLocation
   const locationName = selectedLocation?.displayName || selectedLocation?.fullAddress || selectedLocation?.name || ''
   const profile = context?.profile
   const rangeMinutes = context?.rangeMinutes || 20
   const profileLabel = getProfileLabel(profile)
+  const returnContext = context?.returnContext
 
   const [overallScore, setOverallScore] = useState(null)
   const [scores, setScores] = useState(null)
@@ -1469,7 +2133,16 @@ export default function InsightsPage() {
   const [loading, setLoading] = useState(true)
   const [censusLoading, setCensusLoading] = useState(true)
   const [censusData, setCensusData] = useState(null)
-  const [activeTab, setActiveTab] = useState('accessibility')
+  const [councilLinksLoading, setCouncilLinksLoading] = useState(true)
+  const [councilLinksData, setCouncilLinksData] = useState(null)
+  const [heroBarReady, setHeroBarReady] = useState(false)
+  const [selectedBreakdownCategory, setSelectedBreakdownCategory] = useState(null)
+  const [heroToastMsg, setHeroToastMsg] = useState(null)
+  const [heroToastAction, setHeroToastAction] = useState(null)
+  const [showConditionsModal, setShowConditionsModal] = useState(false)
+  const [recommendations, setRecommendations] = useState([])
+  const [recommendationsLoading, setRecommendationsLoading] = useState(true)
+  const [recommendationsError, setRecommendationsError] = useState(null)
 
   useEffect(() => {
     const lat = Number(selectedLocation?.lat)
@@ -1478,12 +2151,16 @@ export default function InsightsPage() {
     if (!locationName || !Number.isFinite(lat) || !Number.isFinite(lng)) {
       return
     }
+
     let cancelled = false
 
     Promise.resolve().then(() => {
       if (!cancelled) {
         setLoading(true)
         setCensusLoading(true)
+        setCouncilLinksLoading(true)
+        setRecommendationsLoading(true)
+        setRecommendationsError(null)
       }
     })
 
@@ -1493,6 +2170,7 @@ export default function InsightsPage() {
       time: rangeMinutes,
       persona: profile || 'default',
     })
+
     const censusP = getCensusProfileForLocation(selectedLocation).catch((err) => {
       console.error('Census profile load error:', err)
       return {
@@ -1501,58 +2179,209 @@ export default function InsightsPage() {
       }
     })
 
-    Promise.all([scoreP, censusP])
-      .then(([scoreData, censusProfile]) => {
+    const councilLinksP = getCouncilLinksForLocation(selectedLocation).catch((err) => {
+      console.error('Council links load error:', err)
+      return {
+        available: false,
+        message: 'Council planning links could not be loaded for this location.',
+        links: [],
+      }
+    })
+
+    const recommendationsP = getInsightRecommendations({
+      lat,
+      lng,
+      time: rangeMinutes,
+      persona: profile || 'default',
+    }).catch((err) => {
+      console.error('Insight recommendations load error:', err)
+      setRecommendationsError('Recommendations could not be loaded.')
+      return {
+        recommendations: [],
+      }
+    })
+
+    Promise.all([scoreP, censusP, councilLinksP, recommendationsP])
+      .then(([scoreData, censusProfile, councilLinks, recommendationsData]) => {
         if (cancelled) return
+
         setOverallScore(scoreData.liveabilityScore)
         setScores(scoreData.scores || null)
         setScoreWeights(scoreData.weights || null)
         setIndicators(buildIndicatorMapFromBreakdown(scoreData.breakdown || {}, rangeMinutes))
         setCensusData(censusProfile)
+        setCouncilLinksData(councilLinks)
+
+        setRecommendations(
+          recommendationsData?.recommendations ||
+          recommendationsData?.data ||
+          []
+        )
       })
       .catch(console.error)
       .finally(() => {
         if (!cancelled) {
           setLoading(false)
           setCensusLoading(false)
+          setCouncilLinksLoading(false)
+          setRecommendationsLoading(false)
         }
       })
 
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [locationName, rangeMinutes, profile, selectedLocation])
+
+  // Scroll to top whenever the viewed location changes
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'auto' })
+  }, [locationName])
+
+  useEffect(() => {
+    if (!loading) {
+      const t = setTimeout(() => setHeroBarReady(true), 150)
+      return () => clearTimeout(t)
+    }
+    setHeroBarReady(false)
+  }, [loading])
+
+  useEffect(() => {
+    if (!selectedBreakdownCategory) return
+    const onKey = (e) => { if (e.key === 'Escape') setSelectedBreakdownCategory(null) }
+    document.addEventListener('keydown', onKey)
+    document.body.style.overflow = 'hidden'
+    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = '' }
+  }, [selectedBreakdownCategory])
 
   if (!locationName) {
     return (
-      <div style={{ padding: '48px 24px', textAlign: 'center' }}>
-        <p style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '1.4rem', color: '#101828', marginBottom: 8 }}>No suburb selected</p>
-        <p style={{ fontSize: '0.95rem', color: '#4b5563', marginBottom: 24 }}>Search for a suburb or address from the home page first.</p>
-        <button
-          onClick={() => navigate('/')}
-          onFocus={e => { e.currentTarget.style.outline = '2px solid #2563eb'; e.currentTarget.style.outlineOffset = '2px' }}
-          onBlur={e => { e.currentTarget.style.outline = 'none' }}
-          style={{
-            padding: '12px 28px', borderRadius: 12, border: 'none', cursor: 'pointer',
-            background: '#f47c20', color: '#fff', fontWeight: 800, fontSize: 15, fontFamily: 'Figtree, sans-serif',
-          }}
-        >
-          Back to Home
-        </button>
+      <div style={{ minHeight: '100vh', background: '#f5f0eb', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 24px' }}>
+        <div style={{ textAlign: 'center', maxWidth: 400 }}>
+          <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#fff7ed', border: '2px solid #fed7aa', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', fontSize: 28 }}>
+            🏘️
+          </div>
+          <p style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '1.5rem', color: '#101828', marginBottom: 8, fontWeight: 400 }}>
+            The selected suburb could not be loaded.
+          </p>
+          <p style={{ fontSize: '0.95rem', color: '#6b7280', marginBottom: 28, lineHeight: 1.6 }}>
+            This can happen if you navigated here directly. Please search for a suburb or address to get started.
+          </p>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+            <button
+              onClick={() => navigate('/')}
+              style={{
+                all: 'unset', cursor: 'pointer',
+                padding: '11px 22px', borderRadius: 10, fontSize: 14, fontWeight: 700,
+                border: '1.5px solid #e5e7eb', background: '#fff', color: '#374151',
+                fontFamily: 'Figtree, sans-serif',
+                transition: 'border-color 0.15s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = '#9ca3af' }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = '#e5e7eb' }}
+            >
+              Try another suburb
+            </button>
+            <button
+              onClick={() => navigate('/')}
+              onFocus={e => { e.currentTarget.style.outline = '2px solid #2563eb'; e.currentTarget.style.outlineOffset = '2px' }}
+              onBlur={e => { e.currentTarget.style.outline = 'none' }}
+              style={{
+                all: 'unset', cursor: 'pointer',
+                padding: '11px 22px', borderRadius: 10, fontSize: 14, fontWeight: 800,
+                background: 'linear-gradient(135deg, #f59648 0%, #f47c20 100%)', color: '#fff',
+                fontFamily: 'Figtree, sans-serif',
+              }}
+            >
+              Back to Home
+            </button>
+          </div>
+        </div>
       </div>
     )
   }
 
   const band = overallScore != null ? getScoreBand(overallScore) : null
-  const activeCfg = CATEGORY_CONFIG[activeTab]
-  const activeIndicators = indicators[activeTab]
-  const activeGroups = groupIndicatorFactors(activeIndicators?.factors || [], profile)
   const situationHighlights = buildSituationHighlights(profile, scores, indicators)
   const benchmarkScores = STATIC_SCORE_BENCHMARK.scores
   const benchmarkShortLabel = STATIC_SCORE_BENCHMARK.label
   const benchmarkTextLabel = 'supported locality average'
   const interpretationSummary = buildInterpretationSummary(scores, profileLabel, rangeMinutes, benchmarkScores)
+  const breakdownCategories = selectedBreakdownCategory ? [selectedBreakdownCategory] : []
+
+  function handleBack() {
+    // Case 1: Insight → Insight
+    // Example: South Wharf Insight → Melbourne 3000 Insight
+    if (returnContext?.type === 'insight' && returnContext?.selectedLocation) {
+      const previousContext = {
+        selectedLocation: returnContext.selectedLocation,
+        rangeMinutes: returnContext.rangeMinutes || rangeMinutes || 20,
+        profile: returnContext.profile || profile || 'default',
+
+        // Keep the earlier return context.
+        // After going back to Melbourne 3000, Melbourne 3000 still needs to know
+        // that its previous page was the Map page.
+        returnContext: returnContext.returnContext || null,
+      }
+
+      saveContext(previousContext)
+
+      navigate('/insights', {
+        state: previousContext,
+      })
+
+      return
+    }
+
+    // Case 2: Map → Insight
+    // Example: Melbourne 3000 Insight → Map
+    if (returnContext?.type === 'map' && returnContext?.selectedLocation) {
+      navigate('/map', {
+        state: {
+          selectedLocation: returnContext.selectedLocation,
+          rangeMinutes: returnContext.rangeMinutes || rangeMinutes || 20,
+          profile: returnContext.profile || profile || 'default',
+        },
+      })
+
+      return
+    }
+
+    // Fallback:
+    // If there is no returnContext but the current page still has a selected location,
+    // go back to the Map page using the current selected location.
+    if (selectedLocation) {
+      navigate('/map', {
+        state: {
+          selectedLocation,
+          rangeMinutes: rangeMinutes || 20,
+          profile: profile || 'default',
+        },
+      })
+
+      return
+    }
+
+    // Final fallback:
+    // If there is no location or return context, go back to the Home page.
+    navigate('/')
+  }
+
+  const previousLocationName =
+      returnContext?.selectedLocation?.displayName ||
+      returnContext?.selectedLocation?.locationName ||
+      returnContext?.selectedLocation?.name ||
+      null
 
   return (
     <div style={{ background: '#f5f0eb', minHeight: '100%', paddingBottom: 80 }}>
+      <Toast
+        message={heroToastMsg}
+        action={heroToastAction}
+        duration={heroToastAction ? 0 : 2500}
+        onClose={() => { setHeroToastMsg(null); setHeroToastAction(null) }}
+      />
+      <LoadingOverlay fixed={true} show={loading} label="Loading neighbourhood insights…" />
 
       <nav aria-label="Page navigation" style={{
         position: 'sticky', top: 64, zIndex: 50,
@@ -1562,7 +2391,7 @@ export default function InsightsPage() {
         padding: '12px 40px', display: 'flex', alignItems: 'center', gap: 14,
       }}>
         <button
-          onClick={() => navigate('/map')}
+          onClick= {handleBack}
           aria-label="Go back to map"
           onFocus={e => { e.currentTarget.style.outline = '2px solid #2563eb'; e.currentTarget.style.outlineOffset = '2px' }}
           onBlur={e => { e.currentTarget.style.outline = 'none' }}
@@ -1575,11 +2404,51 @@ export default function InsightsPage() {
           <ArrowBackIcon style={{ fontSize: 20 }} />
         </button>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ fontWeight: 800, fontSize: 16, color: '#1a2436', lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{locationName}</p>
-          <p style={{ fontSize: 13, color: '#4b5563', marginTop: 3 }}>
-            Liveability breakdown · {rangeMinutes} min range{profileLabel ? ` · ${profileLabel}` : ''}
+          <p style={{
+            fontWeight: 800,
+            fontSize: 16,
+            color: '#1a2436',
+            lineHeight: 1.1,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis'
+          }}>
+            {locationName}
+          </p>
+
+          <p style={{ fontSize: 12, color: '#6b7280', marginTop: 3, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {returnContext?.type === 'insight' && previousLocationName
+              ? `← Back to ${previousLocationName}`
+              : `← Back to map${previousLocationName && previousLocationName !== locationName ? ` · ${previousLocationName}` : ''}`
+            }
+          </p>
+
+          <p style={{ fontSize: 12, color: '#9ca3af', marginTop: 2 }}>
+            {rangeMinutes} min range{profileLabel ? ` · ${profileLabel}` : ''}
           </p>
         </div>
+        <button
+          onClick={() => { if (!loading) setShowConditionsModal(true) }}
+          disabled={loading}
+          aria-label="Change conditions"
+          style={{
+            all: 'unset', cursor: loading ? 'default' : 'pointer', flexShrink: 0,
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '7px 14px', borderRadius: 9,
+            border: '1px solid rgba(0,0,0,0.12)', background: '#fff',
+            fontSize: 13, fontWeight: 700, color: loading ? '#9ca3af' : '#374151',
+            transition: 'border-color 0.15s, background 0.15s, color 0.15s',
+            fontFamily: 'Figtree, sans-serif',
+            opacity: loading ? 0.7 : 1,
+          }}
+          onMouseEnter={e => { if (!loading) { e.currentTarget.style.borderColor = '#f47c20'; e.currentTarget.style.background = '#fff7ed' } }}
+          onMouseLeave={e => { if (!loading) { e.currentTarget.style.borderColor = 'rgba(0,0,0,0.12)'; e.currentTarget.style.background = '#fff' } }}
+        >
+          {loading
+            ? <><span className="nwSearchSpinner" style={{ borderTopColor: '#f47c20', width: 12, height: 12 }} aria-hidden="true" /> Loading...</>
+            : <><span aria-hidden="true">⚙</span> Change Conditions</>
+          }
+        </button>
         {band && !loading && (
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: 7, flexShrink: 0,
@@ -1594,221 +2463,246 @@ export default function InsightsPage() {
 
       <div style={{ maxWidth: 1280, margin: '0 auto', padding: '28px 32px 0' }}>
 
-        {/* Hero score card */}
+        {/* Hero score card — dark navy reference design */}
         <div style={{
-          borderRadius: 28, overflow: 'hidden', marginBottom: 20,
-          background: 'linear-gradient(135deg, #1e1b4b 0%, #6b21a8 45%, #9a3412 100%)',
-          boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
+          borderRadius: 24, overflow: 'hidden', marginBottom: 20,
+          background: 'linear-gradient(140deg, #12122a 0%, #1a1a3e 40%, #0d2d52 100%)',
+          position: 'relative',
+          boxShadow: '0 16px 48px rgba(0,0,0,0.28)',
         }}>
+          {/* Subtle dot texture */}
           <div style={{
-            padding: '36px 40px',
-            display: 'grid',
-            gridTemplateColumns: 'minmax(0,1fr) auto',
-            gap: 32,
-            alignItems: 'center',
-          }}>
-            <div>
-              <p style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)', marginBottom: 8 }}>
-                {locationName} · Overall Liveability
-              </p>
-              <h1 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 'clamp(28px, 3.6vw, 42px)', fontWeight: 400, color: '#fff', lineHeight: 1.15, marginBottom: 16 }}>
-                {band && !loading
-                  ? <>{`A `}<em style={{ color: '#fcd34d', fontStyle: 'italic' }}>{band.label.toLowerCase()}</em>{` place`}<br />{`to call home`}</>
-                  : 'Loading your score…'
-                }
-              </h1>
-              {!loading && band && (
-                <div style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 8,
-                  background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.2)',
-                  borderRadius: 999, padding: '7px 16px', marginBottom: 22,
-                }}>
-                  <div style={{ width: 9, height: 9, borderRadius: '50%', background: band.color }} aria-hidden="true" />
-                  <span style={{ fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.9)' }}>
-                    {band.label}{profileLabel ? ` · Scored for ${profileLabel}` : ''}
-                  </span>
+            position: 'absolute', inset: 0,
+            backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.028) 1px, transparent 1px)',
+            backgroundSize: '26px 26px', pointerEvents: 'none',
+          }} />
+          <div style={{ bottom: 0, left: 0, right: 0, height: 60, position: 'absolute',
+            background: 'linear-gradient(to bottom, transparent, rgba(0,0,0,0.15))', pointerEvents: 'none' }} />
+
+          <div style={{ padding: '22px 28px', position: 'relative' }}>
+            <style>{`
+              @media (max-width: 620px) {
+                .nw-hero-grid-new { grid-template-columns: 1fr !important; gap: 24px !important; }
+                .nw-score-big { font-size: 72px !important; }
+              }
+            `}</style>
+            <div className="nw-hero-grid-new" style={{
+              display: 'grid', gridTemplateColumns: '1fr 1.1fr', gap: 28, alignItems: 'center',
+            }}>
+
+              {/* LEFT — location + animated circle gauge + metadata */}
+              <div>
+                <p style={{ fontSize: 9, fontWeight: 900, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.6)', marginBottom: 8 }}>
+                  Liveability Insights · Melbourne
+                </p>
+                <h1 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 'clamp(20px, 2.8vw, 32px)', fontWeight: 400, color: '#fff', lineHeight: 1.0, margin: '0 0 1px', letterSpacing: '-0.3px' }}>
+                  {locationName.split(',')[0] || locationName}
+                </h1>
+                <p style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 'clamp(13px, 1.8vw, 18px)', color: 'rgba(255,255,255,0.6)', fontStyle: 'italic', margin: '0 0 14px' }}>
+                  VIC
+                </p>
+
+                {/* Gauge + metadata side by side */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+
+                  {/* Animated circle gauge */}
+                  {(() => {
+                    const R = 52
+                    const circ = 2 * Math.PI * R
+                    const offset = (heroBarReady && overallScore != null) ? circ * (1 - overallScore / 100) : circ
+                    const gaugeColor = band?.color || '#f47c20'
+                    return (
+                      <svg width="136" height="136" viewBox="0 0 136 136" style={{ flexShrink: 0, overflow: 'visible' }} aria-hidden="true">
+                        <circle cx="68" cy="68" r={R} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="9" />
+                        <circle cx="68" cy="68" r={R} fill="none"
+                          stroke={gaugeColor} strokeWidth="9"
+                          strokeLinecap="round" opacity="0.22"
+                          strokeDasharray={circ} strokeDashoffset={offset}
+                          transform="rotate(-90 68 68)"
+                          style={{ filter: 'blur(4px)', transition: `stroke-dashoffset 1.5s cubic-bezier(0.22, 1, 0.36, 1)` }}
+                        />
+                        <circle cx="68" cy="68" r={R} fill="none"
+                          stroke={gaugeColor} strokeWidth="9"
+                          strokeLinecap="round"
+                          strokeDasharray={circ} strokeDashoffset={offset}
+                          transform="rotate(-90 68 68)"
+                          style={{ transition: `stroke-dashoffset 1.5s cubic-bezier(0.22, 1, 0.36, 1)` }}
+                        />
+                        <text x="68" y="62" textAnchor="middle" dominantBaseline="middle"
+                          fill="#fff" fontSize="38"
+                          fontFamily="'DM Serif Display', Georgia, serif" fontWeight="400">
+                          {loading ? '–' : (overallScore ?? '–')}
+                        </text>
+                        <text x="68" y="84" textAnchor="middle"
+                          fill="rgba(255,255,255,0.55)" fontSize="9" fontWeight="800"
+                          letterSpacing="2" style={{ textTransform: 'uppercase' }}>
+                          OVERALL
+                        </text>
+                      </svg>
+                    )
+                  })()}
+
+                  {/* Right of gauge: badge + range + profile + Add to Compare */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {/* Badge row */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      {band && !loading && (
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: band.bg, border: `1px solid ${band.border}`, borderRadius: 999, padding: '4px 11px' }}>
+                          <div style={{ width: 6, height: 6, borderRadius: '50%', background: band.color }} aria-hidden="true" />
+                          <span style={{ fontSize: 11, fontWeight: 800, color: band.color }}>{band.label}</span>
+                        </div>
+                      )}
+                      <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>·</span>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.75)', textTransform: 'uppercase', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>
+                        {rangeMinutes} min range
+                      </span>
+                      {profileLabel && (
+                        <>
+                          <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>·</span>
+                          <span style={{ background: '#eff6ff', border: '1px solid #bfdbfe', color: '#2563eb', fontSize: 10, fontWeight: 800, padding: '2px 9px', borderRadius: 999, whiteSpace: 'nowrap' }}>
+                            {profileLabel}
+                          </span>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Add to Compare */}
+                    <button
+                      onClick={() => {
+                        const item = {
+                          displayName: locationName,
+                          name: locationName,
+                          lat: selectedLocation?.lat,
+                          lng: selectedLocation?.lng,
+                          rangeMinutes,
+                          profile,
+                        }
+                        const result = addToCompareList(item)
+                        if (result?.reason === 'ALREADY_EXISTS') {
+                          setHeroToastMsg('Already in your compare list.')
+                          setHeroToastAction(null)
+                        } else if (result?.reason === 'COMPARE_FULL') {
+                          setHeroToastMsg('Your compare list is full.')
+                          setHeroToastAction({ label: 'Go to Compare', onClick: () => navigate('/compare') })
+                        } else {
+                          setHeroToastMsg('Added to compare list.')
+                          setHeroToastAction(null)
+                        }
+                      }}
+                      style={{
+                        all: 'unset', cursor: 'pointer',
+                        display: 'inline-flex', alignItems: 'center', gap: 8,
+                        padding: '8px 18px', borderRadius: 10,
+                        background: 'rgba(255,255,255,0.12)',
+                        border: '1px solid rgba(255,255,255,0.25)',
+                        color: '#fff', fontSize: 13, fontWeight: 700,
+                        transition: 'background 0.15s', alignSelf: 'flex-start',
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.2)' }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.12)' }}
+                    >
+                      ＋ Add to Compare
+                    </button>
+                  </div>
                 </div>
-              )}
-              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                {CATEGORIES.map(k => {
-                  const c = CATEGORY_CONFIG[k]
+              </div>
+
+              {/* RIGHT — category score rows */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+                {CATEGORIES.map((key, i) => {
+                  const cfg = CATEGORY_CONFIG[key]
+                  const score = loading ? null : (scores?.[key] ?? null)
+                  const bench = STATIC_SCORE_BENCHMARK.scores[key]
+                  const delta = score != null ? score - bench : null
                   return (
-                    <div key={k} style={{
-                      background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.15)',
-                      borderRadius: 12, padding: '10px 16px',
-                      display: 'flex', alignItems: 'center', gap: 10,
-                    }}>
-                      <span style={{ fontSize: 16 }} aria-hidden="true">{c.icon}</span>
-                      <div>
-                        <p style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.55)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{c.label}</p>
-                        <p style={{ fontSize: 22, fontWeight: 900, color: '#fff', lineHeight: 1 }}
-                          aria-label={`${c.label}: ${loading ? 'loading' : scores?.[k] ?? 'unavailable'}`}>
-                          {loading ? '–' : scores?.[k] ?? '–'}
-                        </p>
+                    <div key={key}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 7 }}>
+                        <span style={{ fontSize: 15 }} aria-hidden="true">{cfg.icon}</span>
+                        <span style={{ fontSize: 12, fontWeight: 800, color: 'rgba(255,255,255,0.75)', textTransform: 'uppercase', letterSpacing: '0.1em', flex: 1 }}>
+                          {cfg.label}
+                        </span>
+                        <span style={{ fontSize: 23, fontWeight: 900, color: cfg.color, lineHeight: 1, letterSpacing: '-0.5px' }}
+                          aria-label={`${cfg.label}: ${score ?? 'loading'}`}>
+                          {score ?? '–'}
+                        </span>
                       </div>
+                      {/* Animated bar */}
+                      <div style={{ height: 7, borderRadius: 999, background: 'rgba(255,255,255,0.12)', overflow: 'hidden' }}>
+                        <div style={{
+                          height: '100%', borderRadius: 999, background: cfg.color,
+                          width: (heroBarReady && score != null) ? `${score}%` : '0%',
+                          transition: `width 1.3s cubic-bezier(0.22, 1, 0.36, 1) ${i * 160}ms`,
+                        }} />
+                      </div>
+                      {delta != null && (
+                        <p style={{ fontSize: 10, fontWeight: 700, marginTop: 4, color: delta >= 0 ? '#6ee7b7' : '#fca5a5' }}>
+                          {delta >= 0 ? '▲' : '▼'} {Math.abs(delta)} vs Melbourne benchmark
+                        </p>
+                      )}
                     </div>
                   )
                 })}
               </div>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-              {loading
-                ? <div style={{ width: 210, height: 210, borderRadius: '50%', border: '15px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 15 }}>…</span>
-                  </div>
-                : <CircularGauge score={overallScore} color={band?.color ?? '#d97706'} size={210} strokeWidth={15} dark={true} />
-              }
-              <p style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.4)', textAlign: 'center', letterSpacing: '0.06em' }}>LIVEABILITY SCORE</p>
-            </div>
+
           </div>
         </div>
 
-        {/* Category score cards */}
+        {/* Category score cards — each contains its own expandable breakdown */}
         <div
-          style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14, marginBottom: 28 }}
+          style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(270px, 1fr))', gap: 14, marginBottom: 28 }}
           role="region" aria-label="Category scores"
         >
           {CATEGORIES.map(k => {
             const c = CATEGORY_CONFIG[k]
-            const score = scores?.[k]
-            const avg = benchmarkScores?.[k]
-            const delta = score != null && Number.isFinite(Number(avg)) ? score - avg : null
+            const catIndicators = indicators[k]
+            const catGroups = groupIndicatorFactors(catIndicators?.factors || [], profile)
             return (
               <div key={k} style={{
-                background: '#fff', border: `1.5px solid ${c.border}`,
-                borderRadius: 20, padding: '24px 22px',
+                background: '#fff', border: '1.5px solid #e5e7eb',
+                borderRadius: 20, padding: '20px 20px',
                 boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
-                transition: 'box-shadow 0.2s, transform 0.2s',
-              }}
-                onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 8px 32px rgba(0,0,0,0.1)'; e.currentTarget.style.transform = 'translateY(-2px)' }}
-                onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.05)'; e.currentTarget.style.transform = 'none' }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
-                  <div>
-                    <p style={{ fontSize: 16, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: c.color, marginBottom: 6 }}>{c.label}</p>
-                    <p style={{ fontSize: 14, color: '#4b5563', lineHeight: 1.5, maxWidth: 180 }}>{c.description}</p>
-                  </div>
-                  <MiniGauge score={loading ? null : score} color={c.color} size={62} />
+                transition: 'box-shadow 0.2s, border-color 0.2s',
+              }}>
+                <div style={{ marginBottom: 12 }}>
+                  <p style={{ fontSize: 14, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: c.color, marginBottom: 5 }}>
+                    <span aria-hidden="true">{c.icon}</span> {c.label}
+                  </p>
+                  <p style={{ fontSize: 13, color: '#4b5563', lineHeight: 1.5 }}>{c.description}</p>
                 </div>
-                {delta != null && (
-                  <p style={{ fontSize: 13, fontWeight: 700, color: delta >= 0 ? '#059669' : '#dc2626' }}
-                    aria-label={`${Math.abs(delta)} points ${delta >= 0 ? 'above' : 'below'} supported locality average`}>
-                    {delta >= 0 ? 'Above' : 'Below'} by {Math.abs(delta)} vs supported avg
+                {!loading && catIndicators && (
+                  <p style={{ marginTop: 8, fontSize: 12, color: '#6b7280' }}>
+                    {catIndicators.factors?.filter(f => f.met).length ?? 0}/{catIndicators.factors?.length ?? 0} indicators met
                   </p>
                 )}
-                <CompareBar value={loading ? null : score} avg={avg} color={c.color} label={benchmarkShortLabel} />
-                {!loading && indicators[k] && (
-                  <p style={{ marginTop: 12, fontSize: 13, color: '#4b5563' }}>
-                    {indicators[k].factors?.filter(f => f.met).length ?? 0}/{indicators[k].factors?.length ?? 0} indicators met
-                  </p>
+
+                {!loading && catIndicators && catGroups.length > 0 && (
+                  <button
+                    onClick={() => setSelectedBreakdownCategory(k)}
+                    style={{
+                      marginTop: 12, width: '100%', padding: '9px 14px',
+                      background: 'transparent', border: `1px solid ${c.border}`,
+                      borderRadius: 10, cursor: 'pointer',
+                      fontSize: 13, fontWeight: 700, color: c.color,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                      transition: 'all 0.18s', fontFamily: 'Figtree, sans-serif',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = c.soft }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+                  >
+                    See Breakdown ↗
+                  </button>
                 )}
               </div>
             )
           })}
         </div>
 
-        {/* Indicator breakdown */}
-        <div style={{ marginBottom: 28 }} role="region" aria-label="Indicator breakdown">
-          <p style={{ fontSize: 13, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#4b5563', marginBottom: 6 }}>Indicator Breakdown</p>
-          <h2 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 28, fontWeight: 400, color: '#1a2436', marginBottom: 18 }}>
-            What&apos;s driving your score
-          </h2>
-          {!loading && activeIndicators?.takeaway ? (
-            <div style={{
-              background: '#fff',
-              border: `1.5px solid ${activeCfg.border}`,
-              borderLeft: `5px solid ${activeCfg.color}`,
-              borderRadius: 14,
-              padding: '16px 18px',
-              marginBottom: 16,
-              boxShadow: '0 4px 18px rgba(0,0,0,0.04)',
-            }}>
-              <p style={{ fontSize: 13, fontWeight: 900, letterSpacing: '0.1em', textTransform: 'uppercase', color: activeCfg.color, marginBottom: 6 }}>
-                {activeCfg.label} takeaway
-              </p>
-              <p style={{ fontSize: 15, color: '#374151', lineHeight: 1.65, fontWeight: 650 }}>
-                {activeIndicators.takeaway}
-              </p>
-            </div>
-          ) : null}
-
-          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }} role="tablist" aria-label="Score categories">
-            {CATEGORIES.map(k => {
-              const c = CATEGORY_CONFIG[k]
-              const active = activeTab === k
-              const tabId = `tab-${k}`
-              return (
-                <button
-                  key={k}
-                  id={tabId}
-                  role="tab"
-                  aria-selected={active}
-                  onClick={() => setActiveTab(k)}
-                  onFocus={e => { e.currentTarget.style.outline = '2px solid #2563eb'; e.currentTarget.style.outlineOffset = '2px' }}
-                  onBlur={e => { e.currentTarget.style.outline = 'none' }}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 8,
-                    padding: '10px 20px', borderRadius: 12, cursor: 'pointer',
-                    border: active ? `1.5px solid ${c.border}` : '1.5px solid #e5e7eb',
-                    background: active ? c.soft : '#fff',
-                    color: active ? c.color : '#6b7280',
-                    fontFamily: 'Figtree, sans-serif', fontWeight: 700, fontSize: 15,
-                    transition: 'all 0.18s',
-                  }}
-                >
-                  <span aria-hidden="true">{c.icon}</span>
-                  <span>{c.label}</span>
-                  <span style={{
-                    background: active ? c.color : '#e5e7eb',
-                    color: active ? '#fff' : '#6b7280',
-                    borderRadius: 999, fontSize: 12, fontWeight: 900, padding: '2px 9px',
-                  }} aria-label={`score ${loading ? 'loading' : scores?.[k] ?? 'unavailable'}`}>
-                    {loading ? '–' : scores?.[k] ?? '–'}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-
-          <div
-            role="tabpanel"
-            aria-labelledby={`tab-${activeTab}`}
-            style={{ display: 'flex', flexDirection: 'column', gap: 16 }}
-          >
-            {loading
-              ? <div style={{ gridColumn: '1/-1', padding: '20px 0' }}>
-                  <LinearProgress sx={{ borderRadius: 2, height: 5, bgcolor: activeCfg.soft, '& .MuiLinearProgress-bar': { bgcolor: activeCfg.color } }} />
-                </div>
-              : activeGroups.length
-                ? activeGroups.map((group) => (
-                    <section key={group.title} aria-label={group.title}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                        <p style={{ fontSize: 14, fontWeight: 900, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#4b5563' }}>
-                          {group.title}
-                        </p>
-                        <span style={{ height: 1, flex: 1, background: 'rgba(15,23,42,0.08)' }} />
-                      </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12, alignItems: 'start' }}>
-                        {group.factors.map((f) => (
-                          <IndicatorCard key={f.name} factor={f} color={activeCfg.color} soft={activeCfg.soft} border={activeCfg.border} />
-                        ))}
-                      </div>
-                    </section>
-                  ))
-                : <p style={{ color: '#4b5563', fontSize: 16, padding: '16px 0', gridColumn: '1/-1' }}>No indicators available.</p>
-            }
-          </div>
-          {!loading && activeIndicators?.scoreExplanation ? (
-            <p style={{ marginTop: 12, fontSize: 14, color: '#4b5563', lineHeight: 1.6 }}>
-              {activeIndicators.scoreExplanation}
-            </p>
-          ) : null}
-          <p style={{ marginTop: 10, fontSize: 13, color: '#4b5563' }}>
-            Tap any indicator to read the detail behind it.
-          </p>
-        </div>
+        {/* Indicator breakdown moved inside each category card above ↑ */}
 
         <CensusContextSection data={censusData} loading={censusLoading} userProfile={profile} indicators={indicators} />
+
+        <CouncilLinksSection data={councilLinksData} loading={councilLinksLoading} />
 
         {/* Interpretation */}
         {!loading && scores && (
@@ -1874,82 +2768,133 @@ export default function InsightsPage() {
           </div>
         )}
 
-        {/* Methodology */}
-        <div style={{
-          background: '#fff', border: '1.5px solid #e5e7eb',
-          borderRadius: 20, padding: '28px',
-          boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
-          marginBottom: 16,
-        }}>
-          <p style={{ fontSize: 13, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#4b5563', marginBottom: 6 }}>Methodology</p>
-          <h2 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 26, fontWeight: 400, color: '#1a2436', marginBottom: 20 }}>
-            How this score is calculated
-          </h2>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }} aria-label="Score calculation methodology">
-            <thead>
-              <tr>
-                {['Category', 'Weight', 'Data sources'].map(h => (
-                  <th key={h} scope="col" style={{
-                    textAlign: 'left', paddingBottom: 14,
-                    fontSize: 13, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#4b5563',
-                    borderBottom: '1px solid #e5e7eb',
-                  }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {CATEGORIES.map((k, idx) => {
-                const c = CATEGORY_CONFIG[k]
-                const dynamicWeight =
-                  k === 'accessibility'
-                    ? scoreWeights?.A
-                    : k === 'safety'
-                      ? scoreWeights?.S
-                      : scoreWeights?.E
-                const displayWeight = Number.isFinite(dynamicWeight)
-                  ? Math.round(dynamicWeight * 100)
-                  : c.weight
-                return (
-                  <tr key={k}>
-                    <td style={{ padding: '16px 18px 16px 0', borderBottom: idx < 2 ? '1px solid #f3f4f6' : 'none' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <span aria-hidden="true" style={{ fontSize: 18 }}>{c.icon}</span>
-                        <span style={{ fontWeight: 700, fontSize: 16, color: '#1a2436' }}>{c.label}</span>
-                      </div>
-                    </td>
-                    <td style={{ padding: '16px 18px 16px 0', borderBottom: idx < 2 ? '1px solid #f3f4f6' : 'none' }}>
-                      <span style={{
-                        display: 'inline-block', background: c.soft, border: `1px solid ${c.border}`,
-                        borderRadius: 999, padding: '4px 14px',
-                        fontSize: 14, fontWeight: 800, color: c.color,
-                      }} aria-label={`${displayWeight} percent`}>{displayWeight}%</span>
-                    </td>
-                    <td style={{ padding: '16px 0', borderBottom: idx < 2 ? '1px solid #f3f4f6' : 'none' }}>
-                      <span style={{ fontSize: 14, color: '#4b5563' }}>{c.sources}</span>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-
-        <div style={{
-          background: '#fff',
-          border: '1.5px solid #e5e7eb',
-          borderRadius: 16,
-          padding: '16px 18px',
-          boxShadow: '0 4px 20px rgba(0,0,0,0.035)',
-        }} role="note" aria-label="Benchmark explanation">
-          <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#4b5563', marginBottom: 5 }}>
-            Benchmark
-          </p>
-          <p style={{ fontSize: 12, color: '#4b5563', lineHeight: 1.65 }}>
-            {STATIC_SCORE_BENCHMARK.description} The benchmark values are accessibility {STATIC_SCORE_BENCHMARK.scores.accessibility}, safety {STATIC_SCORE_BENCHMARK.scores.safety}, environment {STATIC_SCORE_BENCHMARK.scores.environment}, and overall liveability {STATIC_SCORE_BENCHMARK.scores.liveability}. They are used only as a comparison guide.
-          </p>
-        </div>
+        {/* Similar Suburbs — above methodology */}
+        {!loading && (
+          <SimilarSuburbs
+            recommendations={recommendations}
+            loading={recommendationsLoading}
+            error={recommendationsError}
+            rangeMinutes={rangeMinutes}
+            profile={profile}
+            selectedLocation={selectedLocation}
+            returnContext={returnContext}
+          />
+        )}
 
       </div>
+
+      {/* Change Conditions modal */}
+      {showConditionsModal && (
+        <ChangeConditionsModal
+          rangeMinutes={rangeMinutes}
+          profile={profile}
+          onSave={({ rangeMinutes: newRange, profile: newProfile }) => {
+            const newContext = { ...context, rangeMinutes: newRange, profile: newProfile }
+            saveContext(newContext)
+            navigate('/insights', { state: newContext, replace: true })
+            setShowConditionsModal(false)
+          }}
+          onClose={() => setShowConditionsModal(false)}
+        />
+      )}
+
+      {/* Breakdown modal */}
+      {selectedBreakdownCategory && (
+        <div
+          onClick={e => { if (e.target === e.currentTarget) setSelectedBreakdownCategory(null) }}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 200,
+            background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(3px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '24px 16px',
+          }}
+          role="dialog" aria-modal="true" aria-label="Score breakdown"
+        >
+          <div style={{
+            background: '#fff', borderRadius: 20, width: '100%', maxWidth: 720,
+            maxHeight: '85vh', overflowY: 'auto',
+            boxShadow: '0 24px 64px rgba(0,0,0,0.22)',
+          }}>
+            {/* sticky header */}
+            <div style={{
+              position: 'sticky', top: 0, zIndex: 1,
+              background: '#fff', borderBottom: '1.5px solid #e5e7eb',
+              borderRadius: '20px 20px 0 0',
+              padding: '18px 24px',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            }}>
+              <div>
+                <p style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#6b7280', marginBottom: 3 }}>
+                  Score Breakdown
+                </p>
+                <p style={{ fontSize: 18, fontWeight: 800, color: '#101828' }}>
+                  {locationName}
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedBreakdownCategory(null)}
+                aria-label="Close breakdown"
+                style={{
+                  all: 'unset', cursor: 'pointer', width: 34, height: 34,
+                  borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: '#f3f4f6', fontSize: 18, color: '#4b5563',
+                  transition: 'background 0.15s',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = '#e5e7eb' }}
+                onMouseLeave={e => { e.currentTarget.style.background = '#f3f4f6' }}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* body */}
+            <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 28 }}>
+              {breakdownCategories.map(k => {
+                const c = CATEGORY_CONFIG[k]
+                const catIndicators = indicators[k]
+                const catGroups = groupIndicatorFactors(catIndicators?.factors || [], profile)
+                const catScore = scores?.[k]
+                const band = catScore != null ? getScoreBand(catScore) : null
+                return (
+                  <div key={k}>
+                    {/* category header */}
+                    <div style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      marginBottom: 12, paddingBottom: 10, borderBottom: `2px solid ${c.border}`,
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{
+                          width: 32, height: 32, borderRadius: 9,
+                          background: c.soft, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 16,
+                        }}>{c.icon}</span>
+                        <span style={{ fontSize: 16, fontWeight: 800, color: c.color }}>{c.label}</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {catScore != null && (
+                          <span style={{ fontSize: 22, fontWeight: 900, color: c.color }}>{Math.round(catScore)}</span>
+                        )}
+                        {band && (
+                          <span style={{
+                            fontSize: 11, fontWeight: 700, padding: '3px 10px',
+                            borderRadius: 20, background: c.soft, color: c.color,
+                          }}>{band.label}</span>
+                        )}
+                      </div>
+                    </div>
+                    {/* accordion breakdown */}
+                    {catGroups.length > 0
+                      ? <CategoryAccordion groups={catGroups} color={c.color} soft={c.soft} border={c.border} />
+                      : <p style={{ fontSize: 13, color: '#6b7280' }}>No breakdown data available.</p>
+                    }
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }
