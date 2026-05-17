@@ -1,0 +1,50 @@
+{
+  "generatedAt": "2026-05-11T08:05:15.828Z",
+  "datasets": {
+    "activity": {
+      "inputFile": "raw\\geospatial\\osm_activity_busyness_melbourne.geojson",
+      "outputFile": "processed\\osm_scoring\\osm_activity_scoring.geojson",
+      "inputSizeMb": 18.84,
+      "outputSizeMb": 9.03,
+      "reductionPct": 52.1,
+      "inputFeatures": 39251,
+      "outputFeatures": 38663,
+      "skippedDuplicates": 2,
+      "skippedFiltered": 586,
+      "skippedInvalid": 0,
+      "geometryTypes": {
+        "Point": 38663
+      }
+    },
+    "noise": {
+      "inputFile": "raw\\geospatial\\osm_noise_proxy_roads_rail_melbourne.geojson",
+      "outputFile": "processed\\osm_scoring\\osm_noise_scoring.geojson",
+      "inputSizeMb": 82.76,
+      "outputSizeMb": 33.41,
+      "reductionPct": 59.6,
+      "inputFeatures": 88799,
+      "outputFeatures": 88797,
+      "skippedDuplicates": 0,
+      "skippedFiltered": 2,
+      "skippedInvalid": 0,
+      "geometryTypes": {
+        "LineString": 88797
+      }
+    },
+    "transport": {
+      "inputFile": "raw\\geospatial\\raw_osm_public_transport_stops_victoria.geojson",
+      "outputFile": "processed\\osm_scoring\\osm_transport_comfort_scoring.geojson",
+      "inputSizeMb": 25.36,
+      "outputSizeMb": 11.19,
+      "reductionPct": 55.9,
+      "inputFeatures": 46988,
+      "outputFeatures": 46975,
+      "skippedDuplicates": 13,
+      "skippedFiltered": 0,
+      "skippedInvalid": 0,
+      "geometryTypes": {
+        "Point": 46975
+      }
+    }
+  }
+}

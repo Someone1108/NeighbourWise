@@ -12,8 +12,8 @@ let sitesCache = {
 };
 
 function normalizeNumber(value) {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue : null;
 }
 
 function requireCoordinate(lat, lng) {

@@ -1,6 +1,6 @@
 const CATEGORY_LABELS = {
   accessibility: 'Accessibility',
-  safety: 'Safety',
+  safety: 'Safety & Comfort',
   environment: 'Environment',
 }
 

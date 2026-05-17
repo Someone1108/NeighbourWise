@@ -17,7 +17,7 @@ async function getAqiForLocation(req, res) {
 
     res.status(500).json({
       available: false,
-      error: error.message || 'Failed to load AQI data',
+      error: 'Failed to load AQI data',
     });
   }
 }

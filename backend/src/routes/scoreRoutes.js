@@ -20,8 +20,7 @@ router.get('/accessibility', async (req, res) => {
 
     console.error('Accessibility Score API error:', err);
     res.status(500).json({
-      error: 'Failed to calculate accessibility score',
-      message: err.message
+      error: 'Failed to calculate accessibility score'
     });
   }
 });
@@ -36,8 +35,7 @@ router.get('/safety', async (req, res) => {
 
     console.error('Safety Score API error:', err);
     res.status(500).json({
-      error: 'Failed to calculate safety score',
-      message: err.message
+      error: 'Failed to calculate safety score'
     });
   }
 });
@@ -54,8 +52,7 @@ router.get('/environment', async (req, res) => {
 
     console.error('Environment score API error:', err);
     res.status(500).json({
-      error: 'Failed to calculate environment score',
-      message: err.message
+      error: 'Failed to calculate environment score'
     });
   }
 });
@@ -71,8 +68,7 @@ router.get('/liveability', async (req, res) => {
 
     console.error('Liveability error:', err);
     res.status(500).json({
-      error: 'Failed to calculate liveability score',
-      message: err.message
+      error: 'Failed to calculate liveability score'
     });
   }
 });

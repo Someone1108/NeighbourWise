@@ -4,38 +4,38 @@ const CENSUS_YEAR = 2021;
 
 function toNumber(value) {
   if (value === null || value === undefined || value === '') return null;
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue : null;
 }
 
 function round(value, digits = 1) {
-  const n = toNumber(value);
-  if (n === null) return null;
+  const numericValue = toNumber(value);
+  if (numericValue === null) return null;
   const factor = 10 ** digits;
-  return Math.round(n * factor) / factor;
+  return Math.round(numericValue * factor) / factor;
 }
 
 function formatPct(value) {
-  const n = round(value, 1);
-  return n === null ? null : `${n}%`;
+  const percentValue = round(value, 1);
+  return percentValue === null ? null : `${percentValue}%`;
 }
 
 function formatSafePct(value) {
-  const n = round(value, 1);
-  if (n === null || n < 0 || n > 100) return null;
-  return `${n}%`;
+  const percentValue = round(value, 1);
+  if (percentValue === null || percentValue < 0 || percentValue > 100) return null;
+  return `${percentValue}%`;
 }
 
 function formatCurrency(value, suffix = '') {
-  const n = toNumber(value);
-  if (n === null) return null;
-  return `$${Math.round(n).toLocaleString('en-AU')}${suffix}`;
+  const numericValue = toNumber(value);
+  if (numericValue === null) return null;
+  return `$${Math.round(numericValue).toLocaleString('en-AU')}${suffix}`;
 }
 
 function weeklyToMonthly(value) {
-  const n = toNumber(value);
-  if (n === null) return null;
-  return (n * 365) / 7 / 12;
+  const weeklyValue = toNumber(value);
+  if (weeklyValue === null) return null;
+  return (weeklyValue * 365) / 7 / 12;
 }
 
 function normalizePlaceName(value) {
@@ -248,7 +248,29 @@ async function getCensusByPostcode(postcode) {
   `;
 
   const result = await pool.query(sql, [value]);
-  return shapeResult(result.rows[0], 'postcode', value, 'postcode-to-sa2');
+  if (result.rows[0]) {
+    return shapeResult(result.rows[0], 'postcode', value, 'postcode-to-sa2');
+  }
+
+  const fallbackSql = `
+    select
+      $1::text as postcode,
+      l.sa2_name_2021,
+      null::numeric as overlap_area_pct,
+      'postcode_locality_lookup'::text as confidence,
+      p.*
+    from public.postcode_locality_lookup l
+    inner join public.census_sa2_profile_valid p
+      on p.sa2_code_2021 = l.sa2_code_2021
+    where l.postcode = $1
+      and l.sa2_code_2021 is not null
+      and trim(l.sa2_code_2021::text) <> ''
+    order by l.locality asc
+    limit 1;
+  `;
+
+  const fb = await pool.query(fallbackSql, [value]);
+  return shapeResult(fb.rows[0], 'postcode', value, 'postcode-locality-to-sa2');
 }
 
 async function getCensusBySa2(code) {
@@ -288,6 +310,42 @@ async function getSuburbForPoint(lat, lng) {
   return result.rows[0]?.suburb || null;
 }
 
+async function getNearestCensusProfileForPoint(lat, lng) {
+  const sql = `
+    select
+      l.locality as matched_suburb,
+      l.sa2_name_2021,
+      null::numeric as overlap_area_pct,
+      'nearest-postcode-locality'::text as confidence,
+      sqrt(
+        power((l.lat::numeric - $1::numeric) * 111.32, 2) +
+        power((l.lng::numeric - $2::numeric) * 111.32 * cos(radians($1::numeric)), 2)
+      ) as distance_km,
+      p.*
+    from public.postcode_locality_lookup l
+    join public.census_sa2_profile_valid p
+      on p.sa2_code_2021 = l.sa2_code_2021
+    where l.lat is not null
+      and l.lng is not null
+      and l.sa2_code_2021 is not null
+      and trim(l.sa2_code_2021::text) <> ''
+    order by
+      power((l.lat::numeric - $1::numeric), 2) +
+      power((l.lng::numeric - $2::numeric), 2) asc
+    limit 1;
+  `;
+
+  const result = await pool.query(sql, [lat, lng]);
+  const row = result.rows[0];
+  const distanceKm = toNumber(row?.distance_km);
+
+  if (!row || distanceKm === null || distanceKm > 8) {
+    return null;
+  }
+
+  return row;
+}
+
 async function getCensusByLocation({ lat, lng }) {
   const safeLat = Number(lat);
   const safeLng = Number(lng);
@@ -296,22 +354,25 @@ async function getCensusByLocation({ lat, lng }) {
     throw new Error('Valid latitude and longitude are required');
   }
 
+  const requestedValue = `${safeLat},${safeLng}`;
   const suburb = await getSuburbForPoint(safeLat, safeLng);
 
   if (!suburb) {
-    return {
-      available: false,
-      requestedType: 'location',
-      requestedValue: `${safeLat},${safeLng}`,
-      message: 'Could not match this point to a supported suburb.',
-    };
+    const nearest = await getNearestCensusProfileForPoint(safeLat, safeLng);
+    return shapeResult(nearest, 'location', requestedValue, 'nearest-postcode-locality');
   }
 
   const result = await getCensusBySuburb(suburb);
+
+  if (!result.available) {
+    const nearest = await getNearestCensusProfileForPoint(safeLat, safeLng);
+    return shapeResult(nearest, 'location', requestedValue, 'nearest-postcode-locality');
+  }
+
   return {
     ...result,
     requestedType: 'location',
-    requestedValue: `${safeLat},${safeLng}`,
+    requestedValue,
     matchedBy: 'address-point-to-suburb-to-sa2',
   };
 }

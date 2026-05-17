@@ -39,6 +39,73 @@ const searchLocalities = async (query) => {
 /**
  * Search address OR postcode results from Mapbox.
  */
+/**
+ * VIC postcode + locality from public.postcode_locality_lookup.
+ * Only queries when the input is exactly 4 digits; otherwise returns [].
+ * On DB errors, returns [] so search can fall back to Mapbox later.
+ */
+async function searchPostcodeLocalities(query) {
+  const trimmed = String(query || '').trim();
+  if (!/^\d{4}$/.test(trimmed)) {
+    return [];
+  }
+
+  try {
+    const sql = `
+      select
+        id,
+        postcode,
+        locality,
+        state,
+        type,
+        status,
+        lat,
+        lng,
+        sa1_code_2021,
+        sa1_name_2021,
+        sa2_code_2021,
+        sa2_name_2021,
+        lga_name,
+        lga_code
+      from public.postcode_locality_lookup
+      where postcode = $1
+      order by locality asc
+      limit 25
+    `;
+
+    const result = await pool.query(sql, [trimmed]);
+
+    return result.rows.map((row) => {
+      const locality = String(row.locality || '').trim();
+      const pc = String(row.postcode || '').trim();
+
+      return {
+        id: `postcode-${row.id}`,
+        name: locality || pc,
+        fullAddress: locality ? `${locality}, VIC ${pc}` : `VIC ${pc}`,
+        lat: Number(row.lat),
+        lng: Number(row.lng),
+        placeType: 'postcode',
+        source: 'supabase-postcode',
+        postcode: pc,
+        locality,
+        state: row.state || 'VIC',
+        type: row.type || null,
+        status: row.status || null,
+        sa1Code: row.sa1_code_2021 || null,
+        sa1Name: row.sa1_name_2021 || null,
+        sa2Code: row.sa2_code_2021 || null,
+        sa2Name: row.sa2_name_2021 || null,
+        lgaName: row.lga_name || null,
+        lgaCode: row.lga_code || null,
+      };
+    });
+  } catch (err) {
+    console.error('Postcode lookup failed:', err.message);
+    return [];
+  }
+}
+
 const searchAddresses = async (query) => {
   if (!query || !query.trim()) {
     return [];
@@ -88,6 +155,29 @@ const searchAddresses = async (query) => {
     return results;
   };
 
+  const getContextValue = (feature, keys) => {
+    const context = feature.properties?.context;
+
+    if (context && !Array.isArray(context) && typeof context === 'object') {
+      for (const key of keys) {
+        const item = context[key];
+        const value = item?.name || item?.text || item?.short_code || item;
+        if (typeof value === 'string' && value.trim()) return value.trim();
+      }
+    }
+
+    const legacyContext = feature.context || [];
+    for (const item of legacyContext) {
+      const id = String(item?.id || '').toLowerCase();
+      if (keys.some((key) => id.startsWith(`${key}.`))) {
+        const value = item?.text || item?.name;
+        if (typeof value === 'string' && value.trim()) return value.trim();
+      }
+    }
+
+    return null;
+  };
+
   const response = await axios.get(url, {
     params: {
       q: mapboxQuery,
@@ -120,7 +210,9 @@ const searchAddresses = async (query) => {
       lng: Number(feature.geometry?.coordinates?.[0]),
       placeType: feature.properties?.feature_type || 'address',
       source: 'mapbox',
-      postcode: isPostcodeQuery ? trimmedQuery : null,
+      locality: getContextValue(feature, ['locality', 'place', 'district']),
+      suburb: getContextValue(feature, ['locality', 'place', 'district']),
+      postcode: getContextValue(feature, ['postcode']) || (isPostcodeQuery ? trimmedQuery : null),
     }));
 
   return dedupeAddresses(mappedResults).slice(0, 5);
@@ -129,6 +221,16 @@ const searchAddresses = async (query) => {
 const searchLocations = async (query) => {
   if (!query || !query.trim()) {
     return [];
+  }
+
+  const trimmed = query.trim();
+  const isPostcodeOnly = /^\d{4}$/.test(trimmed);
+
+  if (isPostcodeOnly) {
+    const postcodeRows = await searchPostcodeLocalities(trimmed);
+    if (postcodeRows.length > 0) {
+      return postcodeRows;
+    }
   }
 
   const [localities, addresses] = await Promise.all([
@@ -144,6 +246,7 @@ const searchLocations = async (query) => {
 
 module.exports = {
   searchLocalities,
+  searchPostcodeLocalities,
   searchAddresses,
   searchLocations,
 };

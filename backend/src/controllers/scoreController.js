@@ -17,8 +17,7 @@ const getAccessibility = async (req, res) => {
 
     console.error('Accessibility Controller error:', err);
     res.status(500).json({
-      error: 'Failed to calculate accessibility score',
-      message: err.message
+      error: 'Failed to calculate accessibility score'
     });
   }
 };
@@ -33,8 +32,7 @@ const getSafety = async (req, res) => {
 
     console.error('Safety Controller error:', err);
     res.status(500).json({
-      error: 'Failed to calculate safety score',
-      message: err.message
+      error: 'Failed to calculate safety score'
     });
   }
 };
@@ -49,8 +47,7 @@ const getEnvironment = async (req, res) => {
 
     console.error('Environment Controller error:', err);
     res.status(500).json({
-      error: 'Failed to calculate environment score',
-      message: err.message
+      error: 'Failed to calculate environment score'
     });
   }
 };
@@ -65,8 +62,7 @@ const getLiveability = async (req, res) => {
 
     console.error('Liveability Controller error:', err);
     res.status(500).json({
-      error: 'Failed to calculate liveability score',
-      message: err.message
+      error: 'Failed to calculate liveability score'
     });
   }
 };
