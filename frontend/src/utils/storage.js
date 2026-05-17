@@ -1,11 +1,15 @@
-import { normalizeRangeMinutes } from './location.js'
-
 const KEY = 'neighbourwise_context_v1'
 const COMPARE_KEY = 'neighbourwise_compare_list_v1'
 const COMPARE_UPDATED_EVENT = 'neighbourwise-compare-updated'
 
+function normalizeRangeMinutes(value) {
+  const n = Number(value)
+  if ([10, 20, 30].includes(n)) return n
+  return 20
+}
+
 // The core purpose of these three functions is:
-// Because different pages and APIs may return data in different formats, 
+// Because different pages and APIs may return data in different formats,
 // the system first standardizes the data structure to prevent errors in the Compare feature.
 function getSafeLocationName(item) {
   return String(
@@ -99,8 +103,7 @@ export function clearContext() {
   }
 }
 
-// Trigger a custom event to notify the app that the compare list has been updated.
-// 觸發自訂事件，通知系統 Compare List 已更新。
+// Trigger a custom event to notify the system that the Compare List has been updated.
 function emitCompareUpdated() {
   try {
     window.dispatchEvent(new Event(COMPARE_UPDATED_EVENT))
@@ -148,9 +151,9 @@ export function addToCompareList(item) {
     }
   }
 
-  // 如果已經存在同一個 area，不重複加入
-  const alreadyExists = current.some((area) => {
-    const existingKey = getSafeCompareKey(area)
+  // If the same area already exists, do not add it again
+  const alreadyExists = current.some((x) => {
+    const existingKey = getSafeCompareKey(x)
     return existingKey === compareKey
   })
 
@@ -162,8 +165,8 @@ export function addToCompareList(item) {
     }
   }
 
-  // 如果 Area1 + Area2 都已經存在，不直接加入
-  // 交給前端跳出 Replace Area1 / Replace Area2 / Cancel
+  // If both Area1 and Area2 already exist, do not add the new area directly
+  // Let the frontend show Replace Area1 / Replace Area2 / Cancel instead
   if (current.length >= 2) {
     return {
       success: false,
@@ -219,9 +222,7 @@ export function addToCompareList(item) {
   }
 }
 
-// Replace one compare area (Area1 or Area2)
-// 替換 Compare Page 中的其中一個比較區域
-
+// Replace one compare area in the Compare Page, either Area1 or Area2
 export function replaceCompareArea(index, item) {
   const current = loadCompareList()
 
@@ -291,6 +292,7 @@ export function replaceCompareArea(index, item) {
 
   return next
 }
+
 export function clearCompareList() {
   saveCompareList([])
 }
@@ -304,8 +306,8 @@ export function removeFromCompareList(locationNameOrItem) {
   if (!key || key === 'name:') return loadCompareList()
 
   const current = loadCompareList()
-  const next = current.filter((area) => {
-    const existingKey = getSafeCompareKey(area)
+  const next = current.filter((x) => {
+    const existingKey = getSafeCompareKey(x)
     return existingKey !== key
   })
 
