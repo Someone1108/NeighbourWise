@@ -279,9 +279,9 @@ export default function HomePage() {
     }
 
     setError('')
-    const ctx = { selectedLocation, profile, rangeMinutes: 20 }
-    saveContext(ctx)
-    navigate('/map', { state: ctx })
+    const nextContext = { selectedLocation, profile, rangeMinutes: 20 }
+    saveContext(nextContext)
+    navigate('/map', { state: nextContext })
   }
 
   function scrollToSearch() {

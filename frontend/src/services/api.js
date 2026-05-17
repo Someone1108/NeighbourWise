@@ -1,3 +1,5 @@
+import { inferSuburbFromAddress } from '../utils/location.js'
+
 const CATEGORY_LABELS = {
   accessibility: 'Accessibility',
   safety: 'Safety',
@@ -12,21 +14,22 @@ const DEFAULT_RANGE_RADIUS_METERS = {
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || 'http://localhost:5050'
+const API_ACCESS_TOKEN = import.meta.env.VITE_API_ACCESS_TOKEN || ''
 
 // A tiny deterministic hash so mock data is stable per input.
 function hashString(input) {
   const str = String(input)
-  let h = 0
-  for (let i = 0; i < str.length; i += 1) {
-    h = (h * 31 + str.charCodeAt(i)) | 0
+  let hash = 0
+  for (let index = 0; index < str.length; index += 1) {
+    hash = (hash * 31 + str.charCodeAt(index)) | 0
   }
-  return Math.abs(h)
+  return Math.abs(hash)
 }
 
 function stableScore(seed, offset, min = 35, max = 95) {
   // Simple deterministic mapping (mock backend), not front-end business logic.
-  const h = hashString(`${seed}:${offset}`)
-  return min + (h % (max - min + 1))
+  const hash = hashString(`${seed}:${offset}`)
+  return min + (hash % (max - min + 1))
 }
 
 function geocodeMock(locationName) {
@@ -46,27 +49,40 @@ function geocodeMock(locationName) {
 }
 
 function formatAreaName(locationName) {
-  const s = String(locationName).trim()
-  if (!s) return 'Selected Area'
-  return s
+  const trimmedName = String(locationName).trim()
+  if (!trimmedName) return 'Selected Area'
+  return trimmedName
     .split(/\s+/)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ')
 }
 
 function profileSignature(profile) {
-  const p = profile || {}
+  const activeProfile = profile || {}
   const parts = [
-    p.familyWithChildren ? 'family' : '',
-    p.elderly ? 'elderly' : '',
-    p.petOwner ? 'pet' : '',
+    activeProfile.familyWithChildren ? 'family' : '',
+    activeProfile.elderly ? 'elderly' : '',
+    activeProfile.petOwner ? 'pet' : '',
   ].filter(Boolean)
 
   return parts.length ? parts.sort().join('-') : 'general'
 }
 
-async function fetchJson(url) {
-  const response = await fetch(url)
+function getApiHeaders(extraHeaders = {}) {
+  const headers = { ...extraHeaders }
+
+  if (API_ACCESS_TOKEN) {
+    headers.Authorization = `Bearer ${API_ACCESS_TOKEN}`
+  }
+
+  return headers
+}
+
+async function fetchJson(url, options = {}) {
+  const response = await fetch(url, {
+    ...options,
+    headers: getApiHeaders(options.headers),
+  })
 
   if (!response.ok) {
     throw new Error(`Request failed: ${response.status}`)
@@ -234,9 +250,9 @@ export async function getMapContext({ locationName, rangeMinutes, profile }) {
   const overallScore = Math.round((accessibility + safety + environment) / 3)
   const radiusMeters = DEFAULT_RANGE_RADIUS_METERS[safeRange] || 2200
 
-  const h = hashString(seed)
-  const offset1 = (h % 1000) / 100000
-  const offset2 = (Math.floor(h / 7) % 1000) / 100000
+  const hash = hashString(seed)
+  const offset1 = (hash % 1000) / 100000
+  const offset2 = (Math.floor(hash / 7) % 1000) / 100000
   const baseLat = coords.lat
   const baseLng = coords.lng
 
@@ -289,10 +305,10 @@ export async function getMapContext({ locationName, rangeMinutes, profile }) {
 export async function getInsights({ locationName, rangeMinutes, profile, category }) {
   const range = Number(rangeMinutes)
   const safeRange = [10, 20, 30].includes(range) ? range : 20
-  const cat = String(category)
+  const categoryKey = String(category)
 
-  const seed = `${locationName}:${safeRange}:${profileSignature(profile)}:${cat}`
-  const h = hashString(seed)
+  const seed = `${locationName}:${safeRange}:${profileSignature(profile)}:${categoryKey}`
+  const hash = hashString(seed)
 
   const templates = {
     accessibility: [
@@ -315,17 +331,17 @@ export async function getInsights({ locationName, rangeMinutes, profile, categor
     ],
   }
 
-  const list = templates[cat] || templates.accessibility
-  const factors = list.map(({ name, note }, idx) => {
-    const met = (h + idx * 17) % 3 !== 0
+  const list = templates[categoryKey] || templates.accessibility
+  const factors = list.map(({ name, note }, index) => {
+    const met = (hash + index * 17) % 3 !== 0
     return { name, note, met }
   })
 
   return {
-    category: cat,
+    category: categoryKey,
     factors,
     scoreExplanation: `Mock breakdown for ${
-      CATEGORY_LABELS[cat] || cat
+      CATEGORY_LABELS[categoryKey] || categoryKey
     }. In the real project, the backend will provide which factors are met/not met based on open datasets.`,
   }
 }
@@ -379,7 +395,7 @@ export async function getCompareData({ locationName, rangeMinutes, profile }) {
     { key: 'environment', delta: environment[0] - environment[1] },
   ]
 
-  deltas.sort((x, y) => Math.abs(y.delta) - Math.abs(x.delta))
+  deltas.sort((leftDelta, rightDelta) => Math.abs(rightDelta.delta) - Math.abs(leftDelta.delta))
   const best = deltas[0]
 
   let recommendation = `Recommendation is based on ${CATEGORY_LABELS[best.key]}.`
@@ -406,13 +422,13 @@ export async function getCompareData({ locationName, rangeMinutes, profile }) {
 }
 
 export function validateSearchInput(input) {
-  const s = String(input || '').trim()
+  const searchText = String(input || '').trim()
 
-  if (!s) {
+  if (!searchText) {
     return { ok: false, message: 'Please enter a suburb, postcode, or address.' }
   }
 
-  if (!/^\d{4}$/.test(s) && s.length < 3) {
+  if (!/^\d{4}$/.test(searchText) && searchText.length < 3) {
     return { ok: false, message: 'Input is too short. Please be more specific.' }
   }
 
@@ -456,50 +472,6 @@ export async function getLiveabilityScore({ lat, lng, time, persona }) {
   return fetchCachedJson(
     `${API_BASE_URL}/api/score/liveability?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}&time=${encodeURIComponent(safeTime)}&persona=${encodeURIComponent(safePersona)}`
   )
-}
-
-function inferSuburbFromAddress(value) {
-  const text = String(value || '').trim()
-  if (!text) return ''
-
-  const commaMatch = text.match(/,\s*([^,]+?)\s+(?:VIC|Victoria)\s+\d{4}\b/i)
-  if (commaMatch?.[1]) {
-    return commaMatch[1]
-      .replace(/\bVIC\b|\bVictoria\b|\bAustralia\b/gi, '')
-      .replace(/\b\d{4}\b/g, '')
-      .trim()
-  }
-
-  const streetTypePattern = [
-    'avenue',
-    'ave',
-    'boulevard',
-    'blvd',
-    'court',
-    'ct',
-    'drive',
-    'dr',
-    'lane',
-    'ln',
-    'parade',
-    'pde',
-    'place',
-    'pl',
-    'road',
-    'rd',
-    'street',
-    'st',
-    'terrace',
-    'tce',
-    'way',
-  ].join('|')
-  const streetMatch = text.match(new RegExp(`\\b(?:${streetTypePattern})\\b\\s+(.+?)\\s+(?:VIC|Victoria)\\s+\\d{4}\\b`, 'i'))
-  if (!streetMatch?.[1]) return ''
-
-  return streetMatch[1]
-    .replace(/\bVIC\b|\bVictoria\b|\bAustralia\b/gi, '')
-    .replace(/\b\d{4}\b/g, '')
-    .trim()
 }
 
 export async function getCensusProfileForLocation(selectedLocation) {

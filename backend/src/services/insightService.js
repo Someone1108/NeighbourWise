@@ -23,7 +23,7 @@ const delay = (ms = 0) =>
 const calculateDistanceKm = (lat1, lng1, lat2, lng2) => {
   const toRad = (value) => (value * Math.PI) / 180;
 
-  const R = 6371;
+  const earthRadiusKm = 6371;
   const dLat = toRad(lat2 - lat1);
   const dLng = toRad(lng2 - lng1);
 
@@ -36,7 +36,7 @@ const calculateDistanceKm = (lat1, lng1, lat2, lng2) => {
 
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
-  return R * c;
+  return earthRadiusKm * c;
 };
 
 // 將名稱標準化，方便判斷是否為同一個 POI

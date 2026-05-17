@@ -2,6 +2,11 @@ const {
   findInsightRecommendations,
   findCompareRecommendations
 } = require('../services/recommendationService');
+const {
+  sendValidationError,
+  validateCompareRecommendationBody,
+  validateInsightRecommendationQuery,
+} = require('../utils/validators');
 
 /**
  * Insight Recommendation
@@ -9,30 +14,16 @@ const {
  */
 async function getInsightRecommendations(req, res) {
   try {
-    const {
-      lat,
-      lng,
-      suburb,
-      postcode,
-      address,
-      profile,
-      rangeMinutes
-    } = req.query;
+    const input = validateInsightRecommendationQuery(req.query);
 
     const results =
-      await findInsightRecommendations({
-        lat,
-        lng,
-        suburb,
-        postcode,
-        address,
-        profile,
-        rangeMinutes
-      });
+      await findInsightRecommendations(input);
 
     res.json(results);
 
   } catch (error) {
+    if (sendValidationError(res, error)) return;
+
     console.error(
       'Insight recommendation error:',
       error
@@ -51,8 +42,7 @@ async function getInsightRecommendations(req, res) {
  */
 async function getCompareRecommendations(req, res) {
   try {
-    // Compare recommendation uses req.body
-    const input = req.body;
+    const input = validateCompareRecommendationBody(req.body);
 
     const results =
       await findCompareRecommendations(input);
@@ -60,6 +50,8 @@ async function getCompareRecommendations(req, res) {
     res.json(results);
 
   } catch (error) {
+    if (sendValidationError(res, error)) return;
+
     console.error(
       'Compare recommendation error:',
       error

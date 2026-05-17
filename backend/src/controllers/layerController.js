@@ -19,9 +19,13 @@ async function getLayersForSuburb(req, res) {
       error.message && error.message.toLowerCase().includes('no boundary found')
         ? 404
         : 500;
+    const errorMessage =
+      statusCode === 404
+        ? 'Suburb layer data was not found'
+        : 'Failed to load suburb layer data';
 
     res.status(statusCode).json({
-      error: error.message || 'Failed to load suburb layer data',
+      error: errorMessage,
     });
   }
 }
@@ -46,7 +50,7 @@ async function getLayersForAddress(req, res) {
     console.error('Error loading address layer data:', error);
 
     res.status(500).json({
-      error: error.message || 'Failed to load address layer data',
+      error: 'Failed to load address layer data',
     });
   }
 }

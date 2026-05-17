@@ -2,11 +2,19 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { LinearProgress } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
-import { getCensusProfileForLocation, getCouncilLinksForLocation, getLiveabilityScore } from '../services/api.js'
+import { getCensusProfileForLocation, getLiveabilityScore } from '../services/api.js'
 import { addToCompareList, replaceCompareArea, loadCompareList, getCompareUpdatedEventName, loadContext, saveContext } from '../utils/storage.js'
 import LoadingOverlay from '../components/LoadingOverlay.jsx'
 import CompareReplaceModal from '../components/CompareReplaceModal.jsx'
 import ChangeConditionsModal from '../components/ChangeConditionsModal.jsx'
+import {
+  formatMoney,
+  formatNumber,
+  formatPercent,
+  formatSafePercent,
+  weeklyToMonthly,
+} from '../utils/formatters.js'
+import { generateSimilarSuburbs } from './similarSuburbs.js'
 
 const CATEGORIES = ['accessibility', 'safety', 'environment']
 
@@ -346,36 +354,16 @@ function joinList(items = [], limit = 3) {
 
 function formatDecimal(value, digits = 1) {
   if (value === null || value === undefined || value === '') return 'Unavailable'
-  const n = Number(value)
-  if (!Number.isFinite(n)) return 'Unavailable'
-  return n.toFixed(digits)
+  const numericValue = Number(value)
+  if (!Number.isFinite(numericValue)) return 'Unavailable'
+  return numericValue.toFixed(digits)
 }
 
 function formatSharePercent(value) {
   if (value === null || value === undefined || value === '') return 'Unavailable'
-  const n = Number(value)
-  if (!Number.isFinite(n)) return 'Unavailable'
-  return `${Math.round(n * 100)}%`
-}
-
-function validPlaceName(value) {
-  const name = String(value || '').trim()
-  if (!name || name.toLowerCase() === 'unknown') return ''
-  return name
-}
-
-function formatDistanceKm(value) {
-  const n = Number(value)
-  if (!Number.isFinite(n)) return ''
-  if (n < 1) return `${Math.round(n * 1000)} m`
-  return `${Math.round(n * 10) / 10} km`
-}
-
-function formatDistanceMeters(value) {
-  const n = Number(value)
-  if (!Number.isFinite(n)) return ''
-  if (n < 1000) return `${Math.round(n)} m`
-  return `${Math.round((n / 1000) * 10) / 10} km`
+  const numericValue = Number(value)
+  if (!Number.isFinite(numericValue)) return 'Unavailable'
+  return `${Math.round(numericValue * 100)}%`
 }
 
 function describeVegetationRange(minValue, maxValue) {
@@ -519,8 +507,6 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
     const score = Number(item?.score) || 0
     const count = Number(item?.count) || 0
     const nearestDistanceKm = Number(item?.nearestDistanceKm)
-    const nearestPoi = item?.nearestPoi || null
-    const nearestPoiName = validPlaceName(nearestPoi?.name)
     const target = TARGET_COUNT_MAP[type] || 3
     const indicatorWeights = INDICATOR_WEIGHT_CONFIG[type] || { distance: 0.5, count: 0.5 }
     const distanceScore =
@@ -529,11 +515,10 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
         : 0
     const countScore = 100 * Math.min(count / target, 1)
     const distanceText = Number.isFinite(nearestDistanceKm)
-      ? formatDistanceKm(nearestDistanceKm)
+      ? nearestDistanceKm < 1
+        ? `${(nearestDistanceKm * 1000).toFixed(0)} m`
+        : `${nearestDistanceKm.toFixed(2)} km`
       : 'No nearby result'
-    const nearestPlaceText = nearestPoiName
-      ? `${nearestPoiName}${distanceText !== 'No nearby result' ? ` (${distanceText} away)` : ''}`
-      : distanceText
 
     const convenienceHint =
       score >= 80
@@ -547,14 +532,13 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
       score,
       met: score >= 60,
       summary: `${score.toFixed(1)}/100`,
-      preview: nearestPoiName ? `Nearest: ${nearestPlaceText}` : '',
-      plainText: `${ACCESSIBILITY_FACTOR_LABELS[type] || type.replaceAll('_', ' ')} scores ${score.toFixed(1)}/100. ${nearestPoiName ? `Nearest named place: ${nearestPlaceText}.` : `The nearest result is ${distanceText}.`} ${count} found in the selected range.`,
+      plainText: `${ACCESSIBILITY_FACTOR_LABELS[type] || type.replaceAll('_', ' ')} scores ${score.toFixed(1)}/100. The nearest result is ${distanceText}, with ${count} found in the selected range.`,
       impact: getImpactText(score, 'Accessibility'),
       lines: [
         convenienceHint,
       ],
       details: [
-        `Nearest place: ${nearestPlaceText}`,
+        `Nearest place: ${distanceText}`,
         `Availability: ${count} found, target ${target}`,
         `Distance score: ${distanceScore.toFixed(1)}/100`,
         `Availability score: ${countScore.toFixed(1)}/100`,
@@ -578,12 +562,6 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
   const transportDetails = safety?.transportComfortDetails || {}
   const transportModes = joinList(transportDetails.modes || [], 4)
   const transportTagCoverage = transportDetails.tagCoverage || {}
-  const nearestTransportStop = transportDetails.nearestStop || null
-  const nearestTransportStopName = validPlaceName(nearestTransportStop?.name)
-  const nearestTransportStopDistance = formatDistanceMeters(nearestTransportStop?.distanceMeters)
-  const nearestTransportStopText = nearestTransportStopName
-    ? `${nearestTransportStopName}${nearestTransportStopDistance ? ` (${nearestTransportStopDistance} away)` : ''}`
-    : ''
   const zoneCount = Number(safety?.zoningDetails?.zoneCount)
   const zoneMix = (safety?.zoningDetails?.zoneMix || [])
     .map((zone) => `${zone.label} (${zone.count})`)
@@ -698,9 +676,8 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
       score: transportComfortScore,
       met: transportComfortScore >= 60,
       summary: Number.isFinite(transportComfortScore) ? `${transportComfortScore}/100` : 'Unavailable',
-      preview: nearestTransportStopText ? `Nearby stop: ${nearestTransportStopText}` : '',
       plainText: Number.isFinite(transportComfortScore)
-        ? `Public transport stop comfort scores ${transportComfortScore}/100 using nearby stops and mapped amenities such as lighting, shelters, benches, wheelchair access and tactile paving.${nearestTransportStopText ? ` A nearby stop assessed is ${nearestTransportStopText}.` : ''}`
+        ? `Public transport stop comfort scores ${transportComfortScore}/100 using nearby stops and mapped amenities such as lighting, shelters, benches, wheelchair access and tactile paving.`
         : 'Public transport stop comfort data is unavailable for this area.',
       impact: getImpactText(transportComfortScore, 'Safety'),
       lines: [
@@ -719,7 +696,6 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
           : 'No transport modes were returned for this area.',
       ],
       details: [
-        nearestTransportStopText ? `Nearby public transport: ${nearestTransportStopText}` : 'Nearby public transport: Unavailable',
         `Lighting coverage: ${formatSharePercent(transportTagCoverage.lit)}`,
         `Shelter coverage: ${formatSharePercent(transportTagCoverage.shelter)}`,
         `Bench coverage: ${formatSharePercent(transportTagCoverage.bench)}`,
@@ -905,10 +881,10 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
 }
 
 function CircularGauge({ score, color, size = 160, strokeWidth = 13, dark = false }) {
-  const r = (size - strokeWidth) / 2
-  const circ = 2 * Math.PI * r
+  const radius = (size - strokeWidth) / 2
+  const circumference = 2 * Math.PI * radius
   const [displayed, setDisplayed] = useState(0)
-  const [dash, setDash] = useState(circ)
+  const [dashOffset, setDashOffset] = useState(circumference)
 
   useEffect(() => {
     if (score == null) return
@@ -920,19 +896,19 @@ function CircularGauge({ score, color, size = 160, strokeWidth = 13, dark = fals
       const progress = Math.min((ts - start) / duration, 1)
       const e = ease(progress)
       setDisplayed(Math.round(e * score))
-      setDash(circ - e * (score / 100) * circ)
+      setDashOffset(circumference - e * (score / 100) * circumference)
       if (progress < 1) requestAnimationFrame(step)
     }
     requestAnimationFrame(step)
-  }, [score, circ])
+  }, [score, circumference])
 
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(0,0,0,0.1)" strokeWidth={strokeWidth} />
+      <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="rgba(0,0,0,0.1)" strokeWidth={strokeWidth} />
       <circle
-        cx={size / 2} cy={size / 2} r={r} fill="none"
+        cx={size / 2} cy={size / 2} r={radius} fill="none"
         stroke={color} strokeWidth={strokeWidth}
-        strokeDasharray={circ} strokeDashoffset={dash}
+        strokeDasharray={circumference} strokeDashoffset={dashOffset}
         strokeLinecap="round"
         transform={`rotate(-90 ${size / 2} ${size / 2})`}
       />
@@ -945,16 +921,16 @@ function CircularGauge({ score, color, size = 160, strokeWidth = 13, dark = fals
 }
 
 function MiniGauge({ score, color, size = 52 }) {
-  const sw = 5
-  const r = (size - sw) / 2
-  const circ = 2 * Math.PI * r
-  const offset = score != null ? circ - (score / 100) * circ : circ
+  const strokeWidth = 5
+  const radius = (size - strokeWidth) / 2
+  const circumference = 2 * Math.PI * radius
+  const offset = score != null ? circumference - (score / 100) * circumference : circumference
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true" style={{ flexShrink: 0 }}>
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(0,0,0,0.08)" strokeWidth={sw} />
+      <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="rgba(0,0,0,0.08)" strokeWidth={strokeWidth} />
       {score != null && (
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={sw}
-          strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round"
+        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={color} strokeWidth={strokeWidth}
+          strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round"
           transform={`rotate(-90 ${size / 2} ${size / 2})`} />
       )}
       <text x={size / 2} y={size / 2 + 1} textAnchor="middle" dominantBaseline="middle"
@@ -1046,11 +1022,6 @@ function IndicatorCard({ factor, color, soft, border }) {
           <p style={{ fontSize: 14, color: '#4b5563', marginTop: 4, lineHeight: 1.4 }}>
             Score {scoreText}
           </p>
-          {factor.preview ? (
-            <p style={{ fontSize: 13, color: '#64748b', marginTop: 4, lineHeight: 1.35 }}>
-              {factor.preview}
-            </p>
-          ) : null}
         </div>
         <span style={{ fontSize: 22, fontWeight: 800, color: isMet ? color : '#9ca3af', flexShrink: 0, lineHeight: 1 }} aria-hidden="true">
           {open ? '▴' : '▾'}
@@ -1076,13 +1047,13 @@ function IndicatorCard({ factor, color, soft, border }) {
               {factor.plainText}
             </p>
           ) : null}
-          {Array.isArray(factor.lines) && factor.lines.map((line, idx) => (
-            <p key={`line-${idx}`} style={{ fontSize: 14, color: '#4b5563', lineHeight: 1.6 }}>
+          {Array.isArray(factor.lines) && factor.lines.map((line, index) => (
+            <p key={`line-${index}`} style={{ fontSize: 14, color: '#4b5563', lineHeight: 1.6 }}>
               {line}
             </p>
           ))}
-          {Array.isArray(factor.details) && factor.details.map((line, idx) => (
-            <p key={`detail-${idx}`} style={{ fontSize: 13, color: '#6b7280', lineHeight: 1.55 }}>
+          {Array.isArray(factor.details) && factor.details.map((line, index) => (
+            <p key={`detail-${index}`} style={{ fontSize: 13, color: '#6b7280', lineHeight: 1.55 }}>
               {line}
             </p>
           ))}
@@ -1128,41 +1099,6 @@ function CategoryAccordion({ groups, color, soft, border }) {
       })}
     </div>
   )
-}
-
-function formatNumber(value) {
-  if (value === null || value === undefined || value === '') return 'Unavailable'
-  const n = Number(value)
-  if (!Number.isFinite(n)) return 'Unavailable'
-  return Math.round(n).toLocaleString('en-AU')
-}
-
-function formatPercent(value) {
-  if (value === null || value === undefined || value === '') return 'Unavailable'
-  const n = Number(value)
-  if (!Number.isFinite(n)) return 'Unavailable'
-  return `${Math.round(n * 10) / 10}%`
-}
-
-function formatSafePercent(value) {
-  if (value === null || value === undefined || value === '') return 'Unavailable'
-  const n = Number(value)
-  if (!Number.isFinite(n) || n < 0 || n > 100) return 'Unavailable'
-  return `${Math.round(n * 10) / 10}%`
-}
-
-function formatMoney(value, suffix) {
-  if (value === null || value === undefined || value === '') return 'Unavailable'
-  const n = Number(value)
-  if (!Number.isFinite(n)) return 'Unavailable'
-  return `$${Math.round(n).toLocaleString('en-AU')}${suffix}`
-}
-
-function weeklyToMonthly(value) {
-  if (value === null || value === undefined || value === '') return null
-  const n = Number(value)
-  if (!Number.isFinite(n)) return null
-  return (n * 365) / 7 / 12
 }
 
 function getIndicatorMetric(indicators, category, namePart) {
@@ -1650,178 +1586,9 @@ function CensusContextSection({ data, loading, userProfile, indicators }) {
 
 // ── Similar Suburbs ─────────────────────────────────────────────────────────
 
-function CouncilLinksSection({ data, loading }) {
-  const links = data?.links || []
-
-  return (
-    <div style={{
-      background: '#fff',
-      border: '1.5px solid #e5e7eb',
-      borderRadius: 20,
-      overflow: 'hidden',
-      marginBottom: 28,
-      boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
-    }} role="region" aria-label="Council plans and development sources">
-      <div style={{
-        background: 'linear-gradient(90deg, #12312c, #1f4e45)',
-        padding: '18px 24px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 16,
-      }}>
-        <div>
-          <p style={{ fontSize: 11, fontWeight: 900, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.65)', marginBottom: 4 }}>
-            Official sources
-          </p>
-          <h2 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 24, fontWeight: 400, color: '#fff', margin: 0 }}>
-            Council plans and development links
-          </h2>
-        </div>
-        {data?.lgaName && (
-          <span style={{
-            flexShrink: 0,
-            background: 'rgba(255,255,255,0.12)',
-            border: '1px solid rgba(255,255,255,0.24)',
-            borderRadius: 999,
-            padding: '6px 12px',
-            color: '#fff',
-            fontSize: 12,
-            fontWeight: 800,
-          }}>
-            {data.lgaName}
-          </span>
-        )}
-      </div>
-
-      <div style={{ padding: '22px 24px' }}>
-        {loading ? (
-          <LinearProgress sx={{ borderRadius: 2, height: 5, bgcolor: '#ccfbf1', '& .MuiLinearProgress-bar': { bgcolor: '#0f766e' } }} />
-        ) : links.length > 0 ? (
-          <>
-            {data?.available ? (
-              <p style={{ fontSize: 15, color: '#334155', lineHeight: 1.65, marginBottom: 16 }}>
-                Use these official council and Victorian Government sources to check projects, planning controls,
-                permits, strategies and long-term local plans for this area.
-              </p>
-            ) : (
-              <div style={{
-                background: '#f8fafc',
-                border: '1px solid #e5e7eb',
-                borderRadius: 14,
-                padding: '14px 16px',
-                marginBottom: 16,
-              }}>
-                <p style={{ fontSize: 15, color: '#475569', lineHeight: 1.65 }}>
-                  {data?.message || 'Council-specific links are not available for this area yet. Victorian planning sources are still available below.'}
-                </p>
-              </div>
-            )}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 14 }}>
-              {links.map((item) => (
-                <a
-                  key={`${item.key}-${item.url}`}
-                  href={item.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{
-                    display: 'block',
-                    textDecoration: 'none',
-                    color: 'inherit',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: 14,
-                    padding: '16px 18px',
-                    background: '#fff',
-                    minHeight: 145,
-                    transition: 'border-color 0.16s, box-shadow 0.16s, transform 0.16s',
-                  }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.borderColor = '#0f766e'
-                    e.currentTarget.style.boxShadow = '0 8px 24px rgba(15,118,110,0.1)'
-                    e.currentTarget.style.transform = 'translateY(-2px)'
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.borderColor = '#e5e7eb'
-                    e.currentTarget.style.boxShadow = 'none'
-                    e.currentTarget.style.transform = 'none'
-                  }}
-                >
-                  <p style={{ fontSize: 11, fontWeight: 900, letterSpacing: '0.09em', textTransform: 'uppercase', color: '#0f766e', marginBottom: 7 }}>
-                    {item.source}
-                  </p>
-                  <p style={{ fontSize: 16, fontWeight: 900, color: '#0f172a', lineHeight: 1.3, marginBottom: 8 }}>
-                    {item.title}
-                  </p>
-                  <p style={{ fontSize: 13, color: '#475569', lineHeight: 1.55, marginBottom: 12 }}>
-                    {item.description}
-                  </p>
-                  <span style={{ fontSize: 13, color: '#0f766e', fontWeight: 900 }}>
-                    Open official source
-                  </span>
-                </a>
-              ))}
-            </div>
-            <p style={{ marginTop: 16, fontSize: 13, color: '#64748b', lineHeight: 1.55 }}>
-              These links are curated source pages, not a prediction or summary of future developments.
-              Confirm property-specific details through official planning registers.
-            </p>
-          </>
-        ) : (
-          <div style={{
-            background: '#f8fafc',
-            border: '1px solid #e5e7eb',
-            borderRadius: 14,
-            padding: '16px 18px',
-          }}>
-            <p style={{ fontSize: 15, color: '#475569', lineHeight: 1.65 }}>
-              {data?.message || 'Council-specific links are not available for this area yet.'}
-            </p>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-const MELBOURNE_SUBURB_POOL = [
-  { name: 'Fitzroy',        baseDist: 1.2, lat: -37.7963, lng: 144.9778 },
-  { name: 'Collingwood',    baseDist: 1.5, lat: -37.8041, lng: 144.9848 },
-  { name: 'Abbotsford',     baseDist: 2.0, lat: -37.8044, lng: 144.9935 },
-  { name: 'South Yarra',    baseDist: 2.4, lat: -37.8390, lng: 144.9947 },
-  { name: 'Prahran',        baseDist: 2.9, lat: -37.8497, lng: 144.9904 },
-  { name: 'Hawthorn',       baseDist: 3.6, lat: -37.8218, lng: 145.0266 },
-  { name: 'Kew',            baseDist: 4.3, lat: -37.8024, lng: 145.0313 },
-  { name: 'Carlton',        baseDist: 0.9, lat: -37.7983, lng: 144.9665 },
-  { name: 'Brunswick',      baseDist: 2.7, lat: -37.7671, lng: 144.9643 },
-  { name: 'Northcote',      baseDist: 3.9, lat: -37.7735, lng: 145.0098 },
-  { name: 'Cremorne',       baseDist: 1.8, lat: -37.8282, lng: 144.9969 },
-  { name: 'East Melbourne', baseDist: 1.1, lat: -37.8149, lng: 144.9847 },
-]
-
-const SIM_DISTANCE_FILTERS = [5, 10, 15]
-
-function generateSimilarSuburbs(overallScore, scores) {
-  if (!overallScore || !scores) return []
-  const clamp = (n, lo, hi) => Math.round(Math.max(lo, Math.min(hi, n)))
-  return MELBOURNE_SUBURB_POOL.map((sub, i) => {
-    const v = (base) => clamp(base + Math.sin(i * 2.37 + 1.1) * 9, 35, 94)
-    return {
-      name: sub.name,
-      lat: sub.lat,
-      lng: sub.lng,
-      score: v(overallScore),
-      match: Math.max(72, Math.round(96 - i * 2.8)),
-      dist: sub.baseDist,
-      a: v(scores.accessibility ?? 60),
-      s: v(scores.safety ?? 60),
-      e: v(scores.environment ?? 60),
-    }
-  })
-}
-
 function SimilarSuburbs({ overallScore, scores }) {
   const navigate = useNavigate()
-  const [page, setPage] = useState(0)
+  const [page] = useState(0)
   const [replaceModal, setReplaceModal] = useState(null) // { pendingItem, currentList }
 
   // Keep compare list in sync — listens for any add/remove/replace events
@@ -1844,15 +1611,15 @@ function SimilarSuburbs({ overallScore, scores }) {
 
   const [cardsReady, setCardsReady] = useState(false)
   useEffect(() => {
-    const t = setTimeout(() => setCardsReady(true), 100)
-    return () => clearTimeout(t)
+    const animationTimer = setTimeout(() => setCardsReady(true), 100)
+    return () => clearTimeout(animationTimer)
   }, [page])
 
-  const filtered = suburbs.filter(s => s.score > overallScore)
-  const visibleSuburbs = filtered.slice(0, 3)
+  const strongerSuburbs = suburbs.filter((suburb) => suburb.score > overallScore)
+  const visibleSuburbs = strongerSuburbs.slice(0, 3)
 
-  function handleAddToCompare(s) {
-    const item = { displayName: s.name, name: s.name, lat: s.lat, lng: s.lng, rangeMinutes: 20 }
+  function handleAddToCompare(suburb) {
+    const item = { displayName: suburb.name, name: suburb.name, lat: suburb.lat, lng: suburb.lng, rangeMinutes: 20 }
     const result = addToCompareList(item)
     if (result?.reason === 'COMPARE_FULL') {
       setReplaceModal({ pendingItem: item, currentList: result.current })
@@ -1877,12 +1644,12 @@ function SimilarSuburbs({ overallScore, scores }) {
 
       {/* 3-column grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
-        {visibleSuburbs.map((s, idx) => {
-          const sb = getScoreBand(s.score)
-          const inList = compareNames.has(s.name.toLowerCase())
+        {visibleSuburbs.map((suburb, index) => {
+          const scoreBand = getScoreBand(suburb.score)
+          const inList = compareNames.has(suburb.name.toLowerCase())
           return (
             <div
-              key={s.name}
+              key={suburb.name}
               style={{
                 background: '#fff', border: '1.5px solid #e5e7eb', borderRadius: 16,
                 padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 16,
@@ -1893,20 +1660,21 @@ function SimilarSuburbs({ overallScore, scores }) {
             >
               {/* Left: animated circle gauge */}
               {(() => {
-                const R = 28, circ = 2 * Math.PI * R
-                const offset = cardsReady ? circ * (1 - s.score / 100) : circ
+                const radius = 28
+                const circumference = 2 * Math.PI * radius
+                const offset = cardsReady ? circumference * (1 - suburb.score / 100) : circumference
                 return (
                   <svg width="72" height="72" viewBox="0 0 72 72" style={{ flexShrink: 0, overflow: 'visible' }} aria-hidden="true">
-                    <circle cx="36" cy="36" r={R} fill="none" stroke="#f3f4f6" strokeWidth="5" />
-                    <circle cx="36" cy="36" r={R} fill="none"
-                      stroke={sb.color} strokeWidth="5" strokeLinecap="round"
-                      strokeDasharray={circ} strokeDashoffset={offset}
+                    <circle cx="36" cy="36" r={radius} fill="none" stroke="#f3f4f6" strokeWidth="5" />
+                    <circle cx="36" cy="36" r={radius} fill="none"
+                      stroke={scoreBand.color} strokeWidth="5" strokeLinecap="round"
+                      strokeDasharray={circumference} strokeDashoffset={offset}
                       transform="rotate(-90 36 36)"
-                      style={{ transition: `stroke-dashoffset 1.2s cubic-bezier(0.22,1,0.36,1) ${idx * 80}ms` }}
+                      style={{ transition: `stroke-dashoffset 1.2s cubic-bezier(0.22,1,0.36,1) ${index * 80}ms` }}
                     />
                     <text x="36" y="32" textAnchor="middle" dominantBaseline="middle"
-                      fill={sb.color} fontSize="21" fontFamily="'DM Serif Display', Georgia, serif" fontWeight="400">
-                      {s.score}
+                      fill={scoreBand.color} fontSize="21" fontFamily="'DM Serif Display', Georgia, serif" fontWeight="400">
+                      {suburb.score}
                     </text>
                     <text x="36" y="51" textAnchor="middle"
                       fill="#9ca3af" fontSize="7" fontWeight="800" letterSpacing="1">SCORE</text>
@@ -1918,16 +1686,16 @@ function SimilarSuburbs({ overallScore, scores }) {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                   <p style={{ fontWeight: 800, fontSize: 15, color: '#1a2436', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {s.name}
+                    {suburb.name}
                   </p>
                   <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 900, background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0', borderRadius: 999, padding: '2px 8px' }}>
-                    {s.match}%
+                    {suburb.match}%
                   </span>
                 </div>
-                <p style={{ fontSize: 12, color: '#9ca3af', marginBottom: 10 }}>{s.dist.toFixed(1)} km away</p>
+                <p style={{ fontSize: 12, color: '#9ca3af', marginBottom: 10 }}>{suburb.distanceKm.toFixed(1)} km away</p>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button
-                    onClick={() => { if (!inList) handleAddToCompare(s) }}
+                    onClick={() => { if (!inList) handleAddToCompare(suburb) }}
                     disabled={inList}
                     style={{
                       all: 'unset', cursor: inList ? 'default' : 'pointer',
@@ -1944,7 +1712,7 @@ function SimilarSuburbs({ overallScore, scores }) {
                     {inList ? '✓ In Compare List' : 'Add to Compare'}
                   </button>
                   <button
-                    onClick={() => navigate('/insights', { state: { selectedLocation: { name: s.name, displayName: s.name, lat: s.lat, lng: s.lng }, rangeMinutes: 20 } })}
+                    onClick={() => navigate('/insights', { state: { selectedLocation: { name: suburb.name, displayName: suburb.name, lat: suburb.lat, lng: suburb.lng }, rangeMinutes: 20 } })}
                     style={{
                       all: 'unset', cursor: 'pointer',
                       padding: '6px 14px', borderRadius: 8, fontSize: 12, fontWeight: 700,
@@ -2002,8 +1770,6 @@ export default function InsightsPage() {
   const [loading, setLoading] = useState(true)
   const [censusLoading, setCensusLoading] = useState(true)
   const [censusData, setCensusData] = useState(null)
-  const [councilLinksLoading, setCouncilLinksLoading] = useState(true)
-  const [councilLinksData, setCouncilLinksData] = useState(null)
   const [heroBarReady, setHeroBarReady] = useState(false)
   const [selectedBreakdownCategory, setSelectedBreakdownCategory] = useState(null)
   const [heroCompareAdded, setHeroCompareAdded] = useState(null) // 'added' | 'duplicate' | 'full' | null
@@ -2023,7 +1789,6 @@ export default function InsightsPage() {
       if (!cancelled) {
         setLoading(true)
         setCensusLoading(true)
-        setCouncilLinksLoading(true)
       }
     })
 
@@ -2040,31 +1805,21 @@ export default function InsightsPage() {
         message: 'Census information could not be loaded for this location.',
       }
     })
-    const councilLinksP = getCouncilLinksForLocation(selectedLocation).catch((err) => {
-      console.error('Council links load error:', err)
-      return {
-        available: false,
-        message: 'Council planning links could not be loaded for this location.',
-        links: [],
-      }
-    })
 
-    Promise.all([scoreP, censusP, councilLinksP])
-      .then(([scoreData, censusProfile, councilLinks]) => {
+    Promise.all([scoreP, censusP])
+      .then(([scoreData, censusProfile]) => {
         if (cancelled) return
         setOverallScore(scoreData.liveabilityScore)
         setScores(scoreData.scores || null)
         setScoreWeights(scoreData.weights || null)
         setIndicators(buildIndicatorMapFromBreakdown(scoreData.breakdown || {}, rangeMinutes))
         setCensusData(censusProfile)
-        setCouncilLinksData(councilLinks)
       })
       .catch(console.error)
       .finally(() => {
         if (!cancelled) {
           setLoading(false)
           setCensusLoading(false)
-          setCouncilLinksLoading(false)
         }
       })
 
@@ -2073,10 +1828,11 @@ export default function InsightsPage() {
 
   useEffect(() => {
     if (!loading) {
-      const t = setTimeout(() => setHeroBarReady(true), 150)
-      return () => clearTimeout(t)
+      const heroAnimationTimer = setTimeout(() => setHeroBarReady(true), 150)
+      return () => clearTimeout(heroAnimationTimer)
     }
-    setHeroBarReady(false)
+    const heroResetTimer = setTimeout(() => setHeroBarReady(false), 0)
+    return () => clearTimeout(heroResetTimer)
   }, [loading])
 
   useEffect(() => {
@@ -2110,7 +1866,6 @@ export default function InsightsPage() {
   const band = overallScore != null ? getScoreBand(overallScore) : null
   const situationHighlights = buildSituationHighlights(profile, scores, indicators)
   const benchmarkScores = STATIC_SCORE_BENCHMARK.scores
-  const benchmarkShortLabel = STATIC_SCORE_BENCHMARK.label
   const benchmarkTextLabel = 'supported locality average'
   const interpretationSummary = buildInterpretationSummary(scores, profileLabel, rangeMinutes, benchmarkScores)
   const breakdownCategories = selectedBreakdownCategory ? [selectedBreakdownCategory] : []
@@ -2220,24 +1975,24 @@ export default function InsightsPage() {
 
                   {/* Animated circle gauge */}
                   {(() => {
-                    const R = 52
-                    const circ = 2 * Math.PI * R
-                    const offset = (heroBarReady && overallScore != null) ? circ * (1 - overallScore / 100) : circ
+                    const radius = 52
+                    const circumference = 2 * Math.PI * radius
+                    const offset = (heroBarReady && overallScore != null) ? circumference * (1 - overallScore / 100) : circumference
                     const gaugeColor = band?.color || '#f47c20'
                     return (
                       <svg width="136" height="136" viewBox="0 0 136 136" style={{ flexShrink: 0, overflow: 'visible' }} aria-hidden="true">
-                        <circle cx="68" cy="68" r={R} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="9" />
-                        <circle cx="68" cy="68" r={R} fill="none"
+                        <circle cx="68" cy="68" r={radius} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="9" />
+                        <circle cx="68" cy="68" r={radius} fill="none"
                           stroke={gaugeColor} strokeWidth="9"
                           strokeLinecap="round" opacity="0.22"
-                          strokeDasharray={circ} strokeDashoffset={offset}
+                          strokeDasharray={circumference} strokeDashoffset={offset}
                           transform="rotate(-90 68 68)"
                           style={{ filter: 'blur(4px)', transition: `stroke-dashoffset 1.5s cubic-bezier(0.22, 1, 0.36, 1)` }}
                         />
-                        <circle cx="68" cy="68" r={R} fill="none"
+                        <circle cx="68" cy="68" r={radius} fill="none"
                           stroke={gaugeColor} strokeWidth="9"
                           strokeLinecap="round"
-                          strokeDasharray={circ} strokeDashoffset={offset}
+                          strokeDasharray={circumference} strokeDashoffset={offset}
                           transform="rotate(-90 68 68)"
                           style={{ transition: `stroke-dashoffset 1.5s cubic-bezier(0.22, 1, 0.36, 1)` }}
                         />
@@ -2321,29 +2076,29 @@ export default function InsightsPage() {
 
               {/* RIGHT — category score rows */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-                {CATEGORIES.map((key, i) => {
-                  const cfg = CATEGORY_CONFIG[key]
-                  const score = loading ? null : (scores?.[key] ?? null)
-                  const bench = STATIC_SCORE_BENCHMARK.scores[key]
-                  const delta = score != null ? score - bench : null
+                {CATEGORIES.map((categoryKey, index) => {
+                  const categoryConfig = CATEGORY_CONFIG[categoryKey]
+                  const score = loading ? null : (scores?.[categoryKey] ?? null)
+                  const benchmarkScore = STATIC_SCORE_BENCHMARK.scores[categoryKey]
+                  const delta = score != null ? score - benchmarkScore : null
                   return (
-                    <div key={key}>
+                    <div key={categoryKey}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 7 }}>
-                        <span style={{ fontSize: 15 }} aria-hidden="true">{cfg.icon}</span>
+                        <span style={{ fontSize: 15 }} aria-hidden="true">{categoryConfig.icon}</span>
                         <span style={{ fontSize: 12, fontWeight: 800, color: 'rgba(255,255,255,0.75)', textTransform: 'uppercase', letterSpacing: '0.1em', flex: 1 }}>
-                          {cfg.label}
+                          {categoryConfig.label}
                         </span>
-                        <span style={{ fontSize: 23, fontWeight: 900, color: cfg.color, lineHeight: 1, letterSpacing: '-0.5px' }}
-                          aria-label={`${cfg.label}: ${score ?? 'loading'}`}>
+                        <span style={{ fontSize: 23, fontWeight: 900, color: categoryConfig.color, lineHeight: 1, letterSpacing: '-0.5px' }}
+                          aria-label={`${categoryConfig.label}: ${score ?? 'loading'}`}>
                           {score ?? '—'}
                         </span>
                       </div>
                       {/* Animated bar */}
                       <div style={{ height: 7, borderRadius: 999, background: 'rgba(255,255,255,0.12)', overflow: 'hidden' }}>
                         <div style={{
-                          height: '100%', borderRadius: 999, background: cfg.color,
+                          height: '100%', borderRadius: 999, background: categoryConfig.color,
                           width: (heroBarReady && score != null) ? `${score}%` : '0%',
-                          transition: `width 1.3s cubic-bezier(0.22, 1, 0.36, 1) ${i * 160}ms`,
+                          transition: `width 1.3s cubic-bezier(0.22, 1, 0.36, 1) ${index * 160}ms`,
                         }} />
                       </div>
                       {delta != null && (
@@ -2365,41 +2120,41 @@ export default function InsightsPage() {
           style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(270px, 1fr))', gap: 14, marginBottom: 28 }}
           role="region" aria-label="Category scores"
         >
-          {CATEGORIES.map(k => {
-            const c = CATEGORY_CONFIG[k]
-            const catIndicators = indicators[k]
-            const catGroups = groupIndicatorFactors(catIndicators?.factors || [], profile)
+          {CATEGORIES.map((categoryKey) => {
+            const categoryConfig = CATEGORY_CONFIG[categoryKey]
+            const categoryIndicators = indicators[categoryKey]
+            const categoryGroups = groupIndicatorFactors(categoryIndicators?.factors || [], profile)
             return (
-              <div key={k} style={{
+              <div key={categoryKey} style={{
                 background: '#fff', border: '1.5px solid #e5e7eb',
                 borderRadius: 20, padding: '20px 20px',
                 boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
                 transition: 'box-shadow 0.2s, border-color 0.2s',
               }}>
                 <div style={{ marginBottom: 12 }}>
-                  <p style={{ fontSize: 14, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: c.color, marginBottom: 5 }}>
-                    <span aria-hidden="true">{c.icon}</span> {c.label}
+                  <p style={{ fontSize: 14, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: categoryConfig.color, marginBottom: 5 }}>
+                    <span aria-hidden="true">{categoryConfig.icon}</span> {categoryConfig.label}
                   </p>
-                  <p style={{ fontSize: 13, color: '#4b5563', lineHeight: 1.5 }}>{c.description}</p>
+                  <p style={{ fontSize: 13, color: '#4b5563', lineHeight: 1.5 }}>{categoryConfig.description}</p>
                 </div>
-                {!loading && catIndicators && (
+                {!loading && categoryIndicators && (
                   <p style={{ marginTop: 8, fontSize: 12, color: '#6b7280' }}>
-                    {catIndicators.factors?.filter(f => f.met).length ?? 0}/{catIndicators.factors?.length ?? 0} indicators met
+                    {categoryIndicators.factors?.filter((factor) => factor.met).length ?? 0}/{categoryIndicators.factors?.length ?? 0} indicators met
                   </p>
                 )}
 
-                {!loading && catIndicators && catGroups.length > 0 && (
+                {!loading && categoryIndicators && categoryGroups.length > 0 && (
                   <button
-                    onClick={() => setSelectedBreakdownCategory(k)}
+                    onClick={() => setSelectedBreakdownCategory(categoryKey)}
                     style={{
                       marginTop: 12, width: '100%', padding: '9px 14px',
-                      background: 'transparent', border: `1px solid ${c.border}`,
+                      background: 'transparent', border: `1px solid ${categoryConfig.border}`,
                       borderRadius: 10, cursor: 'pointer',
-                      fontSize: 13, fontWeight: 700, color: c.color,
+                      fontSize: 13, fontWeight: 700, color: categoryConfig.color,
                       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                       transition: 'all 0.18s', fontFamily: 'Figtree, sans-serif',
                     }}
-                    onMouseEnter={e => { e.currentTarget.style.background = c.soft }}
+                    onMouseEnter={e => { e.currentTarget.style.background = categoryConfig.soft }}
                     onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
                   >
                     See Breakdown ↗
@@ -2413,8 +2168,6 @@ export default function InsightsPage() {
         {/* Indicator breakdown moved inside each category card above ↑ */}
 
         <CensusContextSection data={censusData} loading={censusLoading} userProfile={profile} indicators={indicators} />
-
-        <CouncilLinksSection data={councilLinksData} loading={councilLinksLoading} />
 
         {/* Interpretation */}
         {!loading && scores && (
@@ -2499,44 +2252,44 @@ export default function InsightsPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }} aria-label="Score calculation methodology">
             <thead>
               <tr>
-                {['Category', 'Weight', 'Data sources'].map(h => (
-                  <th key={h} scope="col" style={{
+                {['Category', 'Weight', 'Data sources'].map((heading) => (
+                  <th key={heading} scope="col" style={{
                     textAlign: 'left', paddingBottom: 14,
                     fontSize: 13, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#4b5563',
                     borderBottom: '1px solid #e5e7eb',
-                  }}>{h}</th>
+                  }}>{heading}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {CATEGORIES.map((k, idx) => {
-                const c = CATEGORY_CONFIG[k]
+              {CATEGORIES.map((categoryKey, index) => {
+                const categoryConfig = CATEGORY_CONFIG[categoryKey]
                 const dynamicWeight =
-                  k === 'accessibility'
+                  categoryKey === 'accessibility'
                     ? scoreWeights?.A
-                    : k === 'safety'
+                    : categoryKey === 'safety'
                       ? scoreWeights?.S
                       : scoreWeights?.E
                 const displayWeight = Number.isFinite(dynamicWeight)
                   ? Math.round(dynamicWeight * 100)
-                  : c.weight
+                  : categoryConfig.weight
                 return (
-                  <tr key={k}>
-                    <td style={{ padding: '16px 18px 16px 0', borderBottom: idx < 2 ? '1px solid #f3f4f6' : 'none' }}>
+                  <tr key={categoryKey}>
+                    <td style={{ padding: '16px 18px 16px 0', borderBottom: index < 2 ? '1px solid #f3f4f6' : 'none' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <span aria-hidden="true" style={{ fontSize: 18 }}>{c.icon}</span>
-                        <span style={{ fontWeight: 700, fontSize: 16, color: '#1a2436' }}>{c.label}</span>
+                        <span aria-hidden="true" style={{ fontSize: 18 }}>{categoryConfig.icon}</span>
+                        <span style={{ fontWeight: 700, fontSize: 16, color: '#1a2436' }}>{categoryConfig.label}</span>
                       </div>
                     </td>
-                    <td style={{ padding: '16px 18px 16px 0', borderBottom: idx < 2 ? '1px solid #f3f4f6' : 'none' }}>
+                    <td style={{ padding: '16px 18px 16px 0', borderBottom: index < 2 ? '1px solid #f3f4f6' : 'none' }}>
                       <span style={{
-                        display: 'inline-block', background: c.soft, border: `1px solid ${c.border}`,
+                        display: 'inline-block', background: categoryConfig.soft, border: `1px solid ${categoryConfig.border}`,
                         borderRadius: 999, padding: '4px 14px',
-                        fontSize: 14, fontWeight: 800, color: c.color,
+                        fontSize: 14, fontWeight: 800, color: categoryConfig.color,
                       }} aria-label={`${displayWeight} percent`}>{displayWeight}%</span>
                     </td>
-                    <td style={{ padding: '16px 0', borderBottom: idx < 2 ? '1px solid #f3f4f6' : 'none' }}>
-                      <span style={{ fontSize: 14, color: '#4b5563' }}>{c.sources}</span>
+                    <td style={{ padding: '16px 0', borderBottom: index < 2 ? '1px solid #f3f4f6' : 'none' }}>
+                      <span style={{ fontSize: 14, color: '#4b5563' }}>{categoryConfig.sources}</span>
                     </td>
                   </tr>
                 )
@@ -2643,42 +2396,42 @@ export default function InsightsPage() {
 
             {/* body */}
             <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 28 }}>
-              {breakdownCategories.map(k => {
-                const c = CATEGORY_CONFIG[k]
-                const catIndicators = indicators[k]
-                const catGroups = groupIndicatorFactors(catIndicators?.factors || [], profile)
-                const catScore = scores?.[k]
-                const band = catScore != null ? getScoreBand(catScore) : null
+              {breakdownCategories.map((categoryKey) => {
+                const categoryConfig = CATEGORY_CONFIG[categoryKey]
+                const categoryIndicators = indicators[categoryKey]
+                const categoryGroups = groupIndicatorFactors(categoryIndicators?.factors || [], profile)
+                const categoryScore = scores?.[categoryKey]
+                const band = categoryScore != null ? getScoreBand(categoryScore) : null
                 return (
-                  <div key={k}>
+                  <div key={categoryKey}>
                     {/* category header */}
                     <div style={{
                       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      marginBottom: 12, paddingBottom: 10, borderBottom: `2px solid ${c.border}`,
+                      marginBottom: 12, paddingBottom: 10, borderBottom: `2px solid ${categoryConfig.border}`,
                     }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span style={{
                           width: 32, height: 32, borderRadius: 9,
-                          background: c.soft, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          background: categoryConfig.soft, display: 'flex', alignItems: 'center', justifyContent: 'center',
                           fontSize: 16,
-                        }}>{c.icon}</span>
-                        <span style={{ fontSize: 16, fontWeight: 800, color: c.color }}>{c.label}</span>
+                        }}>{categoryConfig.icon}</span>
+                        <span style={{ fontSize: 16, fontWeight: 800, color: categoryConfig.color }}>{categoryConfig.label}</span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        {catScore != null && (
-                          <span style={{ fontSize: 22, fontWeight: 900, color: c.color }}>{Math.round(catScore)}</span>
+                        {categoryScore != null && (
+                          <span style={{ fontSize: 22, fontWeight: 900, color: categoryConfig.color }}>{Math.round(categoryScore)}</span>
                         )}
                         {band && (
                           <span style={{
                             fontSize: 11, fontWeight: 700, padding: '3px 10px',
-                            borderRadius: 20, background: c.soft, color: c.color,
+                            borderRadius: 20, background: categoryConfig.soft, color: categoryConfig.color,
                           }}>{band.label}</span>
                         )}
                       </div>
                     </div>
                     {/* accordion breakdown */}
-                    {catGroups.length > 0
-                      ? <CategoryAccordion groups={catGroups} color={c.color} soft={c.soft} border={c.border} />
+                    {categoryGroups.length > 0
+                      ? <CategoryAccordion groups={categoryGroups} color={categoryConfig.color} soft={categoryConfig.soft} border={categoryConfig.border} />
                       : <p style={{ fontSize: 13, color: '#6b7280' }}>No breakdown data available.</p>
                     }
                   </div>
