@@ -18,7 +18,8 @@ export default function NavigationBar() {
 
   // Close mobile menu on route change
   useEffect(() => {
-    setMenuOpen(false)
+    const closeMenuTimer = setTimeout(() => setMenuOpen(false), 0)
+    return () => clearTimeout(closeMenuTimer)
   }, [location.pathname])
 
   // Close on Escape
@@ -32,21 +33,21 @@ export default function NavigationBar() {
   }, [menuOpen])
 
   function hasEnteredAddress() {
-    const ctx = loadContext()
-    const sel = ctx?.selectedLocation
-    if (!sel) return false
-    return Boolean(sel.displayName || sel.fullAddress || sel.name)
+    const savedContext = loadContext()
+    const selectedLocation = savedContext?.selectedLocation
+    if (!selectedLocation) return false
+    return Boolean(selectedLocation.displayName || selectedLocation.fullAddress || selectedLocation.name)
   }
 
   function scrollHomeToSearch() {
     // Wait a frame so HomePage has mounted if we just navigated.
     requestAnimationFrame(() => {
-      const el = document.getElementById('home-search-input')
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      const searchInput = document.getElementById('home-search-input')
+      if (searchInput) {
+        searchInput.scrollIntoView({ behavior: 'smooth', block: 'center' })
         // Slight delay before focusing so the smooth scroll isn't interrupted.
         setTimeout(() => {
-          try { el.focus({ preventScroll: true }) } catch { el.focus() }
+          try { searchInput.focus({ preventScroll: true }) } catch { searchInput.focus() }
         }, 350)
       }
     })
@@ -77,8 +78,8 @@ export default function NavigationBar() {
 
   useEffect(() => {
     if (!isHome) {
-      setScrolled(false)
-      return
+      const resetScrollTimer = setTimeout(() => setScrolled(false), 0)
+      return () => clearTimeout(resetScrollTimer)
     }
     const onScroll = () => setScrolled(window.scrollY > 20)
     onScroll()

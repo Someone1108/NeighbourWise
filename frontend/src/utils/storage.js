@@ -1,12 +1,8 @@
+import { normalizeRangeMinutes } from './location.js'
+
 const KEY = 'neighbourwise_context_v1'
 const COMPARE_KEY = 'neighbourwise_compare_list_v1'
 const COMPARE_UPDATED_EVENT = 'neighbourwise-compare-updated'
-
-function normalizeRangeMinutes(value) {
-  const n = Number(value)
-  if ([10, 20, 30].includes(n)) return n
-  return 20
-}
 
 // The core purpose of these three functions is:
 // Because different pages and APIs may return data in different formats, 
@@ -153,8 +149,8 @@ export function addToCompareList(item) {
   }
 
   // 如果已經存在同一個 area，不重複加入
-  const alreadyExists = current.some((x) => {
-    const existingKey = getSafeCompareKey(x)
+  const alreadyExists = current.some((area) => {
+    const existingKey = getSafeCompareKey(area)
     return existingKey === compareKey
   })
 
@@ -308,8 +304,8 @@ export function removeFromCompareList(locationNameOrItem) {
   if (!key || key === 'name:') return loadCompareList()
 
   const current = loadCompareList()
-  const next = current.filter((x) => {
-    const existingKey = getSafeCompareKey(x)
+  const next = current.filter((area) => {
+    const existingKey = getSafeCompareKey(area)
     return existingKey !== key
   })
 

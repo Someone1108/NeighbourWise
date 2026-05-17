@@ -98,12 +98,17 @@ export default function MapPage() {
 
   useEffect(() => {
     if (!context || !selectedLocation || !profile) {
-      setError("Missing selected location. Please start from Home.");
-      setLoading(false);
-      return;
+      const missingContextTimer = setTimeout(() => {
+        setError("Missing selected location. Please start from Home.");
+        setLoading(false);
+      }, 0);
+      return () => clearTimeout(missingContextTimer);
     }
 
-    setRangeMinutes(asSafeNumber(context.rangeMinutes, 20));
+    const rangeUpdateTimer = setTimeout(() => {
+      setRangeMinutes(asSafeNumber(context.rangeMinutes, 20));
+    }, 0);
+    return () => clearTimeout(rangeUpdateTimer);
   }, [context, selectedLocation, profile]);
 
   useEffect(() => {
@@ -111,8 +116,10 @@ export default function MapPage() {
 
     let cancelled = false;
 
-    setLoading(true);
-    setError("");
+    const resetUi = setTimeout(() => {
+      setLoading(true);
+      setError("");
+    }, 0);
 
     saveContext({ selectedLocation, profile, rangeMinutes });
 
@@ -184,6 +191,7 @@ export default function MapPage() {
 
     return () => {
       cancelled = true;
+      clearTimeout(resetUi);
     };
   }, [context, selectedLocation, profile, rangeMinutes, isSuburb, isAddress]);
 
@@ -367,12 +375,12 @@ export default function MapPage() {
                     Overall Liveability
                   </h2>
                   {(() => {
-                    const s = overallScore;
+                    const score = overallScore;
                     let tier = { label: "—", className: "is-na" };
-                    if (Number.isFinite(s)) {
-                      if (s >= 80) tier = { label: "Excellent", className: "is-excellent" };
-                      else if (s >= 65) tier = { label: "Good", className: "is-good" };
-                      else if (s >= 50) tier = { label: "Moderate", className: "is-moderate" };
+                    if (Number.isFinite(score)) {
+                      if (score >= 80) tier = { label: "Excellent", className: "is-excellent" };
+                      else if (score >= 65) tier = { label: "Good", className: "is-good" };
+                      else if (score >= 50) tier = { label: "Moderate", className: "is-moderate" };
                       else tier = { label: "Low", className: "is-low" };
                     }
                     return (
@@ -407,11 +415,11 @@ export default function MapPage() {
               </div>
 
               <div className="nwScoreHeaderBars">
-                {CATEGORY_KEYS.map((k) => (
+                {CATEGORY_KEYS.map((categoryKey) => (
                   <ScoreBar
-                    key={k}
-                    category={k}
-                    score={scoreData?.scores?.[k]}
+                    key={categoryKey}
+                    category={categoryKey}
+                    score={scoreData?.scores?.[categoryKey]}
                     outOf={100}
                   />
                 ))}
@@ -443,12 +451,12 @@ export default function MapPage() {
                 </legend>
 
                 <div style={{ display: "flex", gap: 6 }}>
-                  {[10, 20, 30].map((m) => (
+                  {[10, 20, 30].map((minutes) => (
                     <button
-                      key={m}
+                      key={minutes}
                       type="button"
                       className={`nwRangeBtn ${
-                        rangeMinutes === m ? "nwRangeBtnActive" : ""
+                        rangeMinutes === minutes ? "nwRangeBtnActive" : ""
                       }`}
                       style={{
                         flex: 1,
@@ -456,11 +464,11 @@ export default function MapPage() {
                         fontSize: 13,
                         margin: 0
                       }}
-                      onClick={() => setRangeMinutes(m)}
-                      aria-pressed={rangeMinutes === m}
-                      aria-label={`${m} minute travel time`}
+                      onClick={() => setRangeMinutes(minutes)}
+                      aria-pressed={rangeMinutes === minutes}
+                      aria-label={`${minutes} minute travel time`}
                     >
-                      {m} min
+                      {minutes} min
                     </button>
                   ))}
                 </div>

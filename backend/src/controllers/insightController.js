@@ -20,8 +20,8 @@ const getPoiInsights = async (req, res) => {
   } catch (error) {
     if (sendValidationError(res, error)) return;
 
-    console.error('Error fetching POI insights:', error.message);
-    res.status(500).json({ error: error.message });
+    console.error('Error fetching POI insights:', error);
+    res.status(500).json({ error: 'Failed to fetch POI insights' });
   }
 };
 
