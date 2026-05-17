@@ -9,6 +9,7 @@ const scoreRoutes = require('./routes/scoreRoutes');
 const aqiRoutes = require('./routes/aqiRoutes');
 const censusRoutes = require('./routes/censusRoutes');
 const recommendationRoutes = require('./routes/recommendationRoutes');
+const councilLinkRoutes = require('./routes/councilLinkRoutes');
 
 const app = express();
 
@@ -27,5 +28,6 @@ app.use('/api/score', scoreRoutes);
 app.use('/api/aqi', aqiRoutes);
 app.use('/api/census', censusRoutes);
 app.use('/api/recommendations', recommendationRoutes);
+app.use('/api/council-links', councilLinkRoutes);
 
 module.exports = app;

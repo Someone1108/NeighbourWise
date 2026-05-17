@@ -63,6 +63,7 @@ export default function MapPage() {
   const [showInsights, setShowInsights] = useState(true);
   const [activeLayer, setActiveLayer] = useState("none");
   const [layerData, setLayerData] = useState(null);
+  const [useSuburbBoundary, setUseSuburbBoundary] = useState(false);
 
   const [scoreData, setScoreData] = useState(null);
 
@@ -113,6 +114,9 @@ export default function MapPage() {
 
     setLoading(true);
     setError("");
+    setSuburbPolygon(null);
+    setLayerData(null);
+    setUseSuburbBoundary(false);
 
     saveContext({ selectedLocation, profile, rangeMinutes });
 
@@ -126,7 +130,10 @@ export default function MapPage() {
     });
 
     const polygonPromise = isSuburb
-      ? getLocalityPolygon(selectedLocation.name)
+      ? getLocalityPolygon(selectedLocation.name).catch((err) => {
+          console.warn("Suburb polygon unavailable; using point radius instead:", err);
+          return null;
+        })
       : Promise.resolve(null);
 
     const poiPromise = getPoiInsights({
@@ -135,14 +142,19 @@ export default function MapPage() {
       time: Number(rangeMinutes)
     });
 
+    const addressLayerPromise = () => getLayerDataForAddress(
+      Number(selectedLocation.lat),
+      Number(selectedLocation.lng),
+      rangeMinutes
+    );
+
     const layerPromise = isSuburb
-      ? getLayerDataForSuburb(selectedLocation.name)
+      ? getLayerDataForSuburb(selectedLocation.name).catch((err) => {
+          console.warn("Suburb layers unavailable; using point radius layers instead:", err);
+          return addressLayerPromise();
+        })
       : isAddress
-        ? getLayerDataForAddress(
-            Number(selectedLocation.lat),
-            Number(selectedLocation.lng),
-            rangeMinutes
-          )
+        ? addressLayerPromise()
         : Promise.resolve(null);
 
     const scorePromise = getLiveabilityScore({
@@ -164,6 +176,7 @@ export default function MapPage() {
 
         setMapData(data);
         setSuburbPolygon(polygon);
+        setUseSuburbBoundary(Boolean(polygon && isSuburb && layers?.suburb));
         setPoiData(poiResponse?.results || []);
         setLayerData(layers);
         setScoreData(scores);
@@ -270,7 +283,7 @@ export default function MapPage() {
             }
             radiusMeters={mapData?.radiusMeters}
             pointsOfInterest={showInsights ? poiData : []}
-            suburbPolygon={isSuburb ? suburbPolygon : null}
+            suburbPolygon={useSuburbBoundary ? suburbPolygon : null}
             selectedLabel={locationName}
             heatLayer={activeLayer === "heat" ? layerData?.heat : null}
             vegetationLayer={

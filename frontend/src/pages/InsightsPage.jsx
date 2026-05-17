@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { LinearProgress } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
-import { getCensusProfileForLocation, getLiveabilityScore } from '../services/api.js'
+import { getCensusProfileForLocation, getCouncilLinksForLocation, getLiveabilityScore } from '../services/api.js'
 import { addToCompareList, replaceCompareArea, loadCompareList, getCompareUpdatedEventName, loadContext, saveContext } from '../utils/storage.js'
 import LoadingOverlay from '../components/LoadingOverlay.jsx'
 import CompareReplaceModal from '../components/CompareReplaceModal.jsx'
@@ -358,6 +358,26 @@ function formatSharePercent(value) {
   return `${Math.round(n * 100)}%`
 }
 
+function validPlaceName(value) {
+  const name = String(value || '').trim()
+  if (!name || name.toLowerCase() === 'unknown') return ''
+  return name
+}
+
+function formatDistanceKm(value) {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return ''
+  if (n < 1) return `${Math.round(n * 1000)} m`
+  return `${Math.round(n * 10) / 10} km`
+}
+
+function formatDistanceMeters(value) {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return ''
+  if (n < 1000) return `${Math.round(n)} m`
+  return `${Math.round((n / 1000) * 10) / 10} km`
+}
+
 function describeVegetationRange(minValue, maxValue) {
   const min = Number(minValue)
   const max = Number(maxValue)
@@ -499,6 +519,8 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
     const score = Number(item?.score) || 0
     const count = Number(item?.count) || 0
     const nearestDistanceKm = Number(item?.nearestDistanceKm)
+    const nearestPoi = item?.nearestPoi || null
+    const nearestPoiName = validPlaceName(nearestPoi?.name)
     const target = TARGET_COUNT_MAP[type] || 3
     const indicatorWeights = INDICATOR_WEIGHT_CONFIG[type] || { distance: 0.5, count: 0.5 }
     const distanceScore =
@@ -507,10 +529,11 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
         : 0
     const countScore = 100 * Math.min(count / target, 1)
     const distanceText = Number.isFinite(nearestDistanceKm)
-      ? nearestDistanceKm < 1
-        ? `${(nearestDistanceKm * 1000).toFixed(0)} m`
-        : `${nearestDistanceKm.toFixed(2)} km`
+      ? formatDistanceKm(nearestDistanceKm)
       : 'No nearby result'
+    const nearestPlaceText = nearestPoiName
+      ? `${nearestPoiName}${distanceText !== 'No nearby result' ? ` (${distanceText} away)` : ''}`
+      : distanceText
 
     const convenienceHint =
       score >= 80
@@ -524,13 +547,14 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
       score,
       met: score >= 60,
       summary: `${score.toFixed(1)}/100`,
-      plainText: `${ACCESSIBILITY_FACTOR_LABELS[type] || type.replaceAll('_', ' ')} scores ${score.toFixed(1)}/100. The nearest result is ${distanceText}, with ${count} found in the selected range.`,
+      preview: nearestPoiName ? `Nearest: ${nearestPlaceText}` : '',
+      plainText: `${ACCESSIBILITY_FACTOR_LABELS[type] || type.replaceAll('_', ' ')} scores ${score.toFixed(1)}/100. ${nearestPoiName ? `Nearest named place: ${nearestPlaceText}.` : `The nearest result is ${distanceText}.`} ${count} found in the selected range.`,
       impact: getImpactText(score, 'Accessibility'),
       lines: [
         convenienceHint,
       ],
       details: [
-        `Nearest place: ${distanceText}`,
+        `Nearest place: ${nearestPlaceText}`,
         `Availability: ${count} found, target ${target}`,
         `Distance score: ${distanceScore.toFixed(1)}/100`,
         `Availability score: ${countScore.toFixed(1)}/100`,
@@ -554,6 +578,12 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
   const transportDetails = safety?.transportComfortDetails || {}
   const transportModes = joinList(transportDetails.modes || [], 4)
   const transportTagCoverage = transportDetails.tagCoverage || {}
+  const nearestTransportStop = transportDetails.nearestStop || null
+  const nearestTransportStopName = validPlaceName(nearestTransportStop?.name)
+  const nearestTransportStopDistance = formatDistanceMeters(nearestTransportStop?.distanceMeters)
+  const nearestTransportStopText = nearestTransportStopName
+    ? `${nearestTransportStopName}${nearestTransportStopDistance ? ` (${nearestTransportStopDistance} away)` : ''}`
+    : ''
   const zoneCount = Number(safety?.zoningDetails?.zoneCount)
   const zoneMix = (safety?.zoningDetails?.zoneMix || [])
     .map((zone) => `${zone.label} (${zone.count})`)
@@ -668,8 +698,9 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
       score: transportComfortScore,
       met: transportComfortScore >= 60,
       summary: Number.isFinite(transportComfortScore) ? `${transportComfortScore}/100` : 'Unavailable',
+      preview: nearestTransportStopText ? `Nearby stop: ${nearestTransportStopText}` : '',
       plainText: Number.isFinite(transportComfortScore)
-        ? `Public transport stop comfort scores ${transportComfortScore}/100 using nearby stops and mapped amenities such as lighting, shelters, benches, wheelchair access and tactile paving.`
+        ? `Public transport stop comfort scores ${transportComfortScore}/100 using nearby stops and mapped amenities such as lighting, shelters, benches, wheelchair access and tactile paving.${nearestTransportStopText ? ` A nearby stop assessed is ${nearestTransportStopText}.` : ''}`
         : 'Public transport stop comfort data is unavailable for this area.',
       impact: getImpactText(transportComfortScore, 'Safety'),
       lines: [
@@ -688,6 +719,7 @@ function buildIndicatorMapFromBreakdown(breakdown = {}, rangeMinutes = 20) {
           : 'No transport modes were returned for this area.',
       ],
       details: [
+        nearestTransportStopText ? `Nearby public transport: ${nearestTransportStopText}` : 'Nearby public transport: Unavailable',
         `Lighting coverage: ${formatSharePercent(transportTagCoverage.lit)}`,
         `Shelter coverage: ${formatSharePercent(transportTagCoverage.shelter)}`,
         `Bench coverage: ${formatSharePercent(transportTagCoverage.bench)}`,
@@ -1014,6 +1046,11 @@ function IndicatorCard({ factor, color, soft, border }) {
           <p style={{ fontSize: 14, color: '#4b5563', marginTop: 4, lineHeight: 1.4 }}>
             Score {scoreText}
           </p>
+          {factor.preview ? (
+            <p style={{ fontSize: 13, color: '#64748b', marginTop: 4, lineHeight: 1.35 }}>
+              {factor.preview}
+            </p>
+          ) : null}
         </div>
         <span style={{ fontSize: 22, fontWeight: 800, color: isMet ? color : '#9ca3af', flexShrink: 0, lineHeight: 1 }} aria-hidden="true">
           {open ? '▴' : '▾'}
@@ -1613,6 +1650,139 @@ function CensusContextSection({ data, loading, userProfile, indicators }) {
 
 // ── Similar Suburbs ─────────────────────────────────────────────────────────
 
+function CouncilLinksSection({ data, loading }) {
+  const links = data?.links || []
+
+  return (
+    <div style={{
+      background: '#fff',
+      border: '1.5px solid #e5e7eb',
+      borderRadius: 20,
+      overflow: 'hidden',
+      marginBottom: 28,
+      boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
+    }} role="region" aria-label="Council plans and development sources">
+      <div style={{
+        background: 'linear-gradient(90deg, #12312c, #1f4e45)',
+        padding: '18px 24px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 16,
+      }}>
+        <div>
+          <p style={{ fontSize: 11, fontWeight: 900, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.65)', marginBottom: 4 }}>
+            Official sources
+          </p>
+          <h2 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 24, fontWeight: 400, color: '#fff', margin: 0 }}>
+            Council plans and development links
+          </h2>
+        </div>
+        {data?.lgaName && (
+          <span style={{
+            flexShrink: 0,
+            background: 'rgba(255,255,255,0.12)',
+            border: '1px solid rgba(255,255,255,0.24)',
+            borderRadius: 999,
+            padding: '6px 12px',
+            color: '#fff',
+            fontSize: 12,
+            fontWeight: 800,
+          }}>
+            {data.lgaName}
+          </span>
+        )}
+      </div>
+
+      <div style={{ padding: '22px 24px' }}>
+        {loading ? (
+          <LinearProgress sx={{ borderRadius: 2, height: 5, bgcolor: '#ccfbf1', '& .MuiLinearProgress-bar': { bgcolor: '#0f766e' } }} />
+        ) : links.length > 0 ? (
+          <>
+            {data?.available ? (
+              <p style={{ fontSize: 15, color: '#334155', lineHeight: 1.65, marginBottom: 16 }}>
+                Use these official council and Victorian Government sources to check projects, planning controls,
+                permits, strategies and long-term local plans for this area.
+              </p>
+            ) : (
+              <div style={{
+                background: '#f8fafc',
+                border: '1px solid #e5e7eb',
+                borderRadius: 14,
+                padding: '14px 16px',
+                marginBottom: 16,
+              }}>
+                <p style={{ fontSize: 15, color: '#475569', lineHeight: 1.65 }}>
+                  {data?.message || 'Council-specific links are not available for this area yet. Victorian planning sources are still available below.'}
+                </p>
+              </div>
+            )}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 14 }}>
+              {links.map((item) => (
+                <a
+                  key={`${item.key}-${item.url}`}
+                  href={item.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    display: 'block',
+                    textDecoration: 'none',
+                    color: 'inherit',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: 14,
+                    padding: '16px 18px',
+                    background: '#fff',
+                    minHeight: 145,
+                    transition: 'border-color 0.16s, box-shadow 0.16s, transform 0.16s',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.borderColor = '#0f766e'
+                    e.currentTarget.style.boxShadow = '0 8px 24px rgba(15,118,110,0.1)'
+                    e.currentTarget.style.transform = 'translateY(-2px)'
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.borderColor = '#e5e7eb'
+                    e.currentTarget.style.boxShadow = 'none'
+                    e.currentTarget.style.transform = 'none'
+                  }}
+                >
+                  <p style={{ fontSize: 11, fontWeight: 900, letterSpacing: '0.09em', textTransform: 'uppercase', color: '#0f766e', marginBottom: 7 }}>
+                    {item.source}
+                  </p>
+                  <p style={{ fontSize: 16, fontWeight: 900, color: '#0f172a', lineHeight: 1.3, marginBottom: 8 }}>
+                    {item.title}
+                  </p>
+                  <p style={{ fontSize: 13, color: '#475569', lineHeight: 1.55, marginBottom: 12 }}>
+                    {item.description}
+                  </p>
+                  <span style={{ fontSize: 13, color: '#0f766e', fontWeight: 900 }}>
+                    Open official source
+                  </span>
+                </a>
+              ))}
+            </div>
+            <p style={{ marginTop: 16, fontSize: 13, color: '#64748b', lineHeight: 1.55 }}>
+              These links are curated source pages, not a prediction or summary of future developments.
+              Confirm property-specific details through official planning registers.
+            </p>
+          </>
+        ) : (
+          <div style={{
+            background: '#f8fafc',
+            border: '1px solid #e5e7eb',
+            borderRadius: 14,
+            padding: '16px 18px',
+          }}>
+            <p style={{ fontSize: 15, color: '#475569', lineHeight: 1.65 }}>
+              {data?.message || 'Council-specific links are not available for this area yet.'}
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 const MELBOURNE_SUBURB_POOL = [
   { name: 'Fitzroy',        baseDist: 1.2, lat: -37.7963, lng: 144.9778 },
   { name: 'Collingwood',    baseDist: 1.5, lat: -37.8041, lng: 144.9848 },
@@ -1832,6 +2002,8 @@ export default function InsightsPage() {
   const [loading, setLoading] = useState(true)
   const [censusLoading, setCensusLoading] = useState(true)
   const [censusData, setCensusData] = useState(null)
+  const [councilLinksLoading, setCouncilLinksLoading] = useState(true)
+  const [councilLinksData, setCouncilLinksData] = useState(null)
   const [heroBarReady, setHeroBarReady] = useState(false)
   const [selectedBreakdownCategory, setSelectedBreakdownCategory] = useState(null)
   const [heroCompareAdded, setHeroCompareAdded] = useState(null) // 'added' | 'duplicate' | 'full' | null
@@ -1851,6 +2023,7 @@ export default function InsightsPage() {
       if (!cancelled) {
         setLoading(true)
         setCensusLoading(true)
+        setCouncilLinksLoading(true)
       }
     })
 
@@ -1867,21 +2040,31 @@ export default function InsightsPage() {
         message: 'Census information could not be loaded for this location.',
       }
     })
+    const councilLinksP = getCouncilLinksForLocation(selectedLocation).catch((err) => {
+      console.error('Council links load error:', err)
+      return {
+        available: false,
+        message: 'Council planning links could not be loaded for this location.',
+        links: [],
+      }
+    })
 
-    Promise.all([scoreP, censusP])
-      .then(([scoreData, censusProfile]) => {
+    Promise.all([scoreP, censusP, councilLinksP])
+      .then(([scoreData, censusProfile, councilLinks]) => {
         if (cancelled) return
         setOverallScore(scoreData.liveabilityScore)
         setScores(scoreData.scores || null)
         setScoreWeights(scoreData.weights || null)
         setIndicators(buildIndicatorMapFromBreakdown(scoreData.breakdown || {}, rangeMinutes))
         setCensusData(censusProfile)
+        setCouncilLinksData(councilLinks)
       })
       .catch(console.error)
       .finally(() => {
         if (!cancelled) {
           setLoading(false)
           setCensusLoading(false)
+          setCouncilLinksLoading(false)
         }
       })
 
@@ -2230,6 +2413,8 @@ export default function InsightsPage() {
         {/* Indicator breakdown moved inside each category card above ↑ */}
 
         <CensusContextSection data={censusData} loading={censusLoading} userProfile={profile} indicators={indicators} />
+
+        <CouncilLinksSection data={councilLinksData} loading={councilLinksLoading} />
 
         {/* Interpretation */}
         {!loading && scores && (

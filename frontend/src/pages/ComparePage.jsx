@@ -206,8 +206,10 @@ function buildScoreFactors(scoreData) {
 
   const accessibility = Object.entries(accessibilityBreakdown).map(([key, item]) => ({
     category: 'Accessibility',
+    key,
     name: ACCESSIBILITY_FACTOR_LABELS[key] || key.replaceAll('_', ' '),
     score: Number(item?.score),
+    nearestPoi: item?.nearestPoi || null,
   }))
 
   const safety = Object.entries(SAFETY_FACTOR_LABELS).map(([key, name]) => ({
@@ -238,6 +240,70 @@ function findScoreFactor(scoreData, namePart) {
   )
 }
 
+function getNearestAccessibilityPoi(scoreData, type) {
+  return scoreData?.breakdown?.accessibility?.breakdown?.[type]?.nearestPoi || null
+}
+
+function validPoiName(poi) {
+  const name = String(poi?.name || '').trim()
+  if (!name || name.toLowerCase() === 'unknown') return ''
+  return name
+}
+
+function formatDistanceKm(value) {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return ''
+  if (n < 1) return `${Math.round(n * 1000)} m`
+  return `${Math.round(n * 10) / 10} km`
+}
+
+function nearestPoiPhrase(scoreData, type) {
+  const poi = getNearestAccessibilityPoi(scoreData, type)
+  const name = validPoiName(poi)
+  if (!name) return ''
+
+  const distance = formatDistanceKm(poi.distanceKm)
+  return distance ? `${name} about ${distance} away` : name
+}
+
+function nearestParkPhrase(scoreData) {
+  return nearestPoiPhrase(scoreData, 'park') || 'nearby park options'
+}
+
+function parkFocusPhrase(scoreData) {
+  const nearestPark = getNearestAccessibilityPoi(scoreData, 'park')
+  const name = validPoiName(nearestPark)
+  if (!name) return 'nearby parks'
+  return name
+}
+
+function poiCardDetail(factor) {
+  const name = validPoiName(factor?.nearestPoi)
+  if (!name) return ''
+
+  const distance = formatDistanceKm(factor.nearestPoi.distanceKm)
+  return distance ? `${name} - ${distance} away` : name
+}
+
+function joinTextParts(parts) {
+  const clean = parts.filter(Boolean)
+  if (clean.length <= 1) return clean[0] || ''
+  if (clean.length === 2) return `${clean[0]} and ${clean[1]}`
+  return `${clean.slice(0, -1).join(', ')} and ${clean[clean.length - 1]}`
+}
+
+function nearbySignalsSentence(scoreData, items) {
+  const phrases = items
+    .map(({ type, label }) => {
+      const phrase = nearestPoiPhrase(scoreData, type)
+      return phrase ? `${label}: ${phrase}` : ''
+    })
+    .filter(Boolean)
+
+  if (!phrases.length) return ''
+  return ` Nearby named options include ${joinTextParts(phrases)}.`
+}
+
 function describeFactor(factor, fallbackLabel) {
   if (!factor) return `${fallbackLabel} unavailable`
   return factorPhrase(factor)
@@ -257,6 +323,7 @@ function buildSituationScoreCard(factor, fallbackLabel) {
     label: factor?.name || fallbackLabel,
     value: Number.isFinite(Number(factor?.score)) ? `${Math.round(Number(factor.score))}/100` : 'Unavailable',
     status: scoreStatus(factor?.score),
+    detail: poiCardDetail(factor),
   }
 }
 
@@ -275,7 +342,12 @@ function buildSituationInsightSummary({ scoreData, censusData, profile }) {
   }
 
   if (profile?.familyWithChildren) {
-    const text = `For a family household, the useful checks are ${describeFactor(findScoreFactor(scoreData, 'school'), 'school access')}, ${describeFactor(findScoreFactor(scoreData, 'park'), 'park access')} and ${describeFactor(findScoreFactor(scoreData, 'crime'), 'crime context')}. Census context adds that ${formatComparePercent(censusProfile.familyHouseholdsPct)} of households are family households, ${formatComparePercent(censusProfile.age0To14Pct)} of residents are aged 0-14 and the average household size is ${censusProfile.averageHouseholdSize ?? 'Unavailable'}.`
+    const nearbyText = nearbySignalsSentence(scoreData, [
+      { type: 'school', label: 'school' },
+      { type: 'bus_stop', label: 'bus stop' },
+      { type: 'train_station', label: 'train station' },
+    ])
+    const text = `For a family household, the useful local checks are ${describeFactor(findScoreFactor(scoreData, 'school'), 'school access')}, ${describeFactor(findScoreFactor(scoreData, 'bus stop'), 'bus stop coverage')} and ${describeFactor(findScoreFactor(scoreData, 'train'), 'train station access')}.${nearbyText} Census context adds that ${formatComparePercent(censusProfile.familyHouseholdsPct)} of households are family households, ${formatComparePercent(censusProfile.age0To14Pct)} of residents are aged 0-14 and the average household size is ${censusProfile.averageHouseholdSize ?? 'Unavailable'}.`
     return {
       label: 'Relevant for families',
       text,
@@ -288,14 +360,19 @@ function buildSituationInsightSummary({ scoreData, censusData, profile }) {
       ],
       scoreCards: [
         buildSituationScoreCard(findScoreFactor(scoreData, 'school'), 'School access'),
-        buildSituationScoreCard(findScoreFactor(scoreData, 'park'), 'Park access'),
-        buildSituationScoreCard(findScoreFactor(scoreData, 'crime'), 'Crime context'),
+        buildSituationScoreCard(findScoreFactor(scoreData, 'bus stop'), 'Bus stop coverage'),
+        buildSituationScoreCard(findScoreFactor(scoreData, 'train'), 'Train station access'),
       ],
     }
   }
 
   if (profile?.elderly) {
-    const text = `For an older resident, the useful checks are ${describeFactor(findScoreFactor(scoreData, 'hospital'), 'hospital access')}, ${describeFactor(findScoreFactor(scoreData, 'bus stop'), 'bus stop coverage')} and ${describeFactor(findScoreFactor(scoreData, 'train'), 'train station access')}. Census context adds that ${formatComparePercent(censusProfile.age65PlusPct)} of residents are aged 65+, ${formatComparePercent(censusProfile.needForAssistancePct)} report needing assistance, ${formatComparePercent(censusProfile.lonePersonHouseholdsPct)} of households are lone-person households and ${formatComparePercent(censusProfile.noCarHouseholdsPct)} have no car.`
+    const nearbyText = nearbySignalsSentence(scoreData, [
+      { type: 'hospital', label: 'hospital' },
+      { type: 'bus_stop', label: 'bus stop' },
+      { type: 'train_station', label: 'train station' },
+    ])
+    const text = `For an older resident, the useful checks are ${describeFactor(findScoreFactor(scoreData, 'hospital'), 'hospital access')}, ${describeFactor(findScoreFactor(scoreData, 'bus stop'), 'bus stop coverage')} and ${describeFactor(findScoreFactor(scoreData, 'train'), 'train station access')}.${nearbyText} Census context adds that ${formatComparePercent(censusProfile.age65PlusPct)} of residents are aged 65+, ${formatComparePercent(censusProfile.needForAssistancePct)} report needing assistance, ${formatComparePercent(censusProfile.lonePersonHouseholdsPct)} of households are lone-person households and ${formatComparePercent(censusProfile.noCarHouseholdsPct)} have no car.`
     return {
       label: 'Relevant for older residents',
       text,
@@ -316,30 +393,16 @@ function buildSituationInsightSummary({ scoreData, censusData, profile }) {
   }
 
   if (profile?.petOwner) {
-    const hasHousingContext = censusData?.available && (
-      censusProfile.rentersPct != null ||
-      censusProfile.ownerOccupiedPct != null ||
-      censusProfile.averageHouseholdSize != null
-    )
-    const text = hasHousingContext
-      ? `For a pet owner, the useful checks are ${describeFactor(findScoreFactor(scoreData, 'park'), 'park access')}, ${describeFactor(findScoreFactor(scoreData, 'green'), 'green coverage')} and local housing flexibility. Census context adds that ${formatComparePercent(censusProfile.rentersPct)} of households rent, ${formatComparePercent(censusProfile.ownerOccupiedPct)} are owner-occupied and the average household size is ${censusProfile.averageHouseholdSize ?? 'Unavailable'}.`
-      : `For a pet owner, the useful checks are ${describeFactor(findScoreFactor(scoreData, 'park'), 'park access')}, ${describeFactor(findScoreFactor(scoreData, 'green'), 'green coverage')} and local housing flexibility. Census housing context is unavailable for this location.`
+    const text = `For a pet owner, the useful checks are ${describeFactor(findScoreFactor(scoreData, 'park'), 'park access')} and ${describeFactor(findScoreFactor(scoreData, 'bus stop'), 'public transport access')}. The closest park signal is ${nearestParkPhrase(scoreData)}. Housing and ownership context stays in the Census cards below.`
     return {
       label: 'Relevant for pet owners',
       text,
       panelTitle: 'Pet owner context',
-      panelText: hasHousingContext
-        ? `${formatComparePercent(censusProfile.rentersPct)} of households rent, ${formatComparePercent(censusProfile.ownerOccupiedPct)} are owner-occupied and average household size is ${censusProfile.averageHouseholdSize ?? 'Unavailable'}.`
-        : 'Census housing context is unavailable for this location.',
-      stats: [
-        { label: 'Renters', value: formatComparePercent(censusProfile.rentersPct) },
-        { label: 'Owner-occupied', value: formatComparePercent(censusProfile.ownerOccupiedPct) },
-        { label: 'Household size', value: censusProfile.averageHouseholdSize ?? 'Unavailable' },
-      ],
+      panelText: `Focus on parks like ${parkFocusPhrase(scoreData)} and practical everyday access when comparing pet-friendly routines.`,
+      stats: [],
       scoreCards: [
         buildSituationScoreCard(findScoreFactor(scoreData, 'park'), 'Park access'),
-        buildSituationScoreCard(findScoreFactor(scoreData, 'green'), 'Green coverage'),
-        buildSituationScoreCard(findScoreFactor(scoreData, 'supermarket'), 'Supermarket access'),
+        buildSituationScoreCard(findScoreFactor(scoreData, 'bus stop'), 'Public transport access'),
       ],
     }
   }
@@ -349,22 +412,16 @@ function buildSituationInsightSummary({ scoreData, censusData, profile }) {
     .filter((item) => Number.isFinite(item.score))
     .sort((a, b) => b.score - a.score)[0]
 
-  const text = `For a general lifestyle comparison, ${strongestCategory ? `${strongestCategory.label.toLowerCase()} is the strongest score signal (${Math.round(strongestCategory.score)}/100). ` : ''}The Census context is also important: median age is ${censusProfile.medianAge ?? 'Unavailable'}, ${formatComparePercent(censusProfile.rentersPct)} of households rent and ${formatComparePercent(censusProfile.publicTransportToWorkPct)} of workers use public transport to work.`
+  const text = strongestCategory
+    ? `For a general lifestyle comparison, ${strongestCategory.label.toLowerCase()} is the strongest score signal (${Math.round(strongestCategory.score)}/100). Use the Census snapshot below for age, housing and transport context.`
+    : 'For a general lifestyle comparison, use the Census snapshot below for age, housing and transport context.'
   return {
     label: 'Lifestyle context',
     text,
-    panelTitle: 'General context',
-    panelText: `Median age is ${censusProfile.medianAge ?? 'Unavailable'}, ${formatComparePercent(censusProfile.rentersPct)} of households rent and ${formatComparePercent(censusProfile.publicTransportToWorkPct)} of workers use public transport to work.`,
-    stats: [
-      { label: 'Median age', value: censusProfile.medianAge ?? 'Unavailable' },
-      { label: 'Renters', value: formatComparePercent(censusProfile.rentersPct) },
-      { label: 'Public transport to work', value: formatComparePercent(censusProfile.publicTransportToWorkPct) },
-    ],
-    scoreCards: [
-      buildSituationScoreCard(findScoreFactor(scoreData, 'bus stop'), 'Bus stop coverage'),
-      buildSituationScoreCard(findScoreFactor(scoreData, 'crime'), 'Crime context'),
-      buildSituationScoreCard(findScoreFactor(scoreData, 'air quality'), 'Air quality'),
-    ],
+    panelTitle: '',
+    panelText: '',
+    stats: [],
+    scoreCards: [],
   }
 }
 
@@ -579,6 +636,11 @@ function CompareScoreCardGrid({ cards }) {
           <p style={{ fontSize: 12, fontWeight: 800, color: '#1e40af' }}>
             {card.status}
           </p>
+          {card.detail && (
+            <p style={{ fontSize: 11, fontWeight: 700, color: '#475569', lineHeight: 1.35, marginTop: 5 }}>
+              {card.detail}
+            </p>
+          )}
         </div>
       ))}
     </div>
@@ -610,6 +672,13 @@ function CompareInsightCell({ insight }) {
     )
   }
 
+  const hasSituationPanel = Boolean(
+    insight.situation?.panelTitle ||
+    insight.situation?.panelText ||
+    insight.situation?.stats?.length ||
+    insight.situation?.scoreCards?.length
+  )
+
   return (
     <div style={{ display: 'grid', gap: 14 }}>
       <div style={{
@@ -627,22 +696,28 @@ function CompareInsightCell({ insight }) {
         </p>
       </div>
 
-      <div style={{
-        background: '#eff6ff',
-        border: '1px solid #bfdbfe',
-        borderLeft: '4px solid #2563eb',
-        borderRadius: 12,
-        padding: '14px 16px',
-      }}>
-        <p style={{ fontSize: 11, fontWeight: 900, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#1d4ed8', marginBottom: 8 }}>
-          {insight.situation.panelTitle}
-        </p>
-        <p style={{ fontSize: 13, lineHeight: 1.55, color: '#1e3a8a', margin: 0, fontWeight: 700 }}>
-          {insight.situation.panelText}
-        </p>
-        <CompareStatGrid stats={insight.situation.stats} />
-        <CompareScoreCardGrid cards={insight.situation.scoreCards} />
-      </div>
+      {hasSituationPanel && (
+        <div style={{
+          background: '#eff6ff',
+          border: '1px solid #bfdbfe',
+          borderLeft: '4px solid #2563eb',
+          borderRadius: 12,
+          padding: '14px 16px',
+        }}>
+          {insight.situation.panelTitle && (
+            <p style={{ fontSize: 11, fontWeight: 900, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#1d4ed8', marginBottom: 8 }}>
+              {insight.situation.panelTitle}
+            </p>
+          )}
+          {insight.situation.panelText && (
+            <p style={{ fontSize: 13, lineHeight: 1.55, color: '#1e3a8a', margin: 0, fontWeight: 700 }}>
+              {insight.situation.panelText}
+            </p>
+          )}
+          <CompareStatGrid stats={insight.situation.stats} />
+          <CompareScoreCardGrid cards={insight.situation.scoreCards} />
+        </div>
+      )}
 
       <CompareStatGrid stats={insight.census.stats} columns="repeat(auto-fit, minmax(120px, 1fr))" />
 

@@ -310,6 +310,42 @@ async function getSuburbForPoint(lat, lng) {
   return result.rows[0]?.suburb || null;
 }
 
+async function getNearestCensusProfileForPoint(lat, lng) {
+  const sql = `
+    select
+      l.locality as matched_suburb,
+      l.sa2_name_2021,
+      null::numeric as overlap_area_pct,
+      'nearest-postcode-locality'::text as confidence,
+      sqrt(
+        power((l.lat::numeric - $1::numeric) * 111.32, 2) +
+        power((l.lng::numeric - $2::numeric) * 111.32 * cos(radians($1::numeric)), 2)
+      ) as distance_km,
+      p.*
+    from public.postcode_locality_lookup l
+    join public.census_sa2_profile_valid p
+      on p.sa2_code_2021 = l.sa2_code_2021
+    where l.lat is not null
+      and l.lng is not null
+      and l.sa2_code_2021 is not null
+      and trim(l.sa2_code_2021::text) <> ''
+    order by
+      power((l.lat::numeric - $1::numeric), 2) +
+      power((l.lng::numeric - $2::numeric), 2) asc
+    limit 1;
+  `;
+
+  const result = await pool.query(sql, [lat, lng]);
+  const row = result.rows[0];
+  const distanceKm = toNumber(row?.distance_km);
+
+  if (!row || distanceKm === null || distanceKm > 8) {
+    return null;
+  }
+
+  return row;
+}
+
 async function getCensusByLocation({ lat, lng }) {
   const safeLat = Number(lat);
   const safeLng = Number(lng);
@@ -318,22 +354,25 @@ async function getCensusByLocation({ lat, lng }) {
     throw new Error('Valid latitude and longitude are required');
   }
 
+  const requestedValue = `${safeLat},${safeLng}`;
   const suburb = await getSuburbForPoint(safeLat, safeLng);
 
   if (!suburb) {
-    return {
-      available: false,
-      requestedType: 'location',
-      requestedValue: `${safeLat},${safeLng}`,
-      message: 'Could not match this point to a supported suburb.',
-    };
+    const nearest = await getNearestCensusProfileForPoint(safeLat, safeLng);
+    return shapeResult(nearest, 'location', requestedValue, 'nearest-postcode-locality');
   }
 
   const result = await getCensusBySuburb(suburb);
+
+  if (!result.available) {
+    const nearest = await getNearestCensusProfileForPoint(safeLat, safeLng);
+    return shapeResult(nearest, 'location', requestedValue, 'nearest-postcode-locality');
+  }
+
   return {
     ...result,
     requestedType: 'location',
-    requestedValue: `${safeLat},${safeLng}`,
+    requestedValue,
     matchedBy: 'address-point-to-suburb-to-sa2',
   };
 }
