@@ -317,6 +317,7 @@ async function getTransportComfortScoreWithinRadius({ lat, lng, radiusMeters }) 
 
     nearby_transport AS (
       SELECT
+        to_jsonb(t) AS props,
         t.mode,
         t.lit,
         t.shelter,
@@ -344,7 +345,24 @@ async function getTransportComfortScoreWithinRadius({ lat, lng, radiusMeters }) 
       AVG(CASE WHEN covered = 'yes' THEN 1.0 WHEN covered = 'no' THEN 0.0 ELSE NULL END) AS covered_share,
       AVG(CASE WHEN wheelchair = 'yes' THEN 1.0 WHEN wheelchair = 'no' THEN 0.0 ELSE NULL END) AS wheelchair_share,
       AVG(CASE WHEN tactile_paving = 'yes' THEN 1.0 WHEN tactile_paving = 'no' THEN 0.0 ELSE NULL END) AS tactile_paving_share,
-      ARRAY_AGG(DISTINCT mode ORDER BY mode) FILTER (WHERE mode IS NOT NULL) AS modes
+      ARRAY_AGG(DISTINCT mode ORDER BY mode) FILTER (WHERE mode IS NOT NULL) AS modes,
+      (ARRAY_AGG(
+        json_build_object(
+          'name',
+          COALESCE(
+            NULLIF(props->>'name', ''),
+            NULLIF(props->>'stop_name', ''),
+            NULLIF(props->>'public_transport', ''),
+            NULLIF(props->>'ref', ''),
+            CONCAT(INITCAP(COALESCE(mode, 'transport')), ' stop')
+          ),
+          'mode',
+          mode,
+          'distanceMeters',
+          distance_m
+        )
+        ORDER BY distance_m ASC
+      ))[1] AS nearest_stop
     FROM nearby_transport;
   `;
 
@@ -383,7 +401,16 @@ async function getTransportComfortScoreWithinRadius({ lat, lng, radiusMeters }) 
           ? round2(Number(row.tactile_paving_share))
           : null
       },
-      modes: row.modes || []
+      modes: row.modes || [],
+      nearestStop: row.nearest_stop
+        ? {
+            name: row.nearest_stop.name || null,
+            mode: row.nearest_stop.mode || null,
+            distanceMeters: row.nearest_stop.distanceMeters != null
+              ? round2(Number(row.nearest_stop.distanceMeters))
+              : null
+          }
+        : null
     };
   } catch (error) {
     if (isMissingTableError(error)) {
@@ -396,6 +423,7 @@ async function getTransportComfortScoreWithinRadius({ lat, lng, radiusMeters }) 
         averageWeight: null,
         tagCoverage: {},
         modes: [],
+        nearestStop: null,
         message: 'Transport comfort scoring table unavailable'
       };
     }
@@ -613,7 +641,8 @@ async function getSafetyScore({ lat, lng, time = 20, persona = 'default' }) {
       comfortDensity: transportComfortResult.comfortDensity,
       averageWeight: transportComfortResult.averageWeight,
       tagCoverage: transportComfortResult.tagCoverage,
-      modes: transportComfortResult.modes
+      modes: transportComfortResult.modes,
+      nearestStop: transportComfortResult.nearestStop
     },
 
     zoningDetails: {

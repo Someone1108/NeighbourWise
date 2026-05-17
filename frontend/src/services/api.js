@@ -519,6 +519,14 @@ export async function getCensusProfileForLocation(selectedLocation) {
     selectedLocation.postcode ||
     String(selectedLocation.fullAddress || selectedLocation.displayName || selectedLocation.name || '').match(/\b\d{4}\b/)?.[0] ||
     null
+  const lat = Number(selectedLocation.lat)
+  const lng = Number(selectedLocation.lng)
+
+  if (Number.isFinite(lat) && Number.isFinite(lng)) {
+    return fetchCachedJson(
+      `${API_BASE_URL}/api/census/location?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}`
+    )
+  }
 
   if (placeType === 'suburb' || placeType === 'locality') {
     if (!name) throw new Error('Suburb name is required')
@@ -533,16 +541,23 @@ export async function getCensusProfileForLocation(selectedLocation) {
     return fetchCachedJson(`${API_BASE_URL}/api/census/postcode/${encodeURIComponent(postcode)}`)
   }
 
+  throw new Error('Valid lat/lng are required for Census location lookup')
+}
+
+export async function getCouncilLinksForLocation(selectedLocation) {
+  if (!selectedLocation) {
+    throw new Error('Selected location is required')
+  }
+
+  const params = new URLSearchParams()
   const lat = Number(selectedLocation.lat)
   const lng = Number(selectedLocation.lng)
 
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-    throw new Error('Valid lat/lng are required for Census location lookup')
-  }
+  if (Number.isFinite(lat)) params.set('lat', String(lat))
+  if (Number.isFinite(lng)) params.set('lng', String(lng))
+  if (selectedLocation.lgaName) params.set('lgaName', selectedLocation.lgaName)
 
-  return fetchCachedJson(
-    `${API_BASE_URL}/api/census/location?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}`
-  )
+  return fetchCachedJson(`${API_BASE_URL}/api/council-links?${params.toString()}`)
 }
 
 export async function prefetchInsightPageData({ selectedLocation, rangeMinutes, profile }) {

@@ -78,6 +78,21 @@ function calculateCountScore(count, target) {
 }
 
 // 單一指標分數
+function buildNearestPoi(pois) {
+  const nearest = pois
+    .filter((poi) => Number.isFinite(Number(poi.distanceKm)))
+    .sort((a, b) => Number(a.distanceKm) - Number(b.distanceKm))[0];
+
+  if (!nearest) return null;
+
+  return {
+    name: nearest.name || null,
+    address: nearest.address || '',
+    distanceKm: Number(Number(nearest.distanceKm).toFixed(2)),
+    type: nearest.type || null
+  };
+}
+
 function calculateIndicatorScore({
   nearestDistanceKm,
   count,
@@ -131,10 +146,11 @@ const getAccessibilityScore = async ({
     const pois = allPois.filter((p) => p.type === type);
 
     const count = pois.length;
+    const nearestPoi = buildNearestPoi(pois);
 
     const nearestDistanceKm =
-      pois.length > 0
-        ? Math.min(...pois.map((p) => p.distanceKm))
+      nearestPoi
+        ? nearestPoi.distanceKm
         : null;
 
     const target = TARGET_COUNT_MAP[type] || 3;
@@ -156,7 +172,8 @@ const getAccessibilityScore = async ({
     breakdown[type] = {
       score: Number(score.toFixed(2)),
       count,
-      nearestDistanceKm
+      nearestDistanceKm,
+      nearestPoi
     };
   }
 
