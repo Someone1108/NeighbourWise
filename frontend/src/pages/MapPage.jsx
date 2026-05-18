@@ -5,6 +5,7 @@ import NeighbourMap from "../components/NeighbourMap.jsx";
 import Button from "../components/buttons/Button.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import Toast from "../components/Toast.jsx";
+import CompareReplaceModal from "../components/CompareReplaceModal.jsx";
 import {
   getMapContext,
   getLocalityPolygon,
@@ -16,6 +17,8 @@ import {
 } from "../services/api.js";
 import {
   addToCompareList,
+  replaceCompareArea,
+  loadCompareList,
   loadContext,
   saveContext
 } from "../utils/storage.js";
@@ -65,6 +68,7 @@ export default function MapPage() {
   const [useSuburbBoundary, setUseSuburbBoundary] = useState(false);
   const [toastMsg, setToastMsg] = useState("");
   const [toastAction, setToastAction] = useState(null);
+  const [replaceModal, setReplaceModal] = useState(null);
   const [scoreData, setScoreData] = useState(null);
 
   const context = useMemo(() => {
@@ -331,8 +335,12 @@ export default function MapPage() {
                   return;
                 }
                 if (result.reason === "COMPARE_FULL") {
-                  setToastMsg("Your compare list is full.");
-                  setToastAction({ label: "Go to Compare", onClick: () => navigate("/compare") });
+                  setToastMsg("");
+                  setToastAction(null);
+                  setReplaceModal({
+                    pendingItem: compareItem,
+                    currentList: result.current || result.list || loadCompareList()
+                  });
                   return;
                 }
                 if (result.success) {
@@ -586,6 +594,19 @@ export default function MapPage() {
         </aside>
       </div>
 
+      {replaceModal && (
+        <CompareReplaceModal
+          pendingItem={replaceModal.pendingItem}
+          currentList={replaceModal.currentList}
+          onReplace={(index) => {
+            replaceCompareArea(index, replaceModal.pendingItem);
+            setReplaceModal(null);
+            setToastMsg("Compare area replaced.");
+            setToastAction(null);
+          }}
+          onClose={() => setReplaceModal(null)}
+        />
+      )}
 
       <Toast
         message={toastMsg}

@@ -47,6 +47,26 @@ const HOW_TO_STEPS = [
 
 const SCROLL_DURATION_MS = 2200
 
+function getSearchResultKey(item) {
+  return String(item?.displayName || item?.fullAddress || item?.name || '')
+    .toLowerCase()
+    .replace(/[.,]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function getSearchResultLabel(item) {
+  return item?.displayName || item?.fullAddress || item?.name || 'Unknown location'
+}
+
+function getSearchResultMeta(item) {
+  if (item?.suburb) {
+    return `${item.suburb}${item.postcode ? `, ${item.postcode}` : ''}`
+  }
+
+  return item?.state || item?.placeType || item?.type || 'Location'
+}
+
 export default function HomePage() {
   const navigate = useNavigate()
 
@@ -96,10 +116,9 @@ export default function HomePage() {
 
     const words = query.toLowerCase().split(/\s+/).filter(Boolean)
 
-    function dedupeAndFilter(arr) {
-      const seen = new Set()
+    function dedupeAndFilter(arr, seen = new Set()) {
       return arr.filter((item) => {
-        const label = (item.displayName || item.fullAddress || item.name || '').toLowerCase()
+        const label = getSearchResultKey(item)
         const placeType = item.placeType || item.type || ''
         const suburbName = String(item.name || item.displayName || '').trim().toLowerCase()
         const isSuburb = placeType === 'suburb' || placeType === 'locality'
@@ -108,9 +127,8 @@ export default function HomePage() {
           !isSuburb ||
           !hasCoverageList ||
           supportedSuburbs.some((name) => name.toLowerCase() === suburbName)
-        const key = label
-        if (seen.has(key)) return false
-        seen.add(key)
+        if (!label || seen.has(label)) return false
+        seen.add(label)
         return isSupportedSuburb && words.every((w) => label.includes(w))
       })
     }
@@ -150,8 +168,9 @@ export default function HomePage() {
               ? results[1].value
               : []
 
-          setSuburbResults(dedupeAndFilter(localities))
-          setAddressResults(dedupeAndFilter(addresses))
+          const seen = new Set()
+          setSuburbResults(dedupeAndFilter(localities, seen))
+          setAddressResults(dedupeAndFilter(addresses, seen))
         })
         .catch((err) => {
           console.error('Search fetch failed:', err)
@@ -316,7 +335,8 @@ export default function HomePage() {
     requestAnimationFrame(animateScroll)
   }
 
-  const hasResults = suburbResults.length > 0 || addressResults.length > 0
+  const searchResults = [...suburbResults, ...addressResults]
+  const hasResults = searchResults.length > 0
 
   return (
     <>
@@ -561,46 +581,20 @@ export default function HomePage() {
                   role="listbox"
                   aria-label="Search results"
                 >
-                {suburbResults.length > 0 && (
-                  <>
-                    <div className="search-dropdown-group-label" aria-hidden="true">Suburbs</div>
-                    {suburbResults.map((item, i) => (
-                      <div
-                        key={`suburb-${i}`}
-                        className="search-dropdown-item"
-                        role="option"
-                        aria-selected={selectedLocation?.displayName === (item.displayName || item.name)}
-                        tabIndex={0}
-                        onClick={() => onSelectLocation(item)}
-                        onKeyDown={(e) => e.key === 'Enter' && onSelectLocation(item)}
-                      >
-                        {item.displayName || item.name}
-                      </div>
-                    ))}
-                  </>
-                )}
-
-                {addressResults.length > 0 && (
-                  <>
-                    {suburbResults.length > 0 && (
-                      <div className="search-dropdown-group-divider" aria-hidden="true" />
-                    )}
-                    <div className="search-dropdown-group-label" aria-hidden="true">Addresses</div>
-                    {addressResults.map((item, i) => (
-                      <div
-                        key={`address-${i}`}
-                        className="search-dropdown-item"
-                        role="option"
-                        aria-selected={selectedLocation?.fullAddress === (item.fullAddress || item.name)}
-                        tabIndex={0}
-                        onClick={() => onSelectLocation(item)}
-                        onKeyDown={(e) => e.key === 'Enter' && onSelectLocation(item)}
-                      >
-                        {item.displayName || item.fullAddress || item.name}
-                      </div>
-                    ))}
-                  </>
-                )}
+                {searchResults.map((item, i) => (
+                  <div
+                    key={`result-${item.id || getSearchResultKey(item) || i}`}
+                    className="search-dropdown-item"
+                    role="option"
+                    aria-selected={getSearchResultKey(selectedLocation) === getSearchResultKey(item)}
+                    tabIndex={0}
+                    onClick={() => onSelectLocation(item)}
+                    onKeyDown={(e) => e.key === 'Enter' && onSelectLocation(item)}
+                  >
+                    <div>{getSearchResultLabel(item)}</div>
+                    <div className="search-dropdown-item-meta">{getSearchResultMeta(item)}</div>
+                  </div>
+                ))}
                 </div>
               )}
             </div>
