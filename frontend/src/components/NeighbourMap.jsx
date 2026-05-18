@@ -689,7 +689,7 @@ export default function NeighbourMap({
               lineHeight: 1.45
             }}
           >
-            Click at any point on the map to view the heat level of that area.
+            Higher values mean stronger heat exposure. Click the map for a local reading.
           </div>
         </div>
       ) : null}
@@ -727,7 +727,7 @@ export default function NeighbourMap({
               lineHeight: 1.45
             }}
           >
-            Click on the map to view the vegetation cover percentage in that area.
+            Higher percentages mean more greenery. Click the map for local cover.
           </div>
         </div>
       ) : null}
