@@ -1999,13 +1999,14 @@ function SimilarSuburbs({
       )}
 
       {!loading && !error && visibleSuburbs.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
+        <div className="nwSimilarSuburbsGrid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14 }}>
           {visibleSuburbs.map((s) => {
             const sb = getScoreBand(s.score)
             const inList = compareNames.has(String(s.name).toLowerCase())
 
             return (
               <div
+                className="nwSimilarSuburbCard"
                 key={`${s.name}-${s.lat}-${s.lng}`}
                 style={{
                   background: '#fff',
@@ -2015,6 +2016,7 @@ function SimilarSuburbs({
                   display: 'flex',
                   alignItems: 'center',
                   gap: 16,
+                  minWidth: 0,
                   transition: 'box-shadow 0.2s, transform 0.2s',
                 }}
                 onMouseEnter={e => {
@@ -2080,7 +2082,7 @@ function SimilarSuburbs({
                     </p>
                   )}
 
-                  <div style={{ display: 'flex', gap: 8 }}>
+                  <div className="nwSimilarSuburbActions" style={{ display: 'flex', gap: 8 }}>
                     <button
                       onClick={() => {
                         if (!inList) handleAddToCompare(s)

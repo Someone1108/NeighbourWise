@@ -311,7 +311,7 @@ body {
   background: rgba(245, 240, 235, 0.78);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
-  z-index: 2000;
+  z-index: 1100;
   border-radius: inherit;
   /* Block clicks reaching the content behind */
   cursor: progress;
@@ -320,6 +320,7 @@ body {
 .nwLoadingOverlay--fixed {
   position: fixed;
   inset: 64px 0 0 0; /* leave nav bar visible */
+  z-index: 1900;
 }
 
 .nwLoadingOverlay__text {
@@ -563,6 +564,8 @@ body {
   flex: 1 1 auto;
   min-width: 0;
   position: relative;
+  overflow: hidden;
+  border-radius: 24px;
 }
 
 .nwMapRight {
@@ -2354,6 +2357,21 @@ body {
   outline-offset: 2px;
 }
 
+/* InsightsPage recommendations */
+.nwSimilarSuburbsGrid {
+  width: 100%;
+  min-width: 0;
+}
+
+.nwSimilarSuburbCard,
+.nwSimilarSuburbCard > div {
+  min-width: 0;
+}
+
+.nwSimilarSuburbActions {
+  flex-wrap: wrap;
+}
+
 @media (max-width: 1100px) {
   .nwCompareTopGrid {
     grid-template-columns: 1fr;
@@ -2369,6 +2387,29 @@ body {
 }
 
 @media (max-width: 640px) {
+  .nwSimilarSuburbsGrid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .nwSimilarSuburbCard {
+    width: 100%;
+    box-sizing: border-box;
+    align-items: flex-start !important;
+    padding: 14px !important;
+  }
+
+  .nwSimilarSuburbActions {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px !important;
+  }
+
+  .nwSimilarSuburbActions button {
+    width: 100%;
+    box-sizing: border-box;
+    text-align: center;
+  }
+
   .nwMapHeader {
     display: flex !important;
     align-items: flex-start !important;
