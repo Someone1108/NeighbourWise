@@ -23,7 +23,6 @@ async function sendCensusResponse(res, work) {
     return res.status(500).json({
       available: false,
       error: 'Failed to load Census profile',
-      message: error.message,
     });
   }
 }

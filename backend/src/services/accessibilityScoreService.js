@@ -1,8 +1,8 @@
-//(A) Accessibility score
+// (A) Accessibility score
 const { fetchPoiInsights } = require('./insightService');
 const { MAX_DISTANCE_MAP } = require('../utils/distanceConfig');
 
-// 🎯 每種 POI 的理想數量
+// Ideal target count for each POI type
 const TARGET_COUNT_MAP = {
   bus_stop: 8,
   train_station: 1,
@@ -13,7 +13,7 @@ const TARGET_COUNT_MAP = {
   dog_park: 1
 };
 
-// 🎯 distance vs count 權重
+// Distance vs count weights
 const INDICATOR_WEIGHT_CONFIG = {
   bus_stop: { distance: 0.3, count: 0.7 },
   train_station: { distance: 0.8, count: 0.2 },
@@ -24,7 +24,7 @@ const INDICATOR_WEIGHT_CONFIG = {
   dog_park: { distance: 0.3, count: 0.7 }
 };
 
-// 🎯 persona 權重（Accessibility內）
+// Persona-based weights within Accessibility
 const ACCESSIBILITY_WEIGHTS = {
   default: {
     bus_stop: 0.2,
@@ -64,20 +64,20 @@ const ACCESSIBILITY_WEIGHTS = {
   }
 };
 
-// ---------- 基本計算 ----------
+// ---------- Basic calculations ----------
 
-// 距離分數（越近越高）
+// Distance score: closer POIs receive higher scores
 function calculateDistanceScore(nearestDistanceKm, maxDistanceKm) {
   if (nearestDistanceKm == null || nearestDistanceKm > maxDistanceKm) return 0;
   return 100 * (1 - nearestDistanceKm / maxDistanceKm);
 }
 
-// 數量分數（達標就滿分）
+// Count score: full score is given once the target count is reached
 function calculateCountScore(count, target) {
   return 100 * Math.min(count / target, 1);
 }
 
-// 單一指標分數
+// Build the nearest POI object for a single indicator
 function buildNearestPoi(pois) {
   const nearest = pois
     .filter((poi) => Number.isFinite(Number(poi.distanceKm)))
@@ -110,7 +110,7 @@ function calculateIndicatorScore({
   return distanceScore * distanceWeight + countScore * countWeight;
 }
 
-// ---------- 主功能 ----------
+// ---------- Main function ----------
 
 const getAccessibilityScore = async ({
   lat,
@@ -120,7 +120,7 @@ const getAccessibilityScore = async ({
   sequentialPois = false,
   requestDelayMs = 0
 }) => {
-  // 🔥 注意：這裡要轉成 km（因為你的 insight 是 distanceKm）
+  // Convert meters to kilometers because POI insights use distanceKm
   const maxDistanceMeters = MAX_DISTANCE_MAP[time];
   const maxDistanceKm = maxDistanceMeters / 1000;
 
@@ -130,7 +130,7 @@ const getAccessibilityScore = async ({
   let totalScore = 0;
   const breakdown = {};
 
-  // 🔥 一次拿全部 POI（你現在的架構）
+  // Fetch all POIs in one request based on the current architecture
   const response = await fetchPoiInsights({
     lat,
     lng,
@@ -188,8 +188,3 @@ const getAccessibilityScore = async ({
 module.exports = {
   getAccessibilityScore
 };
-
-
-
-
-

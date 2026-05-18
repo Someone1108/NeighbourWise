@@ -4,38 +4,38 @@ const CENSUS_YEAR = 2021;
 
 function toNumber(value) {
   if (value === null || value === undefined || value === '') return null;
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue : null;
 }
 
 function round(value, digits = 1) {
-  const n = toNumber(value);
-  if (n === null) return null;
+  const numericValue = toNumber(value);
+  if (numericValue === null) return null;
   const factor = 10 ** digits;
-  return Math.round(n * factor) / factor;
+  return Math.round(numericValue * factor) / factor;
 }
 
 function formatPct(value) {
-  const n = round(value, 1);
-  return n === null ? null : `${n}%`;
+  const percentValue = round(value, 1);
+  return percentValue === null ? null : `${percentValue}%`;
 }
 
 function formatSafePct(value) {
-  const n = round(value, 1);
-  if (n === null || n < 0 || n > 100) return null;
-  return `${n}%`;
+  const percentValue = round(value, 1);
+  if (percentValue === null || percentValue < 0 || percentValue > 100) return null;
+  return `${percentValue}%`;
 }
 
 function formatCurrency(value, suffix = '') {
-  const n = toNumber(value);
-  if (n === null) return null;
-  return `$${Math.round(n).toLocaleString('en-AU')}${suffix}`;
+  const numericValue = toNumber(value);
+  if (numericValue === null) return null;
+  return `$${Math.round(numericValue).toLocaleString('en-AU')}${suffix}`;
 }
 
 function weeklyToMonthly(value) {
-  const n = toNumber(value);
-  if (n === null) return null;
-  return (n * 365) / 7 / 12;
+  const weeklyValue = toNumber(value);
+  if (weeklyValue === null) return null;
+  return (weeklyValue * 365) / 7 / 12;
 }
 
 function normalizePlaceName(value) {

@@ -15,9 +15,9 @@ import elderlyIcon from '../assets/elderly.png'
 import petIcon from '../assets/pet.png'
 
 const PROFILES = [
-  { key: 'familyWithChildren', title: 'Family', icon: familyIcon, desc: 'Schools, parks & safe streets' },
-  { key: 'elderly', title: 'Elderly', icon: elderlyIcon, desc: 'Healthcare, quiet & accessible' },
-  { key: 'petOwner', title: 'Pet Owner', icon: petIcon, desc: 'Dog parks & off-leash areas' },
+  { key: 'familyWithChildren', title: 'Family', icon: familyIcon, desc: 'Prioritises schools, parks & child safety' },
+  { key: 'elderly', title: 'Elderly', icon: elderlyIcon, desc: 'Prioritises healthcare, quiet streets & accessibility' },
+  { key: 'petOwner', title: 'Pet Owner', icon: petIcon, desc: 'Prioritises parks, open space & walkability' },
 ]
 
 const VALUE_PROPS = [
@@ -40,7 +40,7 @@ const VALUE_PROPS = [
 
 const HOW_TO_STEPS = [
   { step: '1', label: 'Search', desc: 'Type a suburb name or street address in Melbourne.' },
-  { step: '2', label: 'Choose your profile', desc: 'Tell us your situation — family, elderly, or pet owner — so scores reflect what matters to you.' },
+  { step: '2', label: 'Choose your profile', desc: 'Tell us your situation (family, elderly, or pet owner) so scores reflect what matters to you.' },
   { step: '3', label: 'Explore', desc: 'See the liveability map, detailed scores, and nearby places of interest.' },
   { step: '4', label: 'Compare', desc: 'Add areas to your compare list to weigh up two suburbs side by side.' },
 ]
@@ -62,6 +62,7 @@ export default function HomePage() {
   const [coverageMapData, setCoverageMapData] = useState(null)
   const [coverageMapLoading, setCoverageMapLoading] = useState(true)
   const [coverageMapError, setCoverageMapError] = useState('')
+  const [suburbsLoading, setSuburbsLoading] = useState(true)
 
   const [profile, setProfile] = useState({
     familyWithChildren: false,
@@ -172,6 +173,7 @@ export default function HomePage() {
 
     async function loadCoverageSuburbs() {
       try {
+        setSuburbsLoading(true)
         const data = await getCoverageSuburbs()
         if (!cancelled) {
           setSupportedSuburbs(Array.isArray(data?.suburbs) ? data.suburbs : [])
@@ -181,6 +183,8 @@ export default function HomePage() {
         if (!cancelled) {
           setSupportedSuburbs([])
         }
+      } finally {
+        if (!cancelled) setSuburbsLoading(false)
       }
     }
 
@@ -279,9 +283,9 @@ export default function HomePage() {
     }
 
     setError('')
-    const ctx = { selectedLocation, profile, rangeMinutes: 20 }
-    saveContext(ctx)
-    navigate('/map', { state: ctx })
+    const nextContext = { selectedLocation, profile, rangeMinutes: 20 }
+    saveContext(nextContext)
+    navigate('/map', { state: nextContext })
   }
 
   function scrollToSearch() {
@@ -534,14 +538,20 @@ export default function HomePage() {
                   id="home-search-input"
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
-                  placeholder="e.g. Richmond, 3076, or 45 Chapel St"
+                  placeholder={suburbsLoading ? 'Loading suburbs...' : 'e.g. Richmond, 3076, or 45 Chapel St'}
+                  disabled={suburbsLoading}
                   aria-autocomplete="list"
                   aria-expanded={hasResults}
                   aria-controls={hasResults ? 'home-search-results' : undefined}
                   aria-describedby={error ? 'home-search-error' : undefined}
+                  aria-busy={suburbsLoading}
                   autoComplete="off"
+                  style={suburbsLoading ? { opacity: 0.7, cursor: 'not-allowed' } : undefined}
                 />
-                <span className="search-icon" aria-hidden="true">⌕</span>
+                {suburbsLoading
+                  ? <span className="nwSearchSpinner" aria-label="Loading suburbs" style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)' }} />
+                  : <span className="search-icon" aria-hidden="true">⌕</span>
+                }
               </div>
 
               {hasResults && (
@@ -606,9 +616,11 @@ export default function HomePage() {
             </div>
 
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6, marginBottom: 0 }}>
-              <p className="profile-label" id="profile-label" style={{ margin: 0 }}>Your situation</p>
-              <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>
-                No match? Skip this and explore anyway.
+              <p className="profile-label" id="profile-label" style={{ margin: 0 }}>
+                Who are you searching for? <span style={{ fontWeight: 400, fontSize: 13, color: '#9ca3af' }}>(optional)</span>
+              </p>
+              <p style={{ fontSize: 13, color: '#6b7280', margin: 0 }}>
+                Scores will adjust to match your priorities.
               </p>
             </div>
 

@@ -33,6 +33,7 @@ export default function ChangeConditionsModal({ rangeMinutes, profile, onSave, o
     [10, 20, 30].includes(Number(rangeMinutes)) ? Number(rangeMinutes) : 20
   )
   const [situation, setSituation] = useState(profileToKey(profile))
+  const [saving, setSaving] = useState(false)
 
   // Escape key + body scroll lock
   useEffect(() => {
@@ -46,11 +47,16 @@ export default function ChangeConditionsModal({ rangeMinutes, profile, onSave, o
   }, [onClose])
 
   function handleSave() {
+    if (saving) return
+    setSaving(true)
     const sitObj = SITUATIONS.find(s => s.key === situation)
-    onSave({
-      rangeMinutes: range,
-      profile: sitObj?.profile ?? {},
-    })
+    // Brief delay so user sees the loading state before page navigates away
+    setTimeout(() => {
+      onSave({
+        rangeMinutes: range,
+        profile: sitObj?.profile ?? {},
+      })
+    }, 80)
   }
 
   const orangeGrad = 'linear-gradient(135deg, #f59648 0%, #f47c20 52%, #e06818 100%)'
@@ -111,23 +117,34 @@ export default function ChangeConditionsModal({ rangeMinutes, profile, onSave, o
             <div style={{ display: 'flex', gap: 8 }}>
               {RANGES.map(r => {
                 const active = r === range
+                const isLoading = active && saving
                 return (
                   <button
                     key={r}
-                    onClick={() => setRange(r)}
+                    onClick={() => { if (!saving) setRange(r) }}
+                    disabled={saving}
                     style={{
-                      all: 'unset', cursor: 'pointer', flex: 1, textAlign: 'center',
+                      all: 'unset', cursor: saving ? 'default' : 'pointer', flex: 1, textAlign: 'center',
                       padding: '10px 0', borderRadius: 10, fontFamily: 'Figtree, sans-serif',
                       fontSize: 14, fontWeight: 700,
                       border: active ? 'none' : '1.5px solid #e5e7eb',
                       background: active ? orangeGrad : '#f9fafb',
-                      color: active ? '#fff' : '#374151',
+                      color: active ? '#fff' : saving ? '#9ca3af' : '#374151',
                       boxShadow: active ? '0 3px 10px rgba(244,124,32,0.3)' : 'none',
                       transition: 'all 0.15s',
+                      opacity: saving && !active ? 0.5 : 1,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                     }}
-                    onMouseEnter={e => { if (!active) e.currentTarget.style.borderColor = '#f47c20' }}
-                    onMouseLeave={e => { if (!active) e.currentTarget.style.borderColor = '#e5e7eb' }}
+                    onMouseEnter={e => { if (!active && !saving) e.currentTarget.style.borderColor = '#f47c20' }}
+                    onMouseLeave={e => { if (!active && !saving) e.currentTarget.style.borderColor = '#e5e7eb' }}
                   >
+                    {isLoading && (
+                      <span style={{
+                        display: 'inline-block', width: 12, height: 12,
+                        border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff',
+                        borderRadius: '50%', animation: 'nwSpin 0.7s linear infinite',
+                      }} aria-hidden="true" />
+                    )}
                     {r} min
                   </button>
                 )
@@ -195,18 +212,27 @@ export default function ChangeConditionsModal({ rangeMinutes, profile, onSave, o
           </button>
           <button
             onClick={handleSave}
+            disabled={saving}
             style={{
-              all: 'unset', cursor: 'pointer', flex: 2, textAlign: 'center',
+              all: 'unset', cursor: saving ? 'default' : 'pointer', flex: 2, textAlign: 'center',
               padding: '12px 0', borderRadius: 10, fontFamily: 'Figtree, sans-serif',
               fontSize: 14, fontWeight: 800, color: '#fff',
               background: orangeGrad,
               boxShadow: '0 3px 10px rgba(244,124,32,0.35)',
               transition: 'opacity 0.15s',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
             }}
-            onMouseEnter={e => { e.currentTarget.style.opacity = '0.88' }}
+            onMouseEnter={e => { if (!saving) e.currentTarget.style.opacity = '0.88' }}
             onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}
           >
-            Save & Apply
+            {saving && (
+              <span style={{
+                display: 'inline-block', width: 14, height: 14,
+                border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff',
+                borderRadius: '50%', animation: 'nwSpin 0.7s linear infinite',
+              }} aria-hidden="true" />
+            )}
+            {saving ? 'Applying...' : 'Save & Apply'}
           </button>
         </div>
       </div>

@@ -4,7 +4,7 @@ const pool = require('../utils/db');
  * Calculate distance between two coordinates in km
  */
 function calculateDistanceKm(lat1, lng1, lat2, lng2) {
-  const R = 6371;
+  const earthRadiusKm = 6371;
 
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLng = (lng2 - lng1) * Math.PI / 180;
@@ -17,7 +17,7 @@ function calculateDistanceKm(lat1, lng1, lat2, lng2) {
 
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
-  return R * c;
+  return earthRadiusKm * c;
 }
 
 /**
@@ -284,27 +284,6 @@ async function findInsightRecommendations(input) {
 
 /**
  * Compare Recommendation
- * (You will implement later)
- */
-async function findCompareRecommendations(input) {
-  return {
-    type: 'compare',
-    input,
-    recommendations: []
-  };
-}
-
-module.exports = {
-  findInsightRecommendations,
-  findCompareRecommendations
-};
-
-
-
-// Compare Page Recommendation
-
-/**
- * Compare Recommendation
  * Upgrade recommendation
  */
 async function findCompareRecommendations(input) {
@@ -414,7 +393,7 @@ async function findCompareRecommendations(input) {
         'accessibility',
         'safety',
         'environment'
-      ].filter((c) => c !== category);
+      ].filter((categoryKey) => categoryKey !== category);
 
       for (const otherCategory of otherCategories) {
         if (
@@ -455,19 +434,19 @@ async function findCompareRecommendations(input) {
         'accessibility',
         'safety',
         'environment'
-      ].filter((c) => c !== category);
+      ].filter((categoryKey) => categoryKey !== category);
 
       let stabilityTotal = 0;
 
       for (const otherCategory of otherCategories) {
-        const diff =
+        const scoreDifference =
           Math.abs(
             candidateScores[otherCategory] -
             benchmarkScores[otherCategory]
           );
 
         stabilityTotal +=
-          Math.max(0, 100 - diff);
+          Math.max(0, 100 - scoreDifference);
       }
 
       const stabilityScore =
