@@ -5,6 +5,7 @@ import NeighbourMap from "../components/NeighbourMap.jsx";
 import Button from "../components/buttons/Button.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import Toast from "../components/Toast.jsx";
+import CompareReplaceModal from "../components/CompareReplaceModal.jsx";
 import {
   getMapContext,
   getLocalityPolygon,
@@ -12,10 +13,15 @@ import {
   getLayerDataForSuburb,
   getLayerDataForAddress,
   getLiveabilityScore,
-  prefetchInsightPageData
+  prefetchInsightPageData,
+  searchAddresses,
+  searchLocalities,
+  validateSearchInput
 } from "../services/api.js";
 import {
   addToCompareList,
+  replaceCompareArea,
+  loadCompareList,
   loadContext,
   saveContext
 } from "../utils/storage.js";
@@ -49,6 +55,26 @@ function getProfileLabel(profile) {
   return null;
 }
 
+function getSearchResultKey(item) {
+  return String(item?.displayName || item?.fullAddress || item?.name || "")
+    .toLowerCase()
+    .replace(/[.,]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getSearchResultLabel(item) {
+  return item?.displayName || item?.fullAddress || item?.name || "Unknown location";
+}
+
+function getSearchResultMeta(item) {
+  if (item?.suburb) {
+    return `${item.suburb}${item.postcode ? `, ${item.postcode}` : ""}`;
+  }
+
+  return item?.state || item?.placeType || item?.type || "Location";
+}
+
 export default function MapPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -65,7 +91,12 @@ export default function MapPage() {
   const [useSuburbBoundary, setUseSuburbBoundary] = useState(false);
   const [toastMsg, setToastMsg] = useState("");
   const [toastAction, setToastAction] = useState(null);
+  const [replaceModal, setReplaceModal] = useState(null);
   const [scoreData, setScoreData] = useState(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState("");
 
   const context = useMemo(() => {
     const stateCtx = location.state;
@@ -96,6 +127,93 @@ export default function MapPage() {
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, []);
+
+  useEffect(() => {
+    const query = searchTerm.trim();
+
+    if (query.length < 3 && !/^\d{4}$/.test(query)) {
+      setSearchResults([]);
+      setSearching(false);
+      return;
+    }
+
+    const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+    let cancelled = false;
+    setSearching(true);
+
+    const timer = window.setTimeout(() => {
+      const postcodeOnly = /^\d{4}$/.test(query);
+      const searchPromise = postcodeOnly
+        ? searchAddresses(query).then((rows) => [rows, []])
+        : Promise.allSettled([searchLocalities(query), searchAddresses(query)]).then((results) => [
+            results[0].status === "fulfilled" && Array.isArray(results[0].value)
+              ? results[0].value
+              : [],
+            results[1].status === "fulfilled" && Array.isArray(results[1].value)
+              ? results[1].value
+              : []
+          ]);
+
+      searchPromise
+        .then(([localities, addresses]) => {
+          if (cancelled) return;
+          const seen = new Set();
+          const combined = [...localities, ...addresses].filter((item) => {
+            const key = getSearchResultKey(item);
+            if (!key || seen.has(key)) return false;
+            seen.add(key);
+            return words.every((word) => key.includes(word));
+          });
+          setSearchResults(combined);
+        })
+        .catch((err) => {
+          console.error("Map search failed:", err);
+          if (!cancelled) {
+            setSearchResults([]);
+            setSearchError("Search failed. Please try again.");
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setSearching(false);
+        });
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [searchTerm]);
+
+  function handleSearchSelect(nextLocation) {
+    const nextContext = {
+      selectedLocation: nextLocation,
+      profile,
+      rangeMinutes
+    };
+
+    setSearchTerm("");
+    setSearchResults([]);
+    setSearchError("");
+    saveContext(nextContext);
+    navigate("/map", { state: nextContext, replace: true });
+  }
+
+  function handleSearchSubmit(event) {
+    event.preventDefault();
+    const validation = validateSearchInput(searchTerm);
+
+    if (!validation.ok) {
+      setSearchError(validation.message);
+      return;
+    }
+
+    if (searchResults.length === 1) {
+      handleSearchSelect(searchResults[0]);
+      return;
+    }
+
+    setSearchError("Choose an area from the search results.");
+  }
 
   useEffect(() => {
     if (!context || !selectedLocation || !profile) {
@@ -241,26 +359,87 @@ export default function MapPage() {
   return (
     <div className="nwPage">
       <div
+        className="nwMapHeader"
         style={{
           display: "flex",
-          alignItems: "baseline",
+          alignItems: "center",
           flexWrap: "wrap",
-          gap: "0 12px",
+          gap: "12px 18px",
           marginBottom: 18
         }}
       >
-        <h1 className="nwPageTitle" style={{ marginBottom: 0 }}>
-          {String(locationName || "Neighbourhood Map")}
-        </h1>
-        <span
-          style={{
-            fontSize: 15,
-            color: "var(--muted-dark)",
-            fontWeight: 500
-          }}
-        >
-          Liveability Map
-        </span>
+        <div className="nwMapTitleGroup">
+          <h1 className="nwPageTitle" style={{ marginBottom: 0 }}>
+            {String(locationName || "Neighbourhood Map")}
+          </h1>
+          <span
+            style={{
+              fontSize: 15,
+              color: "var(--muted-dark)",
+              fontWeight: 500
+            }}
+          >
+            Liveability Map
+          </span>
+        </div>
+
+        <section className="nwMapSearchCard" aria-label="Explore another area">
+          <form className="nwMapSearchForm" onSubmit={handleSearchSubmit}>
+            <div className="nwMapSearchInputWrap">
+              <input
+                id="map-search-input"
+                value={searchTerm}
+                onChange={(event) => {
+                  setSearchTerm(event.target.value);
+                  setSearchError("");
+                }}
+                placeholder="Search another suburb, postcode, or address"
+                autoComplete="off"
+                aria-autocomplete="list"
+                aria-expanded={searchResults.length > 0}
+                aria-controls={searchResults.length > 0 ? "map-search-results" : undefined}
+                aria-describedby={searchError ? "map-search-error" : undefined}
+              />
+              <button type="submit" aria-label="Search another area">
+                ⌕
+              </button>
+            </div>
+          </form>
+
+          {searching && (
+            <div className="nwMapSearchStatus" aria-live="polite">
+              Searching...
+            </div>
+          )}
+
+          {searchResults.length > 0 && (
+            <div
+              id="map-search-results"
+              className="nwMapSearchResults"
+              role="listbox"
+              aria-label="Map search results"
+            >
+              {searchResults.map((item, index) => (
+                <button
+                  key={`${item.id || getSearchResultKey(item)}-${index}`}
+                  type="button"
+                  role="option"
+                  aria-selected="false"
+                  onClick={() => handleSearchSelect(item)}
+                >
+                  <span>{getSearchResultLabel(item)}</span>
+                  <small>{getSearchResultMeta(item)}</small>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {searchError && (
+            <p id="map-search-error" className="nwMapSearchError" role="alert">
+              {searchError}
+            </p>
+          )}
+        </section>
       </div>
 
       <div className="nwMapLayout nwMapLayoutPolished">
@@ -331,8 +510,12 @@ export default function MapPage() {
                   return;
                 }
                 if (result.reason === "COMPARE_FULL") {
-                  setToastMsg("Your compare list is full.");
-                  setToastAction({ label: "Go to Compare", onClick: () => navigate("/compare") });
+                  setToastMsg("");
+                  setToastAction(null);
+                  setReplaceModal({
+                    pendingItem: compareItem,
+                    currentList: result.current || result.list || loadCompareList()
+                  });
                   return;
                 }
                 if (result.success) {
@@ -586,6 +769,19 @@ export default function MapPage() {
         </aside>
       </div>
 
+      {replaceModal && (
+        <CompareReplaceModal
+          pendingItem={replaceModal.pendingItem}
+          currentList={replaceModal.currentList}
+          onReplace={(index) => {
+            replaceCompareArea(index, replaceModal.pendingItem);
+            setReplaceModal(null);
+            setToastMsg("Compare area replaced.");
+            setToastAction(null);
+          }}
+          onClose={() => setReplaceModal(null)}
+        />
+      )}
 
       <Toast
         message={toastMsg}
