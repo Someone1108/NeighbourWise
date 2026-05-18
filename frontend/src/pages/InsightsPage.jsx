@@ -2,9 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { LinearProgress } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
-import { addToCompareList, loadCompareList, getCompareUpdatedEventName, loadContext, saveContext } from '../utils/storage.js'
+import { addToCompareList, replaceCompareArea, loadCompareList, getCompareUpdatedEventName, loadContext, saveContext } from '../utils/storage.js'
 import LoadingOverlay from '../components/LoadingOverlay.jsx'
 import ChangeConditionsModal from '../components/ChangeConditionsModal.jsx'
+import CompareReplaceModal from '../components/CompareReplaceModal.jsx'
 import Toast from '../components/Toast.jsx'
 import {
   getCensusProfileForLocation,
@@ -1806,6 +1807,7 @@ function SimilarSuburbs({
   const navigate = useNavigate()
   const [toastMsg, setToastMsg] = useState(null)
   const [toastAction, setToastAction] = useState(null)
+  const [replaceModal, setReplaceModal] = useState(null)
 
   function showToast(message, action = null) {
     setToastMsg(message)
@@ -1884,9 +1886,10 @@ function SimilarSuburbs({
     }
 
     if (result?.reason === 'COMPARE_FULL') {
-      showToast('Your compare list is full.', {
-        label: 'Go to Compare',
-        onClick: () => navigate('/compare'),
+      clearToast()
+      setReplaceModal({
+        pendingItem: item,
+        currentList: result.current || result.list || loadCompareList(),
       })
       return
     }
@@ -1929,6 +1932,19 @@ function SimilarSuburbs({
   return (
     <div style={{ marginBottom: 28 }}>
       <Toast message={toastMsg} onClose={clearToast} action={toastAction} duration={toastAction ? 0 : 2500} />
+      {replaceModal && (
+        <CompareReplaceModal
+          pendingItem={replaceModal.pendingItem}
+          currentList={replaceModal.currentList}
+          onReplace={(index) => {
+            replaceCompareArea(index, replaceModal.pendingItem)
+            setReplaceModal(null)
+            setCompareList(loadCompareList())
+            showToast('Compare area replaced.')
+          }}
+          onClose={() => setReplaceModal(null)}
+        />
+      )}
       <div style={{ marginBottom: 14 }}>
         <p style={{ fontSize: 10, fontWeight: 900, letterSpacing: '0.16em', textTransform: 'uppercase', color: '#9ca3af', marginBottom: 5 }}>
           Similar Suburbs
@@ -2139,6 +2155,7 @@ export default function InsightsPage() {
   const [selectedBreakdownCategory, setSelectedBreakdownCategory] = useState(null)
   const [heroToastMsg, setHeroToastMsg] = useState(null)
   const [heroToastAction, setHeroToastAction] = useState(null)
+  const [heroReplaceModal, setHeroReplaceModal] = useState(null)
   const [showConditionsModal, setShowConditionsModal] = useState(false)
   const [recommendations, setRecommendations] = useState([])
   const [recommendationsLoading, setRecommendationsLoading] = useState(true)
@@ -2582,8 +2599,12 @@ export default function InsightsPage() {
                           setHeroToastMsg('Already in your compare list.')
                           setHeroToastAction(null)
                         } else if (result?.reason === 'COMPARE_FULL') {
-                          setHeroToastMsg('Your compare list is full.')
-                          setHeroToastAction({ label: 'Go to Compare', onClick: () => navigate('/compare') })
+                          setHeroToastMsg(null)
+                          setHeroToastAction(null)
+                          setHeroReplaceModal({
+                            pendingItem: item,
+                            currentList: result.current || result.list || loadCompareList(),
+                          })
                         } else {
                           setHeroToastMsg('Added to compare list.')
                           setHeroToastAction(null)
@@ -2690,7 +2711,7 @@ export default function InsightsPage() {
                     onMouseEnter={e => { e.currentTarget.style.background = c.soft }}
                     onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
                   >
-                    See Breakdown ↗
+                    See Score Breakdown ↗
                   </button>
                 )}
               </div>
@@ -2795,6 +2816,20 @@ export default function InsightsPage() {
             setShowConditionsModal(false)
           }}
           onClose={() => setShowConditionsModal(false)}
+        />
+      )}
+
+      {heroReplaceModal && (
+        <CompareReplaceModal
+          pendingItem={heroReplaceModal.pendingItem}
+          currentList={heroReplaceModal.currentList}
+          onReplace={(index) => {
+            replaceCompareArea(index, heroReplaceModal.pendingItem)
+            setHeroReplaceModal(null)
+            setHeroToastMsg('Compare area replaced.')
+            setHeroToastAction(null)
+          }}
+          onClose={() => setHeroReplaceModal(null)}
         />
       )}
 
