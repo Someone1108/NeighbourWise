@@ -3966,10 +3966,11 @@ body {
 }
 
 .vp-example-link {
+  display: inline-block;
   background: none;
   border: none;
   padding: 0;
-  cursor: pointer;
+  cursor: default;
   font-size: 13px;
   font-weight: 600;
   color: var(--accent);
@@ -3994,8 +3995,7 @@ body {
   text-align: left;
 }
 
-.vp-example-wrap:hover .vp-score-tooltip,
-.vp-score-tooltip.is-open {
+.vp-example-wrap:hover .vp-score-tooltip {
   opacity: 1;
   pointer-events: auto;
   transform: translateX(-50%) translateY(0);

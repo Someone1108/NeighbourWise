@@ -76,7 +76,6 @@ export default function HomePage() {
   const [addressResults, setAddressResults] = useState([])
   const [selectedLocation, setSelectedLocation] = useState(null)
   const [showCoverageModal, setShowCoverageModal] = useState(false)
-  const [showScorePreview, setShowScorePreview] = useState(false)
   const [supportedSuburbs, setSupportedSuburbs] = useState([])
 
   const [coverageMapData, setCoverageMapData] = useState(null)
@@ -407,14 +406,10 @@ export default function HomePage() {
                 <p>{vp.desc}</p>
                 {i === 0 && (
                   <div className="vp-example-wrap">
-                    <button
-                      type="button"
-                      className="vp-example-link"
-                      onClick={() => setShowScorePreview(v => !v)}
-                    >
+                    <span className="vp-example-link">
                       See example →
-                    </button>
-                    <div className={`vp-score-tooltip${showScorePreview ? ' is-open' : ''}`} aria-hidden="true">
+                    </span>
+                    <div className="vp-score-tooltip" aria-hidden="true">
                       <div className="nwCard nwScorePreviewCard">
                         <div className="nwScoreHeader">
                           <div className="nwScoreHeaderTop">
