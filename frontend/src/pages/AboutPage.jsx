@@ -1,6 +1,3 @@
-import { useEffect, useState } from 'react'
-import { getCoverageSuburbs } from '../services/api.js'
-
 const SCORE_CATEGORIES = [
   {
     icon: '🚌',
@@ -85,22 +82,6 @@ const METHODOLOGY_ROWS = [
 ]
 
 export default function AboutPage() {
-  const [suburbCount, setSuburbCount] = useState(null)
-
-  useEffect(() => {
-    let cancelled = false
-    getCoverageSuburbs()
-      .then(data => {
-        if (cancelled) return
-        const count = Array.isArray(data?.suburbs) ? data.suburbs.length : null
-        setSuburbCount(count)
-      })
-      .catch(() => {})
-    return () => { cancelled = true }
-  }, [])
-
-  const suburbLabel = suburbCount !== null ? `${suburbCount} suburbs` : '127+ suburbs'
-
   return (
     <div className="nwPage nwAboutPage">
       {/* ── BANNER ── */}
@@ -118,7 +99,7 @@ export default function AboutPage() {
           </p>
 
           <ul className="nwAboutBannerStats" aria-label="At a glance">
-            <li className="nwAboutBannerStat">{suburbLabel}</li>
+            <li className="nwAboutBannerStat">497 suburbs</li>
             <li className="nwAboutBannerStat">3 scoring categories</li>
             <li className="nwAboutBannerStat">15 open data sources</li>
             <li className="nwAboutBannerStat">Personalised profiles</li>
