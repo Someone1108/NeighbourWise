@@ -578,7 +578,7 @@ export async function getCompareRecommendation({
   time,
   persona,
 }) {
-  const res = await fetch(`${API_BASE_URL}/api/recommendations/compare`, {
+  return fetchJson(`${API_BASE_URL}/api/recommendations/compare`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -592,14 +592,6 @@ export async function getCompareRecommendation({
       persona,
     }),
   })
-
-  if (!res.ok) {
-    const errorText = await res.text()
-    console.error('Compare recommendation API error:', errorText)
-    throw new Error('Failed to load compare recommendation')
-  }
-
-  return res.json()
 }
 
 
@@ -626,11 +618,5 @@ export async function getInsightRecommendations({
     params.set('persona', typeof persona === 'string' ? persona : JSON.stringify(persona))
   }
 
-  const res = await fetch(`${API_BASE_URL}/api/recommendations/insight?${params.toString()}`)
-
-  if (!res.ok) {
-    throw new Error('Failed to fetch insight recommendations')
-  }
-
-  return res.json()
+  return fetchJson(`${API_BASE_URL}/api/recommendations/insight?${params.toString()}`)
 }
