@@ -21,7 +21,7 @@ function getLabel(item) {
   )
 }
 
-export default function CompareReplaceModal({ pendingItem, currentList, onReplace, onClose }) {
+export default function CompareReplaceModal({ pendingItem, currentList, onReplace, onClose, onGoToCompare }) {
   // Escape key + body scroll lock
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose() }
@@ -98,8 +98,25 @@ export default function CompareReplaceModal({ pendingItem, currentList, onReplac
           ))}
         </div>
 
-        {/* Cancel */}
-        <div style={{ padding: '0 24px 20px', textAlign: 'center' }}>
+        {/* Footer: Go to Compare + Cancel */}
+        <div style={{ padding: '0 24px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+          {onGoToCompare && (
+            <button
+              onClick={() => { onClose(); onGoToCompare() }}
+              style={{
+                all: 'unset', cursor: 'pointer', boxSizing: 'border-box',
+                width: '100%', padding: '11px 18px', borderRadius: 10,
+                background: 'linear-gradient(135deg, #f59648 0%, #f47c20 100%)',
+                color: '#fff', fontSize: 14, fontWeight: 800,
+                textAlign: 'center', fontFamily: 'Figtree, sans-serif',
+                transition: 'opacity 0.15s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.opacity = '0.88' }}
+              onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}
+            >
+              Go to Compare Page →
+            </button>
+          )}
           <button
             onClick={onClose}
             style={{

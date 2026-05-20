@@ -562,22 +562,6 @@ export default function MapPage() {
                   <h2 className="nwScoreHeaderTitle">
                     Overall Liveability
                   </h2>
-                  {(() => {
-                    const s = overallScore;
-                    let tier = { label: "–", className: "is-na" };
-                    if (Number.isFinite(s)) {
-                      if (s >= 80) tier = { label: "Excellent", className: "is-excellent" };
-                      else if (s >= 65) tier = { label: "Good", className: "is-good" };
-                      else if (s >= 50) tier = { label: "Moderate", className: "is-moderate" };
-                      else tier = { label: "Low", className: "is-low" };
-                    }
-                    return (
-                      <span className={`nwScoreTier ${tier.className}`}>
-                        <span className="nwScoreTierDot" aria-hidden="true" />
-                        {tier.label}
-                      </span>
-                    );
-                  })()}
                   {getProfileLabel(profile) && (
                     <div className="nwScoreHeaderProfile">
                       Scored for: {getProfileLabel(profile)}
