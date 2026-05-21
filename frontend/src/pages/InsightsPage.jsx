@@ -1894,7 +1894,7 @@ function SimilarSuburbs({
       return
     }
 
-    showToast('Added to compare list.', { label: 'Go to Compare', onClick: () => navigate('/compare') })
+    clearToast()
   }
 
   function handleViewInsights(s) {
@@ -1940,7 +1940,7 @@ function SimilarSuburbs({
             replaceCompareArea(index, replaceModal.pendingItem)
             setReplaceModal(null)
             setCompareList(loadCompareList())
-            showToast('Compare area replaced.', { label: 'Go to Compare', onClick: () => navigate('/compare') })
+            clearToast()
           }}
           onClose={() => setReplaceModal(null)}
           onGoToCompare={() => navigate('/compare')}
@@ -2163,6 +2163,36 @@ export default function InsightsPage() {
   const [recommendations, setRecommendations] = useState([])
   const [recommendationsLoading, setRecommendationsLoading] = useState(true)
   const [recommendationsError, setRecommendationsError] = useState(null)
+  const [compareList, setCompareList] = useState(() => loadCompareList())
+
+  useEffect(() => {
+    const refresh = () => setCompareList(loadCompareList())
+    window.addEventListener(getCompareUpdatedEventName(), refresh)
+    return () => window.removeEventListener(getCompareUpdatedEventName(), refresh)
+  }, [])
+
+  const heroInCompareList = useMemo(() => {
+    const currentName = String(locationName || '').trim().toLowerCase()
+    const currentId = String(selectedLocation?.id || '').trim()
+
+    return compareList.some((item) => {
+      const itemId = String(item?.id || item?.selectedLocation?.id || '').trim()
+      if (currentId && itemId && itemId === currentId) return true
+
+      const itemName = String(
+        item?.locationName ||
+        item?.displayName ||
+        item?.fullAddress ||
+        item?.name ||
+        item?.selectedLocation?.displayName ||
+        item?.selectedLocation?.fullAddress ||
+        item?.selectedLocation?.name ||
+        ''
+      ).trim().toLowerCase()
+
+      return Boolean(currentName && itemName && itemName === currentName)
+    })
+  }, [compareList, locationName, selectedLocation?.id])
 
   useEffect(() => {
     const lat = Number(selectedLocation?.lat)
@@ -2328,6 +2358,13 @@ export default function InsightsPage() {
   const benchmarkTextLabel = 'supported locality average'
   const interpretationSummary = buildInterpretationSummary(scores, profileLabel, rangeMinutes, benchmarkScores)
   const breakdownCategories = selectedBreakdownCategory ? [selectedBreakdownCategory] : []
+  const compareBackState = {
+    backTarget: {
+      type: 'insights',
+      label: locationName.split(',')[0] || locationName || 'Insights',
+      context,
+    },
+  }
 
   function handleBack() {
     // Case 1: Insight → Insight
@@ -2572,6 +2609,8 @@ export default function InsightsPage() {
                     {/* Add to Compare */}
                     <button
                       onClick={() => {
+                        if (heroInCompareList) return
+
                         const item = {
                           displayName: locationName,
                           name: locationName,
@@ -2583,7 +2622,7 @@ export default function InsightsPage() {
                         const result = addToCompareList(item)
                         if (result?.reason === 'ALREADY_EXISTS') {
                           setHeroToastMsg('Already in your compare list.')
-                          setHeroToastAction({ label: 'Go to Compare', onClick: () => navigate('/compare') })
+                          setHeroToastAction({ label: 'Go to Compare', onClick: () => navigate('/compare', { state: compareBackState }) })
                         } else if (result?.reason === 'COMPARE_FULL') {
                           setHeroToastMsg(null)
                           setHeroToastAction(null)
@@ -2592,23 +2631,36 @@ export default function InsightsPage() {
                             currentList: result.current || result.list || loadCompareList(),
                           })
                         } else {
+                          setCompareList(result?.list || loadCompareList())
                           setHeroToastMsg('Added to compare list.')
-                          setHeroToastAction({ label: 'Go to Compare', onClick: () => navigate('/compare') })
+                          setHeroToastAction({ label: 'Go to Compare', onClick: () => navigate('/compare', { state: compareBackState }) })
                         }
                       }}
+                      disabled={heroInCompareList}
+                      aria-pressed={heroInCompareList}
                       style={{
-                        all: 'unset', cursor: 'pointer',
+                        all: 'unset', cursor: heroInCompareList ? 'default' : 'pointer',
                         display: 'inline-flex', alignItems: 'center', gap: 8,
                         padding: '8px 18px', borderRadius: 10,
-                        background: 'rgba(255,255,255,0.12)',
-                        border: '1px solid rgba(255,255,255,0.25)',
-                        color: '#fff', fontSize: 13, fontWeight: 700,
-                        transition: 'background 0.15s', alignSelf: 'flex-start',
+                        background: heroInCompareList ? '#ecfdf5' : 'rgba(255,255,255,0.12)',
+                        border: heroInCompareList ? '1.5px solid #86efac' : '1px solid rgba(255,255,255,0.25)',
+                        color: heroInCompareList ? '#047857' : '#fff', fontSize: 13, fontWeight: 700,
+                        boxShadow: heroInCompareList ? '0 10px 26px rgba(16, 185, 129, 0.16)' : 'none',
+                        transition: 'background 0.18s, border-color 0.18s, color 0.18s, box-shadow 0.18s, transform 0.18s',
+                        alignSelf: 'flex-start',
                       }}
-                      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.2)' }}
-                      onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.12)' }}
+                      onMouseEnter={e => {
+                        if (!heroInCompareList) {
+                          e.currentTarget.style.background = 'rgba(255,255,255,0.2)'
+                          e.currentTarget.style.transform = 'translateY(-1px)'
+                        }
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.background = heroInCompareList ? '#ecfdf5' : 'rgba(255,255,255,0.12)'
+                        e.currentTarget.style.transform = 'translateY(0)'
+                      }}
                     >
-                      ＋ Add to Compare
+                      {heroInCompareList ? '✓ In Compare List' : '＋ Add to Compare'}
                     </button>
                   </div>
                 </div>
@@ -2631,29 +2683,6 @@ export default function InsightsPage() {
                         <span style={{ fontSize: 12, fontWeight: 800, color: 'rgba(255,255,255,0.75)', textTransform: 'uppercase', letterSpacing: '0.1em', flex: 1 }}>
                           {cfg.label}
                         </span>
-                        {canBreakdown && (
-                          <button
-                            onClick={() => setSelectedBreakdownCategory(key)}
-                            style={{
-                              all: 'unset', cursor: 'pointer',
-                              fontSize: 12, fontWeight: 800,
-                              color: '#fff',
-                              background: cfg.color,
-                              border: 'none',
-                              borderRadius: 7,
-                              padding: '4px 12px',
-                              whiteSpace: 'nowrap',
-                              transition: 'opacity 0.15s',
-                              fontFamily: 'Figtree, sans-serif',
-                              opacity: 0.92,
-                            }}
-                            onMouseEnter={e => { e.currentTarget.style.opacity = '1' }}
-                            onMouseLeave={e => { e.currentTarget.style.opacity = '0.92' }}
-                            aria-label={`See ${cfg.label} score breakdown`}
-                          >
-                            See Breakdown ↗
-                          </button>
-                        )}
                         <span style={{ fontSize: 23, fontWeight: 900, color: cfg.color, lineHeight: 1, letterSpacing: '-0.5px' }}
                           aria-label={`${cfg.label}: ${score ?? 'loading'}`}>
                           {score ?? '–'}
@@ -2667,11 +2696,44 @@ export default function InsightsPage() {
                           transition: `width 1.3s cubic-bezier(0.22, 1, 0.36, 1) ${i * 160}ms`,
                         }} />
                       </div>
-                      {delta != null && (
-                        <p style={{ fontSize: 10, fontWeight: 700, marginTop: 4, color: delta >= 0 ? '#6ee7b7' : '#fca5a5' }}>
-                          {delta >= 0 ? '▲' : '▼'} {Math.abs(delta)} vs Melbourne benchmark
-                        </p>
-                      )}
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 12,
+                        marginTop: 5,
+                      }}>
+                        {delta != null ? (
+                          <p style={{ fontSize: 10, fontWeight: 700, margin: 0, color: delta >= 0 ? '#6ee7b7' : '#fca5a5' }}>
+                            {delta >= 0 ? '▲' : '▼'} {Math.abs(delta)} vs Melbourne benchmark
+                          </p>
+                        ) : <span />}
+                        {canBreakdown && (
+                          <button
+                            onClick={() => setSelectedBreakdownCategory(key)}
+                            style={{
+                              all: 'unset',
+                              cursor: 'pointer',
+                              fontSize: 11,
+                              fontWeight: 800,
+                              color: '#fff',
+                              background: cfg.color,
+                              borderRadius: 999,
+                              padding: '5px 10px',
+                              boxShadow: `0 8px 18px ${cfg.color}33`,
+                              lineHeight: 1.2,
+                              whiteSpace: 'nowrap',
+                              fontFamily: 'Figtree, sans-serif',
+                              opacity: 0.94,
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.transform = 'translateY(-1px)' }}
+                            onMouseLeave={e => { e.currentTarget.style.opacity = '0.94'; e.currentTarget.style.transform = 'translateY(0)' }}
+                            aria-label={`See ${cfg.label} score breakdown`}
+                          >
+                            See Score Breakdown ↗
+                          </button>
+                        )}
+                      </div>
                     </div>
                   )
                 })}
@@ -2762,6 +2824,85 @@ export default function InsightsPage() {
           />
         )}
 
+        {compareList.length === 2 && (
+          <section
+            style={{
+              margin: '26px 0 44px',
+              padding: '20px 24px',
+              borderRadius: 16,
+              background: '#ffffff',
+              border: '1.5px solid #e5e7eb',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 18,
+              flexWrap: 'wrap',
+            }}
+            aria-label="Compare list ready"
+          >
+            <div style={{ minWidth: 240, flex: '1 1 360px' }}>
+              <p style={{
+                fontSize: 11,
+                fontWeight: 900,
+                letterSpacing: '0.14em',
+                textTransform: 'uppercase',
+                color: '#9ca3af',
+                marginBottom: 7,
+              }}>
+                Ready to compare
+              </p>
+              <h2 style={{
+                fontFamily: "'DM Serif Display', Georgia, serif",
+                fontSize: 'clamp(22px, 2.6vw, 30px)',
+                fontWeight: 400,
+                color: '#101828',
+                lineHeight: 1.1,
+                margin: '0 0 8px',
+              }}>
+                Two locations are waiting in Compare.
+              </h2>
+              <p style={{
+                fontSize: 14,
+                color: '#667085',
+                lineHeight: 1.6,
+                margin: 0,
+              }}>
+                Open the side-by-side view to see which area fits your priorities better.
+              </p>
+            </div>
+            <button
+              onClick={() => navigate('/compare', { state: compareBackState })}
+              style={{
+                all: 'unset',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '11px 18px',
+                borderRadius: 10,
+                background: 'linear-gradient(135deg, #f59648 0%, #f47c20 100%)',
+                color: '#ffffff',
+                fontSize: 14,
+                fontWeight: 900,
+                boxShadow: '0 10px 24px rgba(244, 124, 32, 0.22)',
+                transition: 'transform 0.18s ease, box-shadow 0.18s ease',
+                whiteSpace: 'nowrap',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.transform = 'translateY(-1px)'
+                e.currentTarget.style.boxShadow = '0 14px 28px rgba(244, 124, 32, 0.28)'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.transform = 'translateY(0)'
+                e.currentTarget.style.boxShadow = '0 10px 24px rgba(244, 124, 32, 0.22)'
+              }}
+            >
+              Open comparison →
+            </button>
+          </section>
+        )}
+
       </div>
 
       {/* Change Conditions modal */}
@@ -2786,11 +2927,12 @@ export default function InsightsPage() {
           onReplace={(index) => {
             replaceCompareArea(index, heroReplaceModal.pendingItem)
             setHeroReplaceModal(null)
-            setHeroToastMsg('Compare area replaced.')
-            setHeroToastAction({ label: 'Go to Compare', onClick: () => navigate('/compare') })
+            setCompareList(loadCompareList())
+            setHeroToastMsg(null)
+            setHeroToastAction(null)
           }}
           onClose={() => setHeroReplaceModal(null)}
-          onGoToCompare={() => navigate('/compare')}
+          onGoToCompare={() => navigate('/compare', { state: compareBackState })}
         />
       )}
 

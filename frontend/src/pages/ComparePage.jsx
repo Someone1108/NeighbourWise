@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import Button from '../components/buttons/Button.jsx'
 import LoadingOverlay from '../components/LoadingOverlay.jsx'
 import ChangeConditionsModal from '../components/ChangeConditionsModal.jsx'
@@ -697,7 +697,7 @@ function CompareInsightCell({ insight }) {
         </div>
       )}
 
-      <CompareStatGrid stats={insight.census.stats} columns="repeat(auto-fit, minmax(120px, 1fr))" />
+      <CompareStatGrid stats={insight.census.stats} columns="repeat(3, minmax(0, 1fr))" />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 10 }}>
         <CompareContextCard title="Census snapshot">
@@ -806,6 +806,8 @@ function MobileCompareScoreCards({ data, tableReady }) {
 
 export default function ComparePage() {
   const navigate = useNavigate()
+  const routerLocation = useLocation()
+  const backTarget = routerLocation.state?.backTarget || null
 
   const [compareList, setCompareList] = useState(() => loadCompareList())
   const [searchTerm, setSearchTerm] = useState('')
@@ -884,6 +886,10 @@ export default function ComparePage() {
   const mapButtonTitle = firstArea
   ? `View ${area1Label} Map`
   : 'Back to Home'
+  const backButtonTitle =
+    backTarget?.type === 'insights'
+      ? `Back to ${backTarget?.label || 'Insights'}`
+      : mapButtonTitle
 
   const activeSecondArea = secondArea
 
@@ -1288,6 +1294,11 @@ async function handleFindRecommendation() {
   const sharedRangeMinutes = safeRangeMinutes(firstArea?.rangeMinutes ?? activeSecondArea?.rangeMinutes ?? 20)
 
   const handleViewArea1Map = () => {
+    if (backTarget?.type === 'insights' && backTarget?.context) {
+      navigate('/insights', { state: backTarget.context })
+      return
+    }
+
     if (!firstArea) {
       navigate('/')
       return
@@ -1484,7 +1495,7 @@ async function handleFindRecommendation() {
       }}>
         <button
           onClick={handleViewArea1Map}
-          aria-label="Go back to Area 1 map"
+          aria-label={backTarget?.type === 'insights' ? 'Go back to insights' : 'Go back to Area 1 map'}
           style={{
             width: 38, height: 38, borderRadius: 9,
             border: '1px solid rgba(0,0,0,0.12)', background: '#fff',
@@ -1500,7 +1511,7 @@ async function handleFindRecommendation() {
         </button>
         <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{ fontWeight: 800, fontSize: 16, color: '#1a2436', lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {mapButtonTitle}
+            {backButtonTitle}
           </p>
           <p style={{ fontSize: 13, color: '#4b5563', marginTop: 3 }}>
             {data ? `${shortLabel(data.area1, 24)} vs ${shortLabel(data.area2, 24)}` : 'Compare two areas side by side'}

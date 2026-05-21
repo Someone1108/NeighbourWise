@@ -753,8 +753,8 @@ async function main() {
     const suburbs = suburbNames.length
       ? await fetchSuburbsByName(suburbNames)
       : await fetchSuburbs({ limit, offset });
-    const jobs = personas.flatMap((persona) =>
-      suburbs.map((suburb) => makeJob({ suburb, persona }))
+    const jobs = suburbs.flatMap((suburb) =>
+      personas.map((persona) => makeJob({ suburb, persona }))
     ).filter((job) => !completedCsvRows.has(getJobKey(job)));
     const skipped = suburbs.length * personas.length - jobs.length;
 

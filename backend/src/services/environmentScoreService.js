@@ -130,8 +130,7 @@ const getEnvironmentScore = async ({
       COUNT(*) AS vegetation_count
     FROM public.vegetation_features v
     JOIN buffer_area b
-      ON ST_Intersects(v.geom, b.geom)
-    WHERE NOT ST_IsEmpty(ST_Intersection(v.geom, b.geom));
+      ON ST_Intersects(v.geom, b.geom);
   `;
 
   const greenResult = await pool.query(greenQuery, [
@@ -139,17 +138,6 @@ const getEnvironmentScore = async ({
     safeLat,
     radiusMeters
   ]);
-
-  const greenStats = await pool.query(`
-  SELECT
-    MIN(peranyveg) AS min_green,
-    MAX(peranyveg) AS max_green,
-    AVG(peranyveg) AS avg_green,
-    PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY peranyveg) AS p25,
-    PERCENTILE_CONT(0.5)  WITHIN GROUP (ORDER BY peranyveg) AS median,
-    PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY peranyveg) AS p75
-  FROM public.vegetation_features;
-  `);
 
   const avgGreen = greenResult.rows[0]?.avg_green;
   const greenScore = calculateGreenScore(avgGreen);
@@ -175,8 +163,7 @@ const getEnvironmentScore = async ({
       COUNT(*) AS heat_count
     FROM public.heat_features h
     JOIN buffer_area b
-      ON ST_Intersects(h.geom, b.geom)
-    WHERE NOT ST_IsEmpty(ST_Intersection(h.geom, b.geom));
+      ON ST_Intersects(h.geom, b.geom);
   `;
 
   const heatResult = await pool.query(heatQuery, [
@@ -205,8 +192,7 @@ const getEnvironmentScore = async ({
     SELECT z.zone_code, z.zone_desc
     FROM public.zoning_features z
     JOIN buffer_area b
-      ON ST_Intersects(z.geom, b.geom)
-    WHERE NOT ST_IsEmpty(ST_Intersection(z.geom, b.geom));
+      ON ST_Intersects(z.geom, b.geom);
   `;
 
   const zoningResult = await pool.query(zoningQuery, [

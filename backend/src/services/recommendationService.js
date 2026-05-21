@@ -1,5 +1,8 @@
 const pool = require('../utils/db');
 
+const INSIGHT_SEARCH_RADII_KM = [5, 8, 15, 25];
+const MAX_INSIGHT_SCORE_GAP = 10;
+
 /**
  * Calculate distance between two coordinates in km
  */
@@ -153,36 +156,38 @@ async function findInsightRecommendations(input) {
   const currentScore = Number(currentSuburb.liveability_score);
 
   // Step 2
-  // Search nearby suburbs within 5km
-  let radiusKm = 5;
+  // Prefer genuinely similar liveability scores. Expand the search radius
+  // before accepting suburbs that are much lower than the current area.
+  let radiusKm = INSIGHT_SEARCH_RADII_KM[0];
+  let candidates = [];
 
-  let candidates = await findNearbyCandidateSuburbs(
-    lat,
-    lng,
-    radiusKm
-  );
-
-  // Remove current suburb
-  candidates = candidates.filter(
-    (candidate) =>
-      candidate.suburb_name !== currentSuburb.suburb_name
-  );
-
-  // Step 3
-  // Expand to 8km if less than 3 results
-  if (candidates.length < 3) {
-    radiusKm = 8;
-
-    candidates = await findNearbyCandidateSuburbs(
+  for (const nextRadiusKm of INSIGHT_SEARCH_RADII_KM) {
+    const nearbyCandidates = await findNearbyCandidateSuburbs(
       lat,
       lng,
-      radiusKm
+      nextRadiusKm
     );
 
-    candidates = candidates.filter(
-      (candidate) =>
-        candidate.suburb_name !== currentSuburb.suburb_name
-    );
+    const similarCandidates = nearbyCandidates
+      .filter(
+        (candidate) =>
+          candidate.suburb_name !== currentSuburb.suburb_name
+      )
+      .filter((candidate) => {
+        const candidateScore = Number(candidate.liveability_score);
+        return (
+          Number.isFinite(candidateScore) &&
+          Math.abs(currentScore - candidateScore) <=
+            MAX_INSIGHT_SCORE_GAP
+        );
+      });
+
+    radiusKm = nextRadiusKm;
+    candidates = similarCandidates;
+
+    if (candidates.length >= 3) {
+      break;
+    }
   }
 
   // Step 4

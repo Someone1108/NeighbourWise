@@ -611,11 +611,11 @@ export async function getInsightRecommendations({
   const params = new URLSearchParams({
     lat: String(lat),
     lng: String(lng),
-    time: String(time || 20),
+    rangeMinutes: String(time || 20),
   })
 
   if (persona) {
-    params.set('persona', typeof persona === 'string' ? persona : JSON.stringify(persona))
+    params.set('profile', normalizePersona(persona))
   }
 
   return fetchJson(`${API_BASE_URL}/api/recommendations/insight?${params.toString()}`)

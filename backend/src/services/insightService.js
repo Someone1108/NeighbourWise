@@ -132,17 +132,26 @@ const fetchSingleCategory = async ({ lat, lng, type }) => {
 // Fetch dog park data from the database
 const fetchDogParksFromDB = async ({ lat, lng }) => {
   const sql = `
+    with origin as (
+      select st_setsrid(st_makepoint($1, $2), 4326) as geom
+    ),
+    nearest_spaces as (
+      select p.pet_point_id, p.geom
+      from public.pet_friendly_spaces_points p
+      cross join origin o
+      order by p.geom <-> o.geom
+      limit 50
+    )
     select
       pet_point_id as id,
       st_y(geom) as lat,
       st_x(geom) as lng,
       st_distance(
         geom::geography,
-        st_setsrid(st_makepoint($1, $2), 4326)::geography
+        (select geom from origin)::geography
       ) / 1000 as distance_km
-    from public.pet_friendly_spaces_points
+    from nearest_spaces
     order by distance_km asc
-    limit 50;
   `;
 
   const values = [lng, lat];
