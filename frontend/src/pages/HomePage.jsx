@@ -55,6 +55,22 @@ function getSearchResultKey(item) {
     .trim()
 }
 
+function getCompactSearchText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '')
+}
+
+function matchesSearchQuery(label, query, words) {
+  const compactLabel = getCompactSearchText(label)
+  const compactQuery = getCompactSearchText(query)
+
+  return (
+    words.every((word) => label.includes(word)) ||
+    (compactQuery.length >= 3 && compactLabel.includes(compactQuery))
+  )
+}
+
 function getSearchResultLabel(item) {
   return item?.displayName || item?.fullAddress || item?.name || 'Unknown location'
 }
@@ -128,7 +144,7 @@ export default function HomePage() {
           supportedSuburbs.some((name) => name.toLowerCase() === suburbName)
         if (!label || seen.has(label)) return false
         seen.add(label)
-        return isSupportedSuburb && words.every((w) => label.includes(w))
+        return isSupportedSuburb && matchesSearchQuery(label, query, words)
       })
     }
 
@@ -274,20 +290,9 @@ export default function HomePage() {
     })
   }
 
-  function onSubmit() {
-    const v = validateSearchInput(address)
-    if (!v.ok) {
-      setError(v.message)
-      return
-    }
-
-    if (!selectedLocation) {
-      setError('Please select a suburb or address from the results.')
-      return
-    }
-
-    const placeType = selectedLocation.placeType || selectedLocation.type || ''
-    const suburbName = String(selectedLocation.name || selectedLocation.displayName || '').trim()
+  function submitLocation(location) {
+    const placeType = location.placeType || location.type || ''
+    const suburbName = String(location.name || location.displayName || '').trim()
     const isSuburb = placeType === 'suburb' || placeType === 'locality'
     const hasCoverageList = supportedSuburbs.length > 0
     const isSupportedSuburb =
@@ -301,9 +306,29 @@ export default function HomePage() {
     }
 
     setError('')
-    const nextContext = { selectedLocation, profile, rangeMinutes: 20 }
+    const nextContext = { selectedLocation: location, profile, rangeMinutes: 20 }
     saveContext(nextContext)
     navigate('/map', { state: nextContext })
+  }
+
+  function onSubmit() {
+    const v = validateSearchInput(address)
+    if (!v.ok) {
+      setError(v.message)
+      return
+    }
+
+    if (!selectedLocation) {
+      if (searchResults.length === 1) {
+        submitLocation(searchResults[0])
+        return
+      }
+
+      setError('Please select a suburb or address from the results.')
+      return
+    }
+
+    submitLocation(selectedLocation)
   }
 
   function scrollToSearch() {
@@ -553,6 +578,12 @@ export default function HomePage() {
                   id="home-search-input"
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      onSubmit()
+                    }
+                  }}
                   placeholder={suburbsLoading ? 'Loading suburbs...' : 'e.g. Richmond, 3076, or 45 Chapel St'}
                   disabled={suburbsLoading}
                   aria-autocomplete="list"
@@ -565,7 +596,16 @@ export default function HomePage() {
                 />
                 {suburbsLoading
                   ? <span className="nwSearchSpinner" aria-label="Loading suburbs" style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)' }} />
-                  : <span className="search-icon" aria-hidden="true">⌕</span>
+                  : (
+                    <button
+                      type="button"
+                      className="search-icon-button"
+                      aria-label="Search selected area"
+                      onClick={onSubmit}
+                    >
+                      ⌕
+                    </button>
+                  )
                 }
               </div>
 

@@ -136,6 +136,13 @@ function validatePersona(value) {
     return 'default';
   }
 
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    if (raw.familyWithChildren) return 'family';
+    if (raw.elderly) return 'elderly';
+    if (raw.petOwner) return 'pet';
+    return 'default';
+  }
+
   const persona = String(raw).trim().toLowerCase();
   const normalized = persona === 'pet_owner' ? 'pet' : persona;
 
@@ -280,6 +287,7 @@ function validateCompareRecommendationBody(body) {
     area2: validateRecommendationArea(input.area2, 'area2'),
     benchmarkArea,
     category,
+    persona: validatePersona(input.persona),
   };
 }
 

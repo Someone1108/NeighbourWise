@@ -1,9 +1,15 @@
 const { MAX_DISTANCE_MAP } = require('../utils/distanceConfig');
+const { createTtlCache } = require('../utils/cache');
 
 const axios = require('axios');
 const pool = require('../utils/db');
 
 const MAPBOX_TOKEN = process.env.MAPBOX_TOKEN;
+const MAPBOX_TIMEOUT_MS = Number(process.env.MAPBOX_TIMEOUT_MS) || 3500;
+const poiCache = createTtlCache({
+  ttlMs: Number(process.env.POI_CACHE_TTL_MS) || 10 * 60 * 1000,
+  maxEntries: 500
+});
 
 const categoryMap = {
   park: 'park',
@@ -102,7 +108,8 @@ const fetchSingleCategory = async ({ lat, lng, type }) => {
       access_token: MAPBOX_TOKEN,
       limit: 20,
       language: 'en'
-    }
+    },
+    timeout: MAPBOX_TIMEOUT_MS
   });
 
   const features = response.data.features || [];
@@ -132,17 +139,26 @@ const fetchSingleCategory = async ({ lat, lng, type }) => {
 // Fetch dog park data from the database
 const fetchDogParksFromDB = async ({ lat, lng }) => {
   const sql = `
+    with origin as (
+      select st_setsrid(st_makepoint($1, $2), 4326) as geom
+    ),
+    nearest_spaces as (
+      select p.pet_point_id, p.geom
+      from public.pet_friendly_spaces_points p
+      cross join origin o
+      order by p.geom <-> o.geom
+      limit 50
+    )
     select
       pet_point_id as id,
       st_y(geom) as lat,
       st_x(geom) as lng,
       st_distance(
         geom::geography,
-        st_setsrid(st_makepoint($1, $2), 4326)::geography
+        (select geom from origin)::geography
       ) / 1000 as distance_km
-    from public.pet_friendly_spaces_points
+    from nearest_spaces
     order by distance_km asc
-    limit 50;
   `;
 
   const values = [lng, lat];
@@ -178,6 +194,15 @@ const fetchPoiInsights = async ({
   sequential = false,
   requestDelayMs = 0
 }) => {
+  const cacheKey = [
+    Number(lat).toFixed(5),
+    Number(lng).toFixed(5),
+    Number(time) || 'all',
+    sequential ? 'seq' : 'parallel',
+    Number(requestDelayMs) || 0
+  ].join(':');
+
+  return poiCache.getOrSet(cacheKey, async () => {
   const allTypes = Object.keys(categoryMap);
 
   let allResults;
@@ -186,13 +211,21 @@ const fetchPoiInsights = async ({
     allResults = [];
 
     for (const poiType of allTypes) {
-      allResults.push(await fetchCategoryByType({ lat, lng, type: poiType }));
+      try {
+        allResults.push(await fetchCategoryByType({ lat, lng, type: poiType }));
+      } catch (error) {
+        console.warn(`POI category ${poiType} unavailable:`, error.message);
+        allResults.push([]);
+      }
       await delay(requestDelayMs);
     }
   } else {
     allResults = await Promise.all(
       allTypes.map((poiType) =>
-        fetchCategoryByType({ lat, lng, type: poiType })
+        fetchCategoryByType({ lat, lng, type: poiType }).catch((error) => {
+          console.warn(`POI category ${poiType} unavailable:`, error.message);
+          return [];
+        })
       )
     );
   }
@@ -224,6 +257,7 @@ const fetchPoiInsights = async ({
     time: time || null,
     results: uniqueResults
   };
+  });
 };
 
 module.exports = {

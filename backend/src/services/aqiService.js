@@ -1,10 +1,16 @@
 const axios = require('axios');
+const { createTtlCache } = require('../utils/cache');
 
 const DEFAULT_BASE_URL = 'https://gateway.api.epa.vic.gov.au/environmentMonitoring/v1';
 const DEFAULT_SITES_PATH = '/sites?environmentalSegment=air';
 const DEFAULT_SITE_PARAMETERS_PATH = '/sites/{siteId}/parameters';
 
 const CACHE_TTL_MS = 10 * 60 * 1000;
+const AQI_TIMEOUT_MS = Number(process.env.EPA_AIRWATCH_TIMEOUT_MS) || 2500;
+const aqiCache = createTtlCache({
+  ttlMs: Number(process.env.AQI_CACHE_TTL_MS) || CACHE_TTL_MS,
+  maxEntries: 500,
+});
 
 let sitesCache = {
   expiresAt: 0,
@@ -269,6 +275,7 @@ async function fetchSites(config) {
 
   const response = await axios.get(buildUrl(config.baseUrl, config.sitesPath), {
     headers: getHeaders(config.apiKey),
+    timeout: AQI_TIMEOUT_MS,
   });
 
   const sites = unwrapArray(response.data).map(normalizeSite).filter(Boolean);
@@ -284,7 +291,7 @@ async function fetchSites(config) {
 async function fetchSiteParameters(config, siteId) {
   const response = await axios.get(
     buildUrl(config.baseUrl, config.siteParametersPath, { siteId }),
-    { headers: getHeaders(config.apiKey) }
+    { headers: getHeaders(config.apiKey), timeout: AQI_TIMEOUT_MS }
   );
 
   return normalizeParameters(response.data);
@@ -292,6 +299,9 @@ async function fetchSiteParameters(config, siteId) {
 
 async function getAqiForLocation({ lat, lng }) {
   const coords = requireCoordinate(lat, lng);
+  const cacheKey = `${coords.lat.toFixed(4)}:${coords.lng.toFixed(4)}`;
+
+  return aqiCache.getOrSet(cacheKey, async () => {
   const config = getConfig();
 
   if (!config.apiKey) {
@@ -331,6 +341,7 @@ async function getAqiForLocation({ lat, lng }) {
     coordinates: coords,
     attribution: 'EPA Victoria Environment Monitoring API / AirWatch',
   };
+  });
 }
 
 module.exports = {

@@ -130,29 +130,8 @@ const getEnvironmentScore = async ({
       COUNT(*) AS vegetation_count
     FROM public.vegetation_features v
     JOIN buffer_area b
-      ON ST_Intersects(v.geom, b.geom)
-    WHERE NOT ST_IsEmpty(ST_Intersection(v.geom, b.geom));
+      ON ST_Intersects(v.geom, b.geom);
   `;
-
-  const greenResult = await pool.query(greenQuery, [
-    safeLng,
-    safeLat,
-    radiusMeters
-  ]);
-
-  const greenStats = await pool.query(`
-  SELECT
-    MIN(peranyveg) AS min_green,
-    MAX(peranyveg) AS max_green,
-    AVG(peranyveg) AS avg_green,
-    PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY peranyveg) AS p25,
-    PERCENTILE_CONT(0.5)  WITHIN GROUP (ORDER BY peranyveg) AS median,
-    PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY peranyveg) AS p75
-  FROM public.vegetation_features;
-  `);
-
-  const avgGreen = greenResult.rows[0]?.avg_green;
-  const greenScore = calculateGreenScore(avgGreen);
 
   // 2. Heat score
   const heatQuery = `
@@ -175,18 +154,8 @@ const getEnvironmentScore = async ({
       COUNT(*) AS heat_count
     FROM public.heat_features h
     JOIN buffer_area b
-      ON ST_Intersects(h.geom, b.geom)
-    WHERE NOT ST_IsEmpty(ST_Intersection(h.geom, b.geom));
+      ON ST_Intersects(h.geom, b.geom);
   `;
-
-  const heatResult = await pool.query(heatQuery, [
-    safeLng,
-    safeLat,
-    radiusMeters
-  ]);
-
-  const avgHeat = heatResult.rows[0]?.avg_heat;
-  const heatScore = calculateHeatScore(avgHeat);
 
   // 3. Zoning score
   const zoningQuery = `
@@ -205,15 +174,34 @@ const getEnvironmentScore = async ({
     SELECT z.zone_code, z.zone_desc
     FROM public.zoning_features z
     JOIN buffer_area b
-      ON ST_Intersects(z.geom, b.geom)
-    WHERE NOT ST_IsEmpty(ST_Intersection(z.geom, b.geom));
+      ON ST_Intersects(z.geom, b.geom);
   `;
 
-  const zoningResult = await pool.query(zoningQuery, [
-    safeLng,
-    safeLat,
-    radiusMeters
-  ]);
+  let airQualityResult = null;
+
+  const airQualityPromise = getAqiForLocation({
+    lat: safeLat,
+    lng: safeLng
+  }).catch((err) => {
+    console.error('Air quality API error:', err.message);
+    return null;
+  });
+
+  const [greenResult, heatResult, zoningResult, fetchedAirQualityResult] =
+    await Promise.all([
+      pool.query(greenQuery, [safeLng, safeLat, radiusMeters]),
+      pool.query(heatQuery, [safeLng, safeLat, radiusMeters]),
+      pool.query(zoningQuery, [safeLng, safeLat, radiusMeters]),
+      airQualityPromise
+    ]);
+
+  airQualityResult = fetchedAirQualityResult;
+
+  const avgGreen = greenResult.rows[0]?.avg_green;
+  const greenScore = calculateGreenScore(avgGreen);
+
+  const avgHeat = heatResult.rows[0]?.avg_heat;
+  const heatScore = calculateHeatScore(avgHeat);
 
   const zoningScores = zoningResult.rows.map((row) =>
     getZoningComfortScore(row.zone_code, row.zone_desc)
@@ -233,22 +221,9 @@ const getEnvironmentScore = async ({
     .slice(0, 3);
 
   // 4. Air quality score
-  let airQualityResult = null;
-  let airQualityScore = null;
-
-  try {
-    airQualityResult = await getAqiForLocation({
-      lat: safeLat,
-      lng: safeLng
-    });
-
-    airQualityScore = airQualityResult.available
-      ? airQualityResult.score
-      : null;
-  } catch (err) {
-    console.error('Air quality API error:', err.message);
-    airQualityScore = null;
-  }
+  const airQualityScore = airQualityResult?.available
+    ? airQualityResult.score
+    : null;
 
   // 5. Missing data fallback
   const missingData = {

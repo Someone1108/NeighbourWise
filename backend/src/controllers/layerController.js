@@ -8,7 +8,7 @@ const {
 async function getLayersForSuburb(req, res) {
   try {
     const suburbName = validateSuburbName(req.params.name);
-    const data = await layerService.getLayersForSuburb(suburbName);
+    const data = await layerService.getLayersForSuburb(suburbName, req.query.layer);
     res.json(data);
   } catch (error) {
     if (sendValidationError(res, error)) return;
@@ -37,7 +37,8 @@ async function getLayersForAddress(req, res) {
     const data = await layerService.getLayersForAddress(
       lat,
       lng,
-      radiusMeters
+      radiusMeters,
+      req.query.layer
     );
 
     res.json({

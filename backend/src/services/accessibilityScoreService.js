@@ -112,14 +112,7 @@ function calculateIndicatorScore({
 
 // ---------- Main function ----------
 
-const getAccessibilityScore = async ({
-  lat,
-  lng,
-  time = 20,
-  persona = 'default',
-  sequentialPois = false,
-  requestDelayMs = 0
-}) => {
+function calculateAccessibilityFromPois({ allPois, time, persona }) {
   // Convert meters to kilometers because POI insights use distanceKm
   const maxDistanceMeters = MAX_DISTANCE_MAP[time];
   const maxDistanceKm = maxDistanceMeters / 1000;
@@ -129,16 +122,6 @@ const getAccessibilityScore = async ({
 
   let totalScore = 0;
   const breakdown = {};
-
-  // Fetch all POIs in one request based on the current architecture
-  const response = await fetchPoiInsights({
-    lat,
-    lng,
-    time,
-    sequential: sequentialPois,
-    requestDelayMs
-  });
-  const allPois = response.results || [];
 
   const indicators = Object.keys(weights);
 
@@ -181,10 +164,61 @@ const getAccessibilityScore = async ({
     accessibilityScore: Math.round(totalScore),
     time,
     persona,
+    pois: allPois,
     breakdown
   };
+}
+
+const getAccessibilityScore = async ({
+  lat,
+  lng,
+  time = 20,
+  persona = 'default',
+  sequentialPois = false,
+  requestDelayMs = 0
+}) => {
+  // Fetch all POIs in one request based on the current architecture
+  const response = await fetchPoiInsights({
+    lat,
+    lng,
+    time,
+    sequential: sequentialPois,
+    requestDelayMs
+  });
+
+  return calculateAccessibilityFromPois({
+    allPois: response.results || [],
+    time,
+    persona
+  });
+};
+
+const getAccessibilityScoresForPersonas = async ({
+  lat,
+  lng,
+  time = 20,
+  personas = ['default'],
+  sequentialPois = false,
+  requestDelayMs = 0
+}) => {
+  const response = await fetchPoiInsights({
+    lat,
+    lng,
+    time,
+    sequential: sequentialPois,
+    requestDelayMs
+  });
+  const allPois = response.results || [];
+
+  return Object.fromEntries(
+    personas.map((persona) => [
+      persona,
+      calculateAccessibilityFromPois({ allPois, time, persona })
+    ])
+  );
 };
 
 module.exports = {
-  getAccessibilityScore
+  getAccessibilityScore,
+  getAccessibilityScoresForPersonas
 };

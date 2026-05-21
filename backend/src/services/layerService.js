@@ -1,4 +1,11 @@
 const pool = require('../utils/db');
+const { createTtlCache } = require('../utils/cache');
+
+const VALID_LAYER_KEYS = new Set(['heat', 'vegetation', 'zoning', 'all']);
+const layerCache = createTtlCache({
+  ttlMs: Number(process.env.LAYER_CACHE_TTL_MS) || 30 * 60 * 1000,
+  maxEntries: 250,
+});
 
 function normalizeName(name) {
   return String(name || '').trim();
@@ -15,12 +22,20 @@ function normalizeRadius(radiusMeters) {
   return radius;
 }
 
-async function getLayersForSuburb(suburbName) {
+function normalizeLayer(layer) {
+  const key = String(layer || 'all').trim().toLowerCase();
+  return VALID_LAYER_KEYS.has(key) ? key : 'all';
+}
+
+async function getLayersForSuburb(suburbName, layer = 'all') {
   const target = normalizeName(suburbName);
+  const requestedLayer = normalizeLayer(layer);
 
   if (!target) {
     throw new Error('Suburb name is required');
   }
+
+  return layerCache.getOrSet(`suburb:${target.toUpperCase()}:${requestedLayer}`, async () => {
 
   const boundarySql = `
     select
@@ -85,7 +100,9 @@ async function getLayersForSuburb(suburbName) {
       and not st_isempty(st_intersection(h.geom, p.geom));
   `;
 
-  const heatResult = await pool.query(heatSql, [target]);
+  const heatResult = requestedLayer === 'all' || requestedLayer === 'heat'
+    ? await pool.query(heatSql, [target])
+    : { rows: [] };
 
   const heat = {
     type: 'FeatureCollection',
@@ -134,7 +151,9 @@ async function getLayersForSuburb(suburbName) {
       and not st_isempty(st_intersection(v.geom, p.geom));
   `;
 
-  const vegetationResult = await pool.query(vegetationSql, [target]);
+  const vegetationResult = requestedLayer === 'all' || requestedLayer === 'vegetation'
+    ? await pool.query(vegetationSql, [target])
+    : { rows: [] };
 
   const vegetation = {
     type: 'FeatureCollection',
@@ -171,7 +190,9 @@ async function getLayersForSuburb(suburbName) {
       and not st_isempty(st_intersection(z.geom, p.geom));
   `;
 
-  const zoningResult = await pool.query(zoningSql, [target]);
+  const zoningResult = requestedLayer === 'all' || requestedLayer === 'zoning'
+    ? await pool.query(zoningSql, [target])
+    : { rows: [] };
 
   const zoning = {
     type: 'FeatureCollection',
@@ -197,16 +218,22 @@ async function getLayersForSuburb(suburbName) {
     vegetation,
     zoning,
   };
+  });
 }
 
-async function getLayersForAddress(lat, lng, radiusMeters) {
+async function getLayersForAddress(lat, lng, radiusMeters, layer = 'all') {
   const safeLat = normalizeNumber(lat);
   const safeLng = normalizeNumber(lng);
   const safeRadius = normalizeRadius(radiusMeters);
+  const requestedLayer = normalizeLayer(layer);
 
   if (safeLat === null || safeLng === null) {
     throw new Error('Valid latitude and longitude are required');
   }
+
+  return layerCache.getOrSet(
+    `address:${safeLat.toFixed(5)}:${safeLng.toFixed(5)}:${safeRadius}:${requestedLayer}`,
+    async () => {
 
   const analysisAreaSql = `
     select st_asgeojson(
@@ -284,11 +311,13 @@ async function getLayersForAddress(lat, lng, radiusMeters) {
     where not st_isempty(st_intersection(h.geom, b.geom));
   `;
 
-  const heatResult = await pool.query(heatSql, [
-    safeLng,
-    safeLat,
-    safeRadius,
-  ]);
+  const heatResult = requestedLayer === 'all' || requestedLayer === 'heat'
+    ? await pool.query(heatSql, [
+        safeLng,
+        safeLat,
+        safeRadius,
+      ])
+    : { rows: [] };
 
   const heat = {
     type: 'FeatureCollection',
@@ -348,11 +377,13 @@ async function getLayersForAddress(lat, lng, radiusMeters) {
     where not st_isempty(st_intersection(v.geom, b.geom));
   `;
 
-  const vegetationResult = await pool.query(vegetationSql, [
-    safeLng,
-    safeLat,
-    safeRadius,
-  ]);
+  const vegetationResult = requestedLayer === 'all' || requestedLayer === 'vegetation'
+    ? await pool.query(vegetationSql, [
+        safeLng,
+        safeLat,
+        safeRadius,
+      ])
+    : { rows: [] };
 
   const vegetation = {
     type: 'FeatureCollection',
@@ -400,11 +431,13 @@ async function getLayersForAddress(lat, lng, radiusMeters) {
     where not st_isempty(st_intersection(z.geom, b.geom));
   `;
 
-  const zoningResult = await pool.query(zoningSql, [
-    safeLng,
-    safeLat,
-    safeRadius,
-  ]);
+  const zoningResult = requestedLayer === 'all' || requestedLayer === 'zoning'
+    ? await pool.query(zoningSql, [
+        safeLng,
+        safeLat,
+        safeRadius,
+      ])
+    : { rows: [] };
 
   const zoning = {
     type: 'FeatureCollection',
@@ -434,6 +467,8 @@ async function getLayersForAddress(lat, lng, radiusMeters) {
     vegetation,
     zoning,
   };
+    }
+  );
 }
 
 async function getSuburbLayerSummary(suburbName) {

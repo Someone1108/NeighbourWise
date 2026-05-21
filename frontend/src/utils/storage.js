@@ -24,6 +24,13 @@ function getSafeLocationName(item) {
   ).trim()
 }
 
+function normalizeCompareName(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '')
+}
+
 function getSafeLocationId(item) {
   return String(
     item?.id ||
@@ -36,10 +43,36 @@ function getSafeCompareKey(item) {
   const id = getSafeLocationId(item)
   if (id) return `id:${id}`
 
-  const name = getSafeLocationName(item).toLowerCase()
+  const name = normalizeCompareName(getSafeLocationName(item))
   if (name) return `name:${name}`
 
   return ''
+}
+
+export function isSameCompareArea(a, b) {
+  const keyA = getSafeCompareKey(a)
+  const keyB = getSafeCompareKey(b)
+
+  if (keyA && keyB && keyA === keyB) return true
+
+  const nameA = normalizeCompareName(getSafeLocationName(a))
+  const nameB = normalizeCompareName(getSafeLocationName(b))
+
+  if (nameA && nameB && nameA === nameB) return true
+
+  const latA = Number(a?.lat ?? a?.selectedLocation?.lat)
+  const lngA = Number(a?.lng ?? a?.selectedLocation?.lng)
+  const latB = Number(b?.lat ?? b?.selectedLocation?.lat)
+  const lngB = Number(b?.lng ?? b?.selectedLocation?.lng)
+
+  return (
+    Number.isFinite(latA) &&
+    Number.isFinite(lngA) &&
+    Number.isFinite(latB) &&
+    Number.isFinite(lngB) &&
+    Math.abs(latA - latB) < 0.00001 &&
+    Math.abs(lngA - lngB) < 0.00001
+  )
 }
 
 function normalizeSelectedLocation(item) {
@@ -122,15 +155,29 @@ export function loadCompareList() {
     if (!raw) return []
     const parsed = JSON.parse(raw)
     if (!Array.isArray(parsed)) return []
-    return parsed
+    return dedupeCompareList(parsed)
   } catch {
     return []
   }
 }
 
+function dedupeCompareList(list) {
+  const safe = Array.isArray(list) ? list : []
+  const next = []
+
+  for (const item of safe) {
+    if (!item) continue
+    if (next.some((existing) => isSameCompareArea(existing, item))) continue
+    next.push(item)
+    if (next.length >= 2) break
+  }
+
+  return next
+}
+
 export function saveCompareList(list) {
   try {
-    const safe = Array.isArray(list) ? list : []
+    const safe = dedupeCompareList(list)
     localStorage.setItem(COMPARE_KEY, JSON.stringify(safe))
     emitCompareUpdated()
   } catch {
@@ -155,12 +202,7 @@ export function addToCompareList(item) {
   // Cross-check by name as well to catch cases where one item has an id and
   // the other was built without one (e.g. added from MapPage vs InsightsPage).
   const alreadyExists = current.some((x) => {
-    const existingKey = getSafeCompareKey(x)
-    if (existingKey === compareKey) return true
-    // Fallback: match by normalised display name
-    const existingName = getSafeLocationName(x).toLowerCase()
-    const incomingName = locationName.toLowerCase()
-    return existingName.length > 0 && incomingName.length > 0 && existingName === incomingName
+    return isSameCompareArea(x, item)
   })
 
   if (alreadyExists) {
@@ -291,6 +333,13 @@ export function replaceCompareArea(index, item) {
   }
 
   const next = [...current]
+  const duplicateOtherArea = next.some((existing, existingIndex) => {
+    return existingIndex !== index && isSameCompareArea(existing, item)
+  })
+
+  if (duplicateOtherArea) {
+    return current
+  }
 
   next[index] = newArea
 
@@ -307,7 +356,7 @@ export function removeFromCompareList(locationNameOrItem) {
   const key =
     typeof locationNameOrItem === 'object'
       ? getSafeCompareKey(locationNameOrItem)
-      : `name:${String(locationNameOrItem || '').trim().toLowerCase()}`
+      : `name:${normalizeCompareName(locationNameOrItem)}`
 
   if (!key || key === 'name:') return loadCompareList()
 

@@ -1,6 +1,11 @@
 const pool = require('../utils/db');
+const { createTtlCache } = require('../utils/cache');
 
 const CENSUS_YEAR = 2021;
+const censusCache = createTtlCache({
+  ttlMs: Number(process.env.CENSUS_CACHE_TTL_MS) || 60 * 60 * 1000,
+  maxEntries: 500,
+});
 
 function toNumber(value) {
   if (value === null || value === undefined || value === '') return null;
@@ -186,6 +191,9 @@ function shapeResult(row, requestedType, requestedValue, matchedBy) {
 
 async function getCensusBySuburb(name) {
   const requestedName = String(name || '').trim();
+  const cacheKey = `suburb:${normalizePlaceName(requestedName)}`;
+
+  return censusCache.getOrSet(cacheKey, async () => {
   const searchTerms = buildSuburbSearchTerms(requestedName);
   const parenthesizedPrefix = buildParenthesizedPrefix(requestedName);
 
@@ -224,10 +232,14 @@ async function getCensusBySuburb(name) {
     parenthesizedPrefix,
   ]);
   return shapeResult(result.rows[0], 'suburb', requestedName, 'suburb-to-sa2');
+  });
 }
 
 async function getCensusByPostcode(postcode) {
   const value = String(postcode || '').trim();
+  const cacheKey = `postcode:${value}`;
+
+  return censusCache.getOrSet(cacheKey, async () => {
   if (!/^\d{4}$/.test(value)) {
     throw new Error('A valid four-digit postcode is required');
   }
@@ -271,10 +283,14 @@ async function getCensusByPostcode(postcode) {
 
   const fb = await pool.query(fallbackSql, [value]);
   return shapeResult(fb.rows[0], 'postcode', value, 'postcode-locality-to-sa2');
+  });
 }
 
 async function getCensusBySa2(code) {
   const value = String(code || '').trim();
+  const cacheKey = `sa2:${value}`;
+
+  return censusCache.getOrSet(cacheKey, async () => {
   if (!value) {
     throw new Error('SA2 code is required');
   }
@@ -292,6 +308,7 @@ async function getCensusBySa2(code) {
 
   const result = await pool.query(sql, [value]);
   return shapeResult(result.rows[0], 'sa2', value, 'sa2-code');
+  });
 }
 
 async function getSuburbForPoint(lat, lng) {
@@ -346,6 +363,38 @@ async function getNearestCensusProfileForPoint(lat, lng) {
   return row;
 }
 
+async function getCensusRowForPoint(lat, lng) {
+  const sql = `
+    with point as (
+      select st_setsrid(st_makepoint($1, $2), 4326) as geom
+    ),
+    suburb as (
+      select p."LOCALITY" as suburb
+      from public.locality_polygon p
+      cross join point pt
+      where st_intersects(p.geom, pt.geom)
+      order by st_area(p.geom) asc
+      limit 1
+    )
+    select
+      s.suburb as matched_suburb,
+      m.sa2_name_2021,
+      m.overlap_area_pct,
+      m.confidence,
+      p.*
+    from suburb s
+    join public.sal_to_sa2 m
+      on upper(trim(m.sal_name_2021)) = upper(trim(s.suburb))
+    join public.census_sa2_profile_valid p
+      on p.sa2_code_2021 = m.sa2_code_2021
+    order by m.overlap_area_pct desc nulls last
+    limit 1;
+  `;
+
+  const result = await pool.query(sql, [lng, lat]);
+  return result.rows[0] || null;
+}
+
 async function getCensusByLocation({ lat, lng }) {
   const safeLat = Number(lat);
   const safeLng = Number(lng);
@@ -354,7 +403,25 @@ async function getCensusByLocation({ lat, lng }) {
     throw new Error('Valid latitude and longitude are required');
   }
 
+  const cacheKey = `location:${safeLat.toFixed(5)}:${safeLng.toFixed(5)}`;
+
+  return censusCache.getOrSet(cacheKey, async () => {
   const requestedValue = `${safeLat},${safeLng}`;
+  const directRow = await getCensusRowForPoint(safeLat, safeLng);
+
+  if (directRow) {
+    return {
+      ...shapeResult(
+        directRow,
+        'location',
+        requestedValue,
+        'address-point-to-suburb-to-sa2'
+      ),
+      requestedType: 'location',
+      requestedValue,
+    };
+  }
+
   const suburb = await getSuburbForPoint(safeLat, safeLng);
 
   if (!suburb) {
@@ -375,6 +442,7 @@ async function getCensusByLocation({ lat, lng }) {
     requestedValue,
     matchedBy: 'address-point-to-suburb-to-sa2',
   };
+  });
 }
 
 module.exports = {

@@ -1850,12 +1850,6 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  transition: box-shadow 0.2s ease, transform 0.2s ease;
-}
-
-.vp-card:hover {
-  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
-  transform: translateY(-2px);
 }
 
 .vp-card-icon {
@@ -2085,6 +2079,29 @@ body {
   pointer-events: none;
   font-size: 24px;
   line-height: 1;
+}
+
+.search-icon-button {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  width: 40px;
+  height: 40px;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted-dark);
+  cursor: pointer;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.search-icon-button:hover,
+.search-icon-button:focus-visible {
+  background: #ecfeff;
+  color: var(--accent-2);
+  outline: none;
 }
 
 /* Wrap input + dropdown so the dropdown can absolute-position relative to it */

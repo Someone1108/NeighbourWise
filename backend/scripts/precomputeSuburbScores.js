@@ -3,7 +3,9 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const pool = require('../src/utils/db');
-const { getAccessibilityScore } = require('../src/services/accessibilityScoreService');
+const {
+  getAccessibilityScoresForPersonas
+} = require('../src/services/accessibilityScoreService');
 const { getSafetyScore } = require('../src/services/safetyScoreService');
 const { getEnvironmentScore } = require('../src/services/environmentScoreService');
 
@@ -14,8 +16,19 @@ const PERSONA_WEIGHTS = {
   pet: { A: 0.3, S: 0.25, E: 0.45 }
 };
 
+const DEFAULT_PERSONAS = ['default', 'family', 'elderly', 'pet'];
+const PERSONA_ALIASES = {
+  elder: 'elderly',
+  elderly: 'elderly',
+  family: 'family',
+  pet: 'pet',
+  default: 'default'
+};
+
 const DEFAULT_DELAY_MS = 3000;
-const DEFAULT_POI_DELAY_MS = 500;
+const DEFAULT_POI_DELAY_MS = 750;
+const DEFAULT_MAX_RETRIES = 2;
+const DEFAULT_RETRY_DELAY_MS = 30000;
 
 function parseArgs(argv) {
   return argv.slice(2).reduce((args, arg) => {
@@ -37,11 +50,124 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
 }
 
+function parsePersonas(args, fallbackPersonas = DEFAULT_PERSONAS) {
+  const rawPersonas = args.personas || args.persona;
+  const personas = rawPersonas
+    ? String(rawPersonas)
+        .split(',')
+        .map((persona) => persona.trim().toLowerCase())
+        .filter(Boolean)
+    : fallbackPersonas;
+
+  const normalized = personas.includes('all')
+    ? DEFAULT_PERSONAS
+    : personas.map((persona) => PERSONA_ALIASES[persona] || persona);
+
+  const uniquePersonas = [...new Set(normalized)];
+  const invalidPersonas = uniquePersonas.filter((persona) => !PERSONA_WEIGHTS[persona]);
+
+  if (invalidPersonas.length) {
+    throw new Error(
+      `Unknown persona(s): ${invalidPersonas.join(', ')}. ` +
+        `Use one of: ${Object.keys(PERSONA_WEIGHTS).join(', ')}.`
+    );
+  }
+
+  return uniquePersonas;
+}
+
 function csvEscape(value) {
   if (value === null || value === undefined) return '';
 
   const text = typeof value === 'string' ? value : JSON.stringify(value);
   return `"${text.replace(/"/g, '""')}"`;
+}
+
+function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let field = '';
+  let inQuotes = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    const next = text[index + 1];
+
+    if (char === '"') {
+      if (inQuotes && next === '"') {
+        field += '"';
+        index += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      row.push(field);
+      field = '';
+    } else if ((char === '\n' || char === '\r') && !inQuotes) {
+      if (char === '\r' && next === '\n') index += 1;
+      row.push(field);
+      if (row.some((value) => value !== '')) rows.push(row);
+      row = [];
+      field = '';
+    } else {
+      field += char;
+    }
+  }
+
+  if (field || row.length) {
+    row.push(field);
+    rows.push(row);
+  }
+
+  const [rawHeaders, ...records] = rows;
+  if (!rawHeaders) return [];
+
+  const headers = rawHeaders.map((header) => header.replace(/^\uFEFF/, ''));
+  return records.map((record) =>
+    Object.fromEntries(headers.map((header, index) => [header, record[index] || '']))
+  );
+}
+
+function getCsvRowKey(row) {
+  return [
+    row.locality_point_id || '',
+    String(row.suburb_name || '').toUpperCase(),
+    row.postcode || '',
+    row.persona || ''
+  ].join('|');
+}
+
+function getJobKey(job) {
+  return [
+    job.suburb.localityPointId || '',
+    String(job.suburb.suburbName || '').toUpperCase(),
+    job.suburb.postcode || '',
+    job.persona || ''
+  ].join('|');
+}
+
+function getSuburbCacheKey(suburb) {
+  return [
+    suburb.localityPointId || '',
+    String(suburb.suburbName || '').toUpperCase(),
+    suburb.postcode || '',
+    suburb.latitude,
+    suburb.longitude
+  ].join('|');
+}
+
+function loadCompletedCsvRows(outputCsv) {
+  if (!outputCsv) return new Set();
+
+  const outputPath = path.resolve(process.cwd(), outputCsv);
+  if (!fs.existsSync(outputPath)) return new Set();
+
+  const rows = parseCsv(fs.readFileSync(outputPath, 'utf8'));
+  return new Set(
+    rows
+      .filter((row) => row.status === 'completed')
+      .map((row) => getCsvRowKey(row))
+  );
 }
 
 function createCsvWriter(outputCsv) {
@@ -71,20 +197,21 @@ function createCsvWriter(outputCsv) {
     'breakdown_json'
   ];
 
-  const stream = fs.createWriteStream(outputPath, { encoding: 'utf8' });
-  stream.write(`${columns.join(',')}\n`);
+  const hasExistingRows =
+    fs.existsSync(outputPath) && fs.statSync(outputPath).size > 0;
+
+  if (!hasExistingRows) {
+    fs.appendFileSync(outputPath, `${columns.join(',')}\n`, 'utf8');
+  }
 
   return {
     outputPath,
     write(row) {
       const line = columns.map((column) => csvEscape(row[column])).join(',');
-      stream.write(`${line}\n`);
+      fs.appendFileSync(outputPath, `${line}\n`, 'utf8');
     },
     close() {
-      return new Promise((resolve, reject) => {
-        stream.end(resolve);
-        stream.on('error', reject);
-      });
+      return Promise.resolve();
     }
   };
 }
@@ -248,6 +375,35 @@ async function createScoreRun({ scoringVersion, persona, time, delayMs, sourceMe
   return result.rows[0].id;
 }
 
+async function createScoreRunsByPersona({
+  scoringVersion,
+  personas,
+  time,
+  delayMs,
+  sourceMetadata,
+  writeDb
+}) {
+  if (!writeDb) return new Map();
+
+  const runIdsByPersona = new Map();
+
+  for (const persona of personas) {
+    const runId = await createScoreRun({
+      scoringVersion,
+      persona,
+      time,
+      delayMs,
+      sourceMetadata: {
+        ...sourceMetadata,
+        personas
+      }
+    });
+    runIdsByPersona.set(persona, runId);
+  }
+
+  return runIdsByPersona;
+}
+
 async function finishScoreRun({ runId, status, errorMessage = null }) {
   await pool.query(
     `
@@ -353,21 +509,75 @@ async function saveSuburbScore({ runId, suburb, result }) {
   );
 }
 
-async function scoreSuburb({ suburb, time, persona, poiDelayMs, fallbackSafetyScore }) {
+function cloneScoreForPersona(score, persona) {
+  return {
+    ...score,
+    persona
+  };
+}
+
+async function getBaseSuburbScores({
+  suburb,
+  time,
+  personas,
+  poiDelayMs,
+  suburbScoreCache
+}) {
+  const cacheKey = getSuburbCacheKey(suburb);
+  const cached = suburbScoreCache.get(cacheKey);
+  if (cached) return cached;
+
   const params = {
     lat: suburb.latitude,
     lng: suburb.longitude,
-    time,
-    persona
+    time
   };
 
-  const accessibility = await getAccessibilityScore({
+  const accessibilityByPersona = await getAccessibilityScoresForPersonas({
     ...params,
+    personas,
     sequentialPois: true,
     requestDelayMs: poiDelayMs
   });
-  const rawSafety = await getSafetyScore(params);
-  const environment = await getEnvironmentScore(params);
+  const rawSafety = await getSafetyScore({
+    ...params,
+    persona: 'default'
+  });
+  const environment = await getEnvironmentScore({
+    ...params,
+    persona: 'default'
+  });
+
+  const baseScores = {
+    accessibilityByPersona,
+    rawSafety,
+    environment
+  };
+
+  suburbScoreCache.set(cacheKey, baseScores);
+  return baseScores;
+}
+
+async function scoreSuburb({
+  suburb,
+  time,
+  persona,
+  personas,
+  poiDelayMs,
+  fallbackSafetyScore,
+  suburbScoreCache
+}) {
+  const baseScores = await getBaseSuburbScores({
+    suburb,
+    time,
+    personas,
+    poiDelayMs,
+    suburbScoreCache
+  });
+
+  const accessibility = baseScores.accessibilityByPersona[persona];
+  const rawSafety = cloneScoreForPersona(baseScores.rawSafety, persona);
+  const environment = cloneScoreForPersona(baseScores.environment, persona);
   const safety = applyMissingScoreFallbacks({
     accessibility,
     safety: rawSafety,
@@ -380,10 +590,11 @@ async function scoreSuburb({ suburb, time, persona, poiDelayMs, fallbackSafetySc
     environmentScore: environment.environmentScore,
     persona
   });
+  const status = liveabilityScore == null ? 'failed' : 'completed';
 
   return {
-    status: 'completed',
-    errorMessage: null,
+    status,
+    errorMessage: status === 'failed' ? 'Unable to calculate complete score set' : null,
     accessibilityScore: accessibility.accessibilityScore,
     safetyScore: safety.safetyScore,
     environmentScore: environment.environmentScore,
@@ -396,6 +607,96 @@ async function scoreSuburb({ suburb, time, persona, poiDelayMs, fallbackSafetySc
   };
 }
 
+function makeJob({ suburb, persona }) {
+  return {
+    suburb,
+    persona,
+    attempts: 0,
+    lastError: null,
+    result: null
+  };
+}
+
+function formatJobLabel(job, index, total) {
+  return `[${index + 1}/${total}] ${job.suburb.suburbLabel || job.suburb.suburbName} (${job.persona})`;
+}
+
+function makeFailedResult(error) {
+  return {
+    status: 'failed',
+    errorMessage: error.message,
+    accessibilityScore: null,
+    safetyScore: null,
+    environmentScore: null,
+    liveabilityScore: null,
+    breakdown: {
+      stack: error.stack
+    }
+  };
+}
+
+function writeCsvResult({
+  csvWriter,
+  suburb,
+  result,
+  persona,
+  time,
+  scoringVersion,
+  crimeLatestYear
+}) {
+  if (!csvWriter) return;
+
+  csvWriter.write({
+    locality_point_id: suburb.localityPointId,
+    suburb_name: suburb.suburbName,
+    suburb_label: suburb.suburbLabel,
+    postcode: suburb.postcode,
+    latitude: suburb.latitude,
+    longitude: suburb.longitude,
+    accessibility_score: result.accessibilityScore,
+    safety_score: result.safetyScore,
+    environment_score: result.environmentScore,
+    liveability_score: result.liveabilityScore,
+    persona,
+    time_minutes: time,
+    scoring_version: scoringVersion,
+    crime_latest_year: crimeLatestYear,
+    status: result.status,
+    error_message: result.errorMessage,
+    calculated_at: new Date().toISOString(),
+    breakdown_json: result.breakdown
+  });
+}
+
+async function runJob({
+  job,
+  time,
+  personas,
+  poiDelayMs,
+  fallbackSafetyScore,
+  suburbScoreCache
+}) {
+  job.attempts += 1;
+  const result = await scoreSuburb({
+    suburb: job.suburb,
+    time,
+    persona: job.persona,
+    personas,
+    poiDelayMs,
+    fallbackSafetyScore,
+    suburbScoreCache
+  });
+
+  if (result.status !== 'completed') {
+    throw new Error(result.errorMessage || 'Score generation returned incomplete data');
+  }
+
+  job.result = result;
+  job.lastError = null;
+
+  return job.result;
+}
+
 async function main() {
   const args = parseArgs(process.argv);
   const limit = toInt(args.limit, 0);
@@ -403,15 +704,17 @@ async function main() {
   const time = toInt(args.time, 20);
   const delayMs = toInt(args.delayMs, DEFAULT_DELAY_MS);
   const poiDelayMs = toInt(args.poiDelayMs, DEFAULT_POI_DELAY_MS);
+  const retryDelayMs = toInt(args.retryDelayMs, DEFAULT_RETRY_DELAY_MS);
+  const maxRetries = toInt(args.maxRetries, DEFAULT_MAX_RETRIES);
   const fallbackSafetyScore =
     args.fallbackSafetyScore === undefined
       ? null
       : toInt(args.fallbackSafetyScore, null);
-  const persona = args.persona || 'default';
   const scoringVersion = args.scoringVersion || 'suburb-score-v1';
   const stopOnError = Boolean(args.stopOnError);
   const outputCsv = args.outputCsv || args.csv || null;
   const writeDb = outputCsv ? Boolean(args.writeDb) : true;
+  const personas = parsePersonas(args, outputCsv ? DEFAULT_PERSONAS : ['default']);
   const suburbNames = args.suburbs
     ? String(args.suburbs)
         .split(',')
@@ -420,145 +723,161 @@ async function main() {
     : [];
 
   const sourceMetadata = await getSourceMetadata();
+  const completedCsvRows = loadCompletedCsvRows(outputCsv);
   const csvWriter = createCsvWriter(outputCsv);
-  const runId = writeDb
-    ? await createScoreRun({
-        scoringVersion,
-        persona,
-        time,
-        delayMs,
-        sourceMetadata: {
-          ...sourceMetadata,
-          poiDelayMs,
-          fallbackSafetyScore,
-          limit: limit || null,
-          offset,
-          suburbs: suburbNames,
-          outputCsv: outputCsv || null
-        }
-      })
-    : null;
+  const runSourceMetadata = {
+    ...sourceMetadata,
+    poiDelayMs,
+    retryDelayMs,
+    maxRetries,
+    fallbackSafetyScore,
+    limit: limit || null,
+    offset,
+    suburbs: suburbNames,
+    outputCsv: outputCsv || null
+  };
+  const runIdsByPersona = await createScoreRunsByPersona({
+    scoringVersion,
+    personas,
+    time,
+    delayMs,
+    sourceMetadata: runSourceMetadata,
+    writeDb
+  });
 
   let failures = 0;
+  let completed = 0;
+  const suburbScoreCache = new Map();
 
   try {
     const suburbs = suburbNames.length
       ? await fetchSuburbsByName(suburbNames)
       : await fetchSuburbs({ limit, offset });
-    if (writeDb) {
-      console.log(`Created score run ${runId}. Scoring ${suburbs.length} suburbs.`);
-    } else {
-      console.log(`Writing CSV only. Scoring ${suburbs.length} suburbs.`);
-    }
+    const jobs = suburbs.flatMap((suburb) =>
+      personas.map((persona) => makeJob({ suburb, persona }))
+    ).filter((job) => !completedCsvRows.has(getJobKey(job)));
+    const skipped = suburbs.length * personas.length - jobs.length;
 
-    for (let index = 0; index < suburbs.length; index += 1) {
-      const suburb = suburbs[index];
+    if (writeDb) {
+      const runSummary = [...runIdsByPersona.entries()]
+        .map(([persona, runId]) => `${persona}:${runId}`)
+        .join(', ');
       console.log(
-        `[${index + 1}/${suburbs.length}] ${suburb.suburbLabel || suburb.suburbName}`
+        `Created score runs (${runSummary}). Scoring ${jobs.length} suburb/persona jobs.`
       );
-
-      try {
-        const result = await scoreSuburb({
-          suburb,
-          time,
-          persona,
-          poiDelayMs,
-          fallbackSafetyScore
-        });
-        if (writeDb) {
-          await saveSuburbScore({ runId, suburb, result });
-        }
-        if (csvWriter) {
-          csvWriter.write({
-            locality_point_id: suburb.localityPointId,
-            suburb_name: suburb.suburbName,
-            suburb_label: suburb.suburbLabel,
-            postcode: suburb.postcode,
-            latitude: suburb.latitude,
-            longitude: suburb.longitude,
-            accessibility_score: result.accessibilityScore,
-            safety_score: result.safetyScore,
-            environment_score: result.environmentScore,
-            liveability_score: result.liveabilityScore,
-            persona,
-            time_minutes: time,
-            scoring_version: scoringVersion,
-            crime_latest_year: sourceMetadata.crimeLatestYear,
-            status: result.status,
-            error_message: result.errorMessage,
-            calculated_at: new Date().toISOString(),
-            breakdown_json: result.breakdown
-          });
-        }
-        console.log(
-          `  saved A:${result.accessibilityScore} S:${result.safetyScore} E:${result.environmentScore} L:${result.liveabilityScore}`
-        );
-      } catch (err) {
-        failures += 1;
-        console.error(`  failed: ${err.message}`);
-
-        const failedResult = {
-          runId,
-          suburb,
-          result: {
-            status: 'failed',
-            errorMessage: err.message,
-            breakdown: {
-              stack: err.stack
-            }
-          }
-        };
-
-        if (writeDb) {
-          await saveSuburbScore(failedResult);
-        }
-        if (csvWriter) {
-          csvWriter.write({
-            locality_point_id: suburb.localityPointId,
-            suburb_name: suburb.suburbName,
-            suburb_label: suburb.suburbLabel,
-            postcode: suburb.postcode,
-            latitude: suburb.latitude,
-            longitude: suburb.longitude,
-            accessibility_score: null,
-            safety_score: null,
-            environment_score: null,
-            liveability_score: null,
-            persona,
-            time_minutes: time,
-            scoring_version: scoringVersion,
-            crime_latest_year: sourceMetadata.crimeLatestYear,
-            status: 'failed',
-            error_message: err.message,
-            calculated_at: new Date().toISOString(),
-            breakdown_json: { stack: err.stack }
-          });
-        }
-
-        if (stopOnError) throw err;
-      }
-
-      if (index < suburbs.length - 1) {
-        await delay(delayMs);
+    } else {
+      console.log(
+        `Writing CSV only. Scoring ${jobs.length} suburb/persona jobs ` +
+          `(${suburbs.length} suburbs x ${personas.length} personas).`
+      );
+      if (skipped > 0) {
+        console.log(`Skipping ${skipped} completed rows already in ${outputCsv}.`);
       }
     }
 
-    if (writeDb) {
-      await finishScoreRun({
-        runId,
-        status: failures > 0 ? 'completed_with_errors' : 'completed'
+    for (let pass = 0; pass <= maxRetries; pass += 1) {
+      const pendingJobs = jobs.filter((job) => !job.result);
+      if (!pendingJobs.length) break;
+
+      if (pass > 0) {
+        console.log(
+          `Retry pass ${pass}/${maxRetries}: waiting ${retryDelayMs}ms before ` +
+            `rerunning ${pendingJobs.length} failed jobs.`
+        );
+        await delay(retryDelayMs);
+      }
+
+      for (let index = 0; index < pendingJobs.length; index += 1) {
+        const job = pendingJobs[index];
+        console.log(formatJobLabel(job, index, pendingJobs.length));
+
+        try {
+          const result = await runJob({
+            job,
+            time,
+            personas,
+            poiDelayMs,
+            fallbackSafetyScore,
+            suburbScoreCache
+          });
+          completed += 1;
+          if (writeDb) {
+            await saveSuburbScore({
+              runId: runIdsByPersona.get(job.persona),
+              suburb: job.suburb,
+              result
+            });
+          }
+          writeCsvResult({
+            csvWriter,
+            suburb: job.suburb,
+            result,
+            persona: job.persona,
+            time,
+            scoringVersion,
+            crimeLatestYear: sourceMetadata.crimeLatestYear
+          });
+          console.log(
+            `  scored A:${result.accessibilityScore} S:${result.safetyScore} ` +
+              `E:${result.environmentScore} L:${result.liveabilityScore}`
+          );
+        } catch (err) {
+          job.lastError = err;
+          console.error(`  failed attempt ${job.attempts}/${maxRetries + 1}: ${err.message}`);
+          if (stopOnError) throw err;
+        }
+
+        if (index < pendingJobs.length - 1) {
+          await delay(delayMs);
+        }
+      }
+    }
+
+    for (const job of jobs) {
+      if (job.result) continue;
+
+      const result = makeFailedResult(job.lastError || new Error('Unknown failure'));
+      failures += 1;
+
+      if (writeDb) {
+        await saveSuburbScore({
+          runId: runIdsByPersona.get(job.persona),
+          suburb: job.suburb,
+          result
+        });
+      }
+
+      writeCsvResult({
+        csvWriter,
+        suburb: job.suburb,
+        result,
+        persona: job.persona,
+        time,
+        scoringVersion,
+        crimeLatestYear: sourceMetadata.crimeLatestYear
       });
-      console.log(`Finished score run ${runId} with ${failures} failures.`);
+    }
+
+    if (writeDb) {
+      for (const runId of runIdsByPersona.values()) {
+        await finishScoreRun({
+          runId,
+          status: failures > 0 ? 'completed_with_errors' : 'completed'
+        });
+      }
+      console.log(`Finished score runs with ${completed} completed and ${failures} failures.`);
     } else {
-      console.log(`Finished CSV export with ${failures} failures.`);
+      console.log(`Finished CSV export with ${completed} completed and ${failures} failures.`);
     }
   } catch (err) {
     if (writeDb) {
-      await finishScoreRun({
-        runId,
-        status: 'failed',
-        errorMessage: err.message
-      });
+      for (const runId of runIdsByPersona.values()) {
+        await finishScoreRun({
+          runId,
+          status: 'failed',
+          errorMessage: err.message
+        });
+      }
     }
     throw err;
   } finally {
