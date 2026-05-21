@@ -6,7 +6,7 @@ const DEFAULT_SITES_PATH = '/sites?environmentalSegment=air';
 const DEFAULT_SITE_PARAMETERS_PATH = '/sites/{siteId}/parameters';
 
 const CACHE_TTL_MS = 10 * 60 * 1000;
-const AQI_TIMEOUT_MS = Number(process.env.EPA_AIRWATCH_TIMEOUT_MS) || 2500;
+const AQI_TIMEOUT_MS = Number(process.env.EPA_AIRWATCH_TIMEOUT_MS) || 10000;
 const aqiCache = createTtlCache({
   ttlMs: Number(process.env.AQI_CACHE_TTL_MS) || CACHE_TTL_MS,
   maxEntries: 500,
