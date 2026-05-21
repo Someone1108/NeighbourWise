@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -207,22 +207,22 @@ function getZoneGroupLabel(zoneCode) {
   return (ZONING_COLORS[group] || ZONING_COLORS.other).label;
 }
 
-function LegendRow({ color, fillColor, label }) {
+function LegendRow({ color, fillColor, label, compact = false }) {
   return (
     <div
       style={{
         display: "flex",
         alignItems: "center",
-        gap: 8,
-        marginTop: 6,
-        fontSize: 12,
+        gap: compact ? 6 : 8,
+        marginTop: compact ? 4 : 6,
+        fontSize: compact ? 11 : 12,
         color: "#1f2937"
       }}
     >
       <span
         style={{
-          width: 14,
-          height: 14,
+          width: compact ? 12 : 14,
+          height: compact ? 12 : 14,
           borderRadius: 3,
           border: `2px solid ${color}`,
           background: fillColor,
@@ -230,7 +230,7 @@ function LegendRow({ color, fillColor, label }) {
           flexShrink: 0
         }}
       />
-      <span>{label}</span>
+      <span style={{ lineHeight: 1.25 }}>{label}</span>
     </div>
   );
 }
@@ -268,6 +268,21 @@ function formatMetric(value, suffix = "", decimals = 1) {
   return String(value);
 }
 
+function useIsCompactMap() {
+  const [isCompact, setIsCompact] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth <= 640 : false
+  );
+
+  useEffect(() => {
+    const handleResize = () => setIsCompact(window.innerWidth <= 640);
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  return isCompact;
+}
+
 export default function NeighbourMap({
   coordinates,
   radiusMeters,
@@ -289,6 +304,7 @@ export default function NeighbourMap({
   const heatLayerRef = useRef(null);
   const vegetationLayerRef = useRef(null);
   const zoningLayerRef = useRef(null);
+  const isCompactMap = useIsCompactMap();
 
   const coords = useMemo(() => {
     if (!coordinates) return null;
@@ -314,6 +330,33 @@ export default function NeighbourMap({
     vegetationLayer &&
     Array.isArray(vegetationLayer.features) &&
     vegetationLayer.features.length > 0;
+
+  const legendBoxStyle = {
+    position: "absolute",
+    right: isCompactMap ? 8 : 12,
+    top: isCompactMap ? 8 : 12,
+    zIndex: 1000,
+    background: "rgba(255,255,255,0.94)",
+    borderRadius: isCompactMap ? 10 : 12,
+    padding: isCompactMap ? "7px 9px" : "10px 12px",
+    boxShadow: "0 4px 14px rgba(0,0,0,0.16)",
+    minWidth: isCompactMap ? 0 : 210,
+    maxWidth: isCompactMap ? "min(210px, calc(100% - 16px))" : 360,
+    border: "1px solid rgba(0,0,0,0.08)",
+  };
+
+  const legendTitleStyle = {
+    fontWeight: 800,
+    fontSize: isCompactMap ? 12 : 13,
+    color: "#111827",
+  };
+
+  const legendHelpStyle = {
+    marginTop: isCompactMap ? 5 : 8,
+    fontSize: isCompactMap ? 11 : 12,
+    color: "#4b5563",
+    lineHeight: isCompactMap ? 1.3 : 1.45,
+  };
 
   useEffect(() => {
     if (!coords || mapRef.current) return;
@@ -605,21 +648,8 @@ export default function NeighbourMap({
       />
 
       {showZoningLegend ? (
-        <div
-          style={{
-            position: "absolute",
-            right: 12,
-            top: 12,
-            zIndex: 1000,
-            background: "rgba(255,255,255,0.96)",
-            borderRadius: 12,
-            padding: "10px 12px",
-            boxShadow: "0 4px 14px rgba(0,0,0,0.16)",
-            minWidth: 210,
-            border: "1px solid rgba(0,0,0,0.08)"
-          }}
-        >
-          <div style={{ fontWeight: 800, fontSize: 13, color: "#111827" }}>
+        <div style={legendBoxStyle}>
+          <div style={legendTitleStyle}>
             Zoning legend
           </div>
 
@@ -627,51 +657,44 @@ export default function NeighbourMap({
             color={ZONING_COLORS.residential.color}
             fillColor={ZONING_COLORS.residential.fillColor}
             label={ZONING_COLORS.residential.label}
+            compact={isCompactMap}
           />
           <LegendRow
             color={ZONING_COLORS.commercialMixed.color}
             fillColor={ZONING_COLORS.commercialMixed.fillColor}
             label={ZONING_COLORS.commercialMixed.label}
+            compact={isCompactMap}
           />
           <LegendRow
             color={ZONING_COLORS.industrial.color}
             fillColor={ZONING_COLORS.industrial.fillColor}
             label={ZONING_COLORS.industrial.label}
+            compact={isCompactMap}
           />
           <LegendRow
             color={ZONING_COLORS.publicSpecial.color}
             fillColor={ZONING_COLORS.publicSpecial.fillColor}
             label={ZONING_COLORS.publicSpecial.label}
+            compact={isCompactMap}
           />
           <LegendRow
             color={ZONING_COLORS.growthRuralEnvironmental.color}
             fillColor={ZONING_COLORS.growthRuralEnvironmental.fillColor}
             label={ZONING_COLORS.growthRuralEnvironmental.label}
+            compact={isCompactMap}
           />
           <LegendRow
             color={ZONING_COLORS.other.color}
             fillColor={ZONING_COLORS.other.fillColor}
             label={ZONING_COLORS.other.label}
+            compact={isCompactMap}
           />
         </div>
       ) : null}
 
       {showHeatLegend ? (
-        <div
-          style={{
-            position: "absolute",
-            right: 12,
-            top: 12,
-            zIndex: 1000,
-            background: "rgba(255,255,255,0.96)",
-            borderRadius: 12,
-            padding: "10px 12px",
-            boxShadow: "0 4px 14px rgba(0,0,0,0.16)",
-            minWidth: 210,
-            border: "1px solid rgba(0,0,0,0.08)"
-          }}
-        >
-          <div style={{ fontWeight: 800, fontSize: 13, color: "#111827" }}>
+        <div style={legendBoxStyle}>
+          <div style={legendTitleStyle}>
             Heat legend
           </div>
 
@@ -679,37 +702,18 @@ export default function NeighbourMap({
             color="#D73027"
             fillColor="#FC8D59"
             label="Urban heat layer"
+            compact={isCompactMap}
           />
 
-          <div
-            style={{
-              marginTop: 8,
-              fontSize: 12,
-              color: "#4b5563",
-              lineHeight: 1.45
-            }}
-          >
-            Click at any point on the map to view the heat level of that area.
+          <div style={legendHelpStyle}>
+            {isCompactMap ? "Higher = hotter." : "Higher values mean stronger heat exposure. Click the map for a local reading."}
           </div>
         </div>
       ) : null}
 
       {showVegetationLegend ? (
-        <div
-          style={{
-            position: "absolute",
-            right: 12,
-            top: 12,
-            zIndex: 1000,
-            background: "rgba(255,255,255,0.96)",
-            borderRadius: 12,
-            padding: "10px 12px",
-            boxShadow: "0 4px 14px rgba(0,0,0,0.16)",
-            minWidth: 210,
-            border: "1px solid rgba(0,0,0,0.08)"
-          }}
-        >
-          <div style={{ fontWeight: 800, fontSize: 13, color: "#111827" }}>
+        <div style={legendBoxStyle}>
+          <div style={legendTitleStyle}>
             Vegetation legend
           </div>
 
@@ -717,17 +721,11 @@ export default function NeighbourMap({
             color="#1B7837"
             fillColor="#5AAE61"
             label="Vegetation cover layer"
+            compact={isCompactMap}
           />
 
-          <div
-            style={{
-              marginTop: 8,
-              fontSize: 12,
-              color: "#4b5563",
-              lineHeight: 1.45
-            }}
-          >
-            Click on the map to view the vegetation cover percentage in that area.
+          <div style={legendHelpStyle}>
+            {isCompactMap ? "Higher = greener." : "Higher percentages mean more greenery. Click the map for local cover."}
           </div>
         </div>
       ) : null}

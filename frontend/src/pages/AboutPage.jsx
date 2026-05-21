@@ -1,6 +1,3 @@
-import { useEffect, useState } from 'react'
-import { getCoverageSuburbs } from '../services/api.js'
-
 const SCORE_CATEGORIES = [
   {
     icon: '🚌',
@@ -33,8 +30,18 @@ const METHODOLOGY_ROWS = [
     color: '#2563eb',
     soft: '#eff6ff',
     border: '#bfdbfe',
-    weight: 35,
-    sources: 'GTFS + OpenStreetMap',
+    weightText: '40% default weight',
+    sourceText: 'GTFS transport feeds + OpenStreetMap places',
+    factors: [
+      'Bus stops',
+      'Train stations',
+      'Supermarkets',
+      'Hospitals',
+      'Schools',
+      'Parks',
+      'Dog parks for pet profiles',
+      'Nearest distance and nearby count within the selected travel range',
+    ],
   },
   {
     key: 'safety',
@@ -43,8 +50,17 @@ const METHODOLOGY_ROWS = [
     color: '#059669',
     soft: '#ecfdf5',
     border: '#a7f3d0',
-    weight: 35,
-    sources: 'Crime Statistics VIC + VicPlan',
+    weightText: '35% default weight',
+    sourceText: 'Crime Statistics VIC, OpenStreetMap safety tags + VicPlan zoning',
+    factors: [
+      'Recorded-crime context',
+      'Activity and passive-safety places',
+      'Noise and traffic comfort',
+      'Street lighting signals',
+      'Public transport stop comfort',
+      'Shelter, benches, covered stops, wheelchair access and tactile paving',
+      'Nearby zoning mix',
+    ],
   },
   {
     key: 'environment',
@@ -53,28 +69,19 @@ const METHODOLOGY_ROWS = [
     color: '#ea580c',
     soft: '#fff7ed',
     border: '#fed7aa',
-    weight: 30,
-    sources: 'Urban Heat Islands + EPA AirWatch',
+    weightText: '25% default weight',
+    sourceText: 'Vegetation cover, urban heat, VicPlan zoning + EPA AirWatch',
+    factors: [
+      'Vegetation cover',
+      'Urban heat island exposure',
+      'Environmental zoning comfort',
+      'EPA air quality readings',
+      'Nearby green-area coverage within the selected travel range',
+    ],
   },
 ]
 
 export default function AboutPage() {
-  const [suburbCount, setSuburbCount] = useState(null)
-
-  useEffect(() => {
-    let cancelled = false
-    getCoverageSuburbs()
-      .then(data => {
-        if (cancelled) return
-        const count = Array.isArray(data?.suburbs) ? data.suburbs.length : null
-        setSuburbCount(count)
-      })
-      .catch(() => {})
-    return () => { cancelled = true }
-  }, [])
-
-  const suburbLabel = suburbCount !== null ? `${suburbCount} suburbs` : '127+ suburbs'
-
   return (
     <div className="nwPage nwAboutPage">
       {/* ── BANNER ── */}
@@ -92,9 +99,9 @@ export default function AboutPage() {
           </p>
 
           <ul className="nwAboutBannerStats" aria-label="At a glance">
-            <li className="nwAboutBannerStat">{suburbLabel}</li>
+            <li className="nwAboutBannerStat">497 suburbs</li>
             <li className="nwAboutBannerStat">3 scoring categories</li>
-            <li className="nwAboutBannerStat">6 open data sources</li>
+            <li className="nwAboutBannerStat">15 open data sources</li>
             <li className="nwAboutBannerStat">Personalised profiles</li>
           </ul>
         </div>
@@ -153,6 +160,21 @@ export default function AboutPage() {
         </p>
       </section>
 
+      {/* ── WHO IT'S FOR ── */}
+      <section className="nwAboutBlock nwAboutBlock--orange">
+        <div className="nwAboutBlockInner">
+          <p className="nwAboutBlockEyebrow">Who is it for?</p>
+          <h2 className="nwAboutBlockHeading">
+            People making real decisions about where to live in Melbourne.
+          </h2>
+          <p className="nwAboutBlockBody">
+            Whether you are a family looking for good schools and parks, an older resident who needs
+            healthcare and quiet streets, or a pet owner hunting for dog-friendly open spaces:
+            choose your profile and the scores will reflect what matters most to you.
+          </p>
+        </div>
+      </section>
+
       {/* ── METHODOLOGY ── */}
       <section className="nwAboutSection" style={{ paddingTop: 0 }}>
         <div style={{
@@ -166,56 +188,67 @@ export default function AboutPage() {
           <h2 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 26, fontWeight: 400, color: '#1a2436', marginBottom: 20 }}>
             How this score is calculated
           </h2>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }} aria-label="Score calculation methodology">
-            <thead>
-              <tr>
-                {['Category', 'Weight', 'Data sources'].map(h => (
-                  <th key={h} scope="col" style={{
-                    textAlign: 'left', paddingBottom: 14,
-                    fontSize: 13, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#4b5563',
-                    borderBottom: '1px solid #e5e7eb',
-                  }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {METHODOLOGY_ROWS.map(({ key, label, icon, color, soft, border, weight, sources }, idx) => (
-                <tr key={key}>
-                  <td style={{ padding: '16px 18px 16px 0', borderBottom: idx < 2 ? '1px solid #f3f4f6' : 'none' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span aria-hidden="true" style={{ fontSize: 18 }}>{icon}</span>
-                      <span style={{ fontWeight: 700, fontSize: 16, color: '#1a2436' }}>{label}</span>
-                    </div>
-                  </td>
-                  <td style={{ padding: '16px 18px 16px 0', borderBottom: idx < 2 ? '1px solid #f3f4f6' : 'none' }}>
-                    <span style={{
-                      display: 'inline-block', background: soft, border: `1px solid ${border}`,
-                      borderRadius: 999, padding: '4px 14px',
-                      fontSize: 14, fontWeight: 800, color,
-                    }} aria-label={`${weight} percent`}>{weight}%</span>
-                  </td>
-                  <td style={{ padding: '16px 0', borderBottom: idx < 2 ? '1px solid #f3f4f6' : 'none' }}>
-                    <span style={{ fontSize: 14, color: '#4b5563' }}>{sources}</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      {/* ── WHO IT'S FOR ── */}
-      <section className="nwAboutBlock nwAboutBlock--orange" style={{ marginBottom: 0 }}>
-        <div className="nwAboutBlockInner">
-          <p className="nwAboutBlockEyebrow">Who is it for?</p>
-          <h2 className="nwAboutBlockHeading">
-            People making real decisions about where to live in Melbourne.
-          </h2>
-          <p className="nwAboutBlockBody">
-            Whether you are a family looking for good schools and parks, an older resident who needs
-            healthcare and quiet streets, or a pet owner hunting for dog-friendly open spaces:
-            choose your profile and the scores will reflect what matters most to you.
+          <p style={{ fontSize: 14, color: '#64748b', lineHeight: 1.6, marginBottom: 18 }}>
+            The overall score combines these three category scores. Default weights are shown below;
+            profile choices can shift the balance toward family, elderly, or pet-owner priorities.
           </p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
+            {METHODOLOGY_ROWS.map(({ key, label, icon, color, soft, border, weightText, sourceText, factors }) => (
+              <article
+                key={key}
+                style={{
+                  border: `1.5px solid ${border}`,
+                  borderRadius: 16,
+                  background: soft,
+                  padding: '18px 18px 16px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 12 }}>
+                  <span aria-hidden="true" style={{ fontSize: 22, lineHeight: 1 }}>{icon}</span>
+                  <div style={{ minWidth: 0 }}>
+                    <h3 style={{ fontSize: 17, fontWeight: 900, color: '#1a2436', margin: 0 }}>
+                      {label}
+                    </h3>
+                    <p style={{ fontSize: 12, fontWeight: 800, color, marginTop: 4 }}>
+                      {weightText}
+                    </p>
+                  </div>
+                </div>
+
+                <p style={{ fontSize: 13, fontWeight: 800, color: '#334155', marginBottom: 10 }}>
+                  {sourceText}
+                </p>
+
+                <ul style={{
+                  listStyle: 'none',
+                  padding: 0,
+                  margin: 0,
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: 8,
+                }}>
+                  {factors.map((factor) => (
+                    <li
+                      key={factor}
+                      style={{
+                        background: '#fff',
+                        border: '1px solid rgba(148,163,184,0.35)',
+                        borderRadius: 999,
+                        padding: '6px 10px',
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: '#475569',
+                        lineHeight: 1.2,
+                      }}
+                    >
+                      {factor}
+                    </li>
+                  ))}
+                </ul>
+              </article>
+            ))}
+          </div>
         </div>
       </section>
 

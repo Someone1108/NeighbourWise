@@ -443,6 +443,11 @@ function getLocationLabel(item) {
   )
 }
 
+function shortCompareLabel(str, max = 28) {
+  if (!str) return ''
+  return str.length > max ? str.slice(0, max - 1) + '...' : str
+}
+
 function inferCompareSuburbFromAddress(value) {
   const text = String(value || '').trim()
   if (!text) return ''
@@ -721,7 +726,7 @@ function CompareInsightsTable({ data }) {
         </p>
       </div>
 
-      <table className="nwCompareTable" aria-label="Key comparison insights" style={{ marginTop: 0 }}>
+      <table className="nwCompareTable nwCompareInsightsTable" aria-label="Key comparison insights" style={{ marginTop: 0 }}>
         <thead>
           <tr>
             <th style={{ width: '50%' }} title={data.area1}>{data.area1}</th>
@@ -739,6 +744,62 @@ function CompareInsightsTable({ data }) {
           </tr>
         </tbody>
       </table>
+
+      <div className="nwCompareInsightsMobile" aria-label="Key comparison insights">
+        {[0, 1].map((index) => (
+          <section key={index} className="nwCompareInsightsMobilePanel">
+            <h3 title={index === 0 ? data.area1 : data.area2}>
+              {shortCompareLabel(index === 0 ? data.area1 : data.area2, 28)}
+            </h3>
+            <CompareInsightCell insight={data.insights?.[index]} />
+          </section>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function MobileCompareScoreCards({ data, tableReady }) {
+  return (
+    <div className="nwCompareMobileScoreCards" aria-label="Comparison score cards">
+      {CATEGORY_KEYS.map((key) => {
+        const s1 = data.scores[key][0]
+        const s2 = data.scores[key][1]
+        const meta = CATEGORY_META[key] || {}
+        const area1Wins = s1 > s2
+        const area2Wins = s2 > s1
+
+        return (
+          <section key={key} className="nwCompareMobileScoreCard">
+            <div className="nwCompareMobileScoreHeader">
+              <span style={{ background: meta.tint }} aria-hidden="true">{meta.icon}</span>
+              <h3>{labelForCategory(key)}</h3>
+            </div>
+
+            <div className={`nwCompareMobileAreaScore ${area1Wins ? 'is-winner' : ''}`}>
+              <div>
+                <p title={data.area1}>{shortCompareLabel(data.area1, 28)}</p>
+                {area1Wins && <strong>Higher score</strong>}
+              </div>
+              <div>
+                <b>{s1} / 100</b>
+                {miniProgress(s1, 100, tableReady, 'right')}
+              </div>
+            </div>
+
+            <div className={`nwCompareMobileAreaScore ${area2Wins ? 'is-winner' : ''}`}>
+              <div>
+                <p title={data.area2}>{shortCompareLabel(data.area2, 28)}</p>
+                {area2Wins && <strong>Higher score</strong>}
+              </div>
+              <div>
+                <b>{s2} / 100</b>
+                {miniProgress(s2, 100, tableReady, 'right')}
+              </div>
+            </div>
+          </section>
+        )
+      })}
     </div>
   )
 }
@@ -1570,6 +1631,8 @@ async function handleFindRecommendation() {
               </tbody>
             </table>
 
+            <MobileCompareScoreCards data={data} tableReady={tableReady} />
+
             <CompareInsightsTable data={data} />
 
             <div
@@ -1590,10 +1653,10 @@ async function handleFindRecommendation() {
                 Find a Better Match
               </p>
               <h3 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 'clamp(22px, 3vw, 30px)', fontWeight: 400, color: '#1a2436', margin: '0 0 8px', lineHeight: 1.15 }}>
-                Not satisfied? Find a suburb that does better.
+                Want a stronger option? We'll recommend one.
               </h3>
               <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 6, lineHeight: 1.6 }}>
-                Pick a score category below, then choose which area to use as a starting point. We'll find a nearby suburb that scores higher in that category while keeping its other scores comparable.
+                Choose the score category you want to improve, then pick one of your compared areas as the starting point. We'll suggest a nearby suburb that scores higher in that category while keeping the other scores reasonably balanced.
               </p>
 
               {/* Step 1: Category */}
@@ -1723,7 +1786,7 @@ async function handleFindRecommendation() {
                       </p>
                     </div>
                   ) : (
-                    <div style={{
+                    <div className="nwCompareRecCard" style={{
                       marginTop: 14,
                       background: '#fff',
                       border: '1.5px solid #e5e7eb',
@@ -1734,7 +1797,7 @@ async function handleFindRecommendation() {
                       <style>{`@keyframes nwRecFadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }`}</style>
 
                       {/* Header strip — left: name, right: animated circle gauge */}
-                      <div style={{ background: 'linear-gradient(105deg, #1a1a2e 0%, #0f3460 100%)', padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+                      <div className="nwCompareRecHeader" style={{ background: 'linear-gradient(105deg, #1a1a2e 0%, #0f3460 100%)', padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
                         {/* Left: label + name */}
                         <div style={{ textAlign: 'left' }}>
                           <p style={{ fontSize: 9, fontWeight: 900, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', marginBottom: 6 }}>
@@ -1778,12 +1841,12 @@ async function handleFindRecommendation() {
 
                       <div style={{ padding: '18px 20px', textAlign: 'center' }}>
                         {/* All 3 categories in one row — featured is bigger */}
-                        <div style={{ display: 'flex', gap: 10, justifyContent: 'center', alignItems: 'flex-end', marginBottom: 10 }}>
+                        <div className="nwCompareRecScores" style={{ display: 'flex', gap: 10, justifyContent: 'center', alignItems: 'flex-end', marginBottom: 10 }}>
                           {CATEGORY_KEYS.map(k => {
                             const cc = CATEGORY_COLORS[k]
                             const isFeatured = k === recCategory
                             return (
-                              <div key={k} style={{
+                              <div key={k} className={`nwCompareRecScoreTile ${isFeatured ? 'is-featured' : ''}`} style={{
                                 flex: 1, minWidth: 0,
                                 display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
                                 background: cc.soft, border: `1.5px solid ${isFeatured ? cc.color : cc.border}`,
