@@ -506,7 +506,7 @@ export default function MapPage() {
                 const result = addToCompareList(compareItem);
                 if (result.reason === "ALREADY_EXISTS") {
                   setToastMsg("Already in your compare list.");
-                  setToastAction(null);
+                  setToastAction({ label: "Go to Compare", onClick: () => navigate("/compare") });
                   return;
                 }
                 if (result.reason === "COMPARE_FULL") {
@@ -520,7 +520,7 @@ export default function MapPage() {
                 }
                 if (result.success) {
                   setToastMsg(`Added to compare (${result.list.length}/2).`);
-                  setToastAction(null);
+                  setToastAction({ label: "Go to Compare", onClick: () => navigate("/compare") });
                   return;
                 }
                 setToastMsg("Unable to add this area to compare.");
@@ -562,22 +562,6 @@ export default function MapPage() {
                   <h2 className="nwScoreHeaderTitle">
                     Overall Liveability
                   </h2>
-                  {(() => {
-                    const s = overallScore;
-                    let tier = { label: "–", className: "is-na" };
-                    if (Number.isFinite(s)) {
-                      if (s >= 80) tier = { label: "Excellent", className: "is-excellent" };
-                      else if (s >= 65) tier = { label: "Good", className: "is-good" };
-                      else if (s >= 50) tier = { label: "Moderate", className: "is-moderate" };
-                      else tier = { label: "Low", className: "is-low" };
-                    }
-                    return (
-                      <span className={`nwScoreTier ${tier.className}`}>
-                        <span className="nwScoreTierDot" aria-hidden="true" />
-                        {tier.label}
-                      </span>
-                    );
-                  })()}
                   {getProfileLabel(profile) && (
                     <div className="nwScoreHeaderProfile">
                       Scored for: {getProfileLabel(profile)}
@@ -622,7 +606,7 @@ export default function MapPage() {
               }}
             />
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 0, flex: 1, justifyContent: "space-evenly" }}>
               <fieldset style={{ border: "none", padding: 0, margin: 0 }}>
                 <legend
                   style={{
@@ -631,7 +615,7 @@ export default function MapPage() {
                     letterSpacing: "0.06em",
                     textTransform: "uppercase",
                     color: "var(--muted-dark)",
-                    marginBottom: 4,
+                    marginBottom: 6,
                     padding: 0
                   }}
                 >
@@ -648,7 +632,7 @@ export default function MapPage() {
                       }`}
                       style={{
                         flex: 1,
-                        padding: "8px 4px",
+                        padding: "11px 4px",
                         fontSize: 13,
                         margin: 0
                       }}
@@ -670,7 +654,7 @@ export default function MapPage() {
                     letterSpacing: "0.06em",
                     textTransform: "uppercase",
                     color: "var(--muted-dark)",
-                    marginBottom: 4,
+                    marginBottom: 6,
                     padding: 0
                   }}
                 >
@@ -685,7 +669,7 @@ export default function MapPage() {
                     }`}
                     style={{
                       flex: 1,
-                      padding: "8px 4px",
+                      padding: "11px 4px",
                       fontSize: 13,
                       margin: 0
                     }}
@@ -702,7 +686,7 @@ export default function MapPage() {
                     }`}
                     style={{
                       flex: 1,
-                      padding: "8px 4px",
+                      padding: "11px 4px",
                       fontSize: 13,
                       margin: 0
                     }}
@@ -722,7 +706,7 @@ export default function MapPage() {
                     letterSpacing: "0.06em",
                     textTransform: "uppercase",
                     color: "var(--muted-dark)",
-                    marginBottom: 4,
+                    marginBottom: 6,
                     padding: 0
                   }}
                 >
@@ -751,7 +735,7 @@ export default function MapPage() {
                         activeLayer === key ? "nwRangeBtnActive" : ""
                       }`}
                       style={{
-                        padding: "8px 4px",
+                        padding: "11px 4px",
                         fontSize: 13,
                         margin: 0,
                         textAlign: "center"
@@ -777,9 +761,10 @@ export default function MapPage() {
             replaceCompareArea(index, replaceModal.pendingItem);
             setReplaceModal(null);
             setToastMsg("Compare area replaced.");
-            setToastAction(null);
+            setToastAction({ label: "Go to Compare", onClick: () => navigate("/compare") });
           }}
           onClose={() => setReplaceModal(null)}
+          onGoToCompare={() => navigate("/compare")}
         />
       )}
 

@@ -1881,7 +1881,7 @@ function SimilarSuburbs({
     const result = addToCompareList(item)
 
     if (result?.reason === 'ALREADY_EXISTS') {
-      showToast('Already in your compare list.')
+      showToast('Already in your compare list.', { label: 'Go to Compare', onClick: () => navigate('/compare') })
       return
     }
 
@@ -1894,7 +1894,7 @@ function SimilarSuburbs({
       return
     }
 
-    showToast('Added to compare list.')
+    showToast('Added to compare list.', { label: 'Go to Compare', onClick: () => navigate('/compare') })
   }
 
   function handleViewInsights(s) {
@@ -1940,9 +1940,10 @@ function SimilarSuburbs({
             replaceCompareArea(index, replaceModal.pendingItem)
             setReplaceModal(null)
             setCompareList(loadCompareList())
-            showToast('Compare area replaced.')
+            showToast('Compare area replaced.', { label: 'Go to Compare', onClick: () => navigate('/compare') })
           }}
           onClose={() => setReplaceModal(null)}
+          onGoToCompare={() => navigate('/compare')}
         />
       )}
       <div style={{ marginBottom: 14 }}>
@@ -2468,16 +2469,6 @@ export default function InsightsPage() {
             : <><span aria-hidden="true">⚙</span> Change Conditions</>
           }
         </button>
-        {band && !loading && (
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: 7, flexShrink: 0,
-            background: band.bg, border: `1px solid ${band.border}`,
-            borderRadius: 999, padding: '5px 14px',
-          }} aria-label={`Overall liveability: ${band.label}`}>
-            <div style={{ width: 8, height: 8, borderRadius: '50%', background: band.color }} aria-hidden="true" />
-            <span style={{ fontSize: 14, fontWeight: 800, color: band.color }}>{band.label}</span>
-          </div>
-        )}
       </nav>
 
       <div style={{ maxWidth: 1280, margin: '0 auto', padding: '28px 32px 0' }}>
@@ -2565,13 +2556,6 @@ export default function InsightsPage() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     {/* Badge row */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      {band && !loading && (
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: band.bg, border: `1px solid ${band.border}`, borderRadius: 999, padding: '4px 11px' }}>
-                          <div style={{ width: 6, height: 6, borderRadius: '50%', background: band.color }} aria-hidden="true" />
-                          <span style={{ fontSize: 11, fontWeight: 800, color: band.color }}>{band.label}</span>
-                        </div>
-                      )}
-                      <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>·</span>
                       <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.75)', textTransform: 'uppercase', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>
                         {rangeMinutes} min range
                       </span>
@@ -2599,7 +2583,7 @@ export default function InsightsPage() {
                         const result = addToCompareList(item)
                         if (result?.reason === 'ALREADY_EXISTS') {
                           setHeroToastMsg('Already in your compare list.')
-                          setHeroToastAction(null)
+                          setHeroToastAction({ label: 'Go to Compare', onClick: () => navigate('/compare') })
                         } else if (result?.reason === 'COMPARE_FULL') {
                           setHeroToastMsg(null)
                           setHeroToastAction(null)
@@ -2609,7 +2593,7 @@ export default function InsightsPage() {
                           })
                         } else {
                           setHeroToastMsg('Added to compare list.')
-                          setHeroToastAction(null)
+                          setHeroToastAction({ label: 'Go to Compare', onClick: () => navigate('/compare') })
                         }
                       }}
                       style={{
@@ -2637,6 +2621,9 @@ export default function InsightsPage() {
                   const score = loading ? null : (scores?.[key] ?? null)
                   const bench = STATIC_SCORE_BENCHMARK.scores[key]
                   const delta = score != null ? score - bench : null
+                  const catIndicators = indicators[key]
+                  const catGroups = groupIndicatorFactors(catIndicators?.factors || [], profile)
+                  const canBreakdown = !loading && catIndicators && catGroups.length > 0
                   return (
                     <div key={key}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 7 }}>
@@ -2644,6 +2631,29 @@ export default function InsightsPage() {
                         <span style={{ fontSize: 12, fontWeight: 800, color: 'rgba(255,255,255,0.75)', textTransform: 'uppercase', letterSpacing: '0.1em', flex: 1 }}>
                           {cfg.label}
                         </span>
+                        {canBreakdown && (
+                          <button
+                            onClick={() => setSelectedBreakdownCategory(key)}
+                            style={{
+                              all: 'unset', cursor: 'pointer',
+                              fontSize: 12, fontWeight: 800,
+                              color: '#fff',
+                              background: cfg.color,
+                              border: 'none',
+                              borderRadius: 7,
+                              padding: '4px 12px',
+                              whiteSpace: 'nowrap',
+                              transition: 'opacity 0.15s',
+                              fontFamily: 'Figtree, sans-serif',
+                              opacity: 0.92,
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.opacity = '1' }}
+                            onMouseLeave={e => { e.currentTarget.style.opacity = '0.92' }}
+                            aria-label={`See ${cfg.label} score breakdown`}
+                          >
+                            See Breakdown ↗
+                          </button>
+                        )}
                         <span style={{ fontSize: 23, fontWeight: 900, color: cfg.color, lineHeight: 1, letterSpacing: '-0.5px' }}
                           aria-label={`${cfg.label}: ${score ?? 'loading'}`}>
                           {score ?? '–'}
@@ -2670,58 +2680,6 @@ export default function InsightsPage() {
 
           </div>
         </div>
-
-        {/* Category score cards — each contains its own expandable breakdown */}
-        <div
-          style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(270px, 1fr))', gap: 14, marginBottom: 28 }}
-          role="region" aria-label="Category scores"
-        >
-          {CATEGORIES.map(k => {
-            const c = CATEGORY_CONFIG[k]
-            const catIndicators = indicators[k]
-            const catGroups = groupIndicatorFactors(catIndicators?.factors || [], profile)
-            return (
-              <div key={k} style={{
-                background: '#fff', border: '1.5px solid #e5e7eb',
-                borderRadius: 20, padding: '20px 20px',
-                boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
-                transition: 'box-shadow 0.2s, border-color 0.2s',
-              }}>
-                <div style={{ marginBottom: 12 }}>
-                  <p style={{ fontSize: 14, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: c.color, marginBottom: 5 }}>
-                    <span aria-hidden="true">{c.icon}</span> {c.label}
-                  </p>
-                  <p style={{ fontSize: 13, color: '#4b5563', lineHeight: 1.5 }}>{c.description}</p>
-                </div>
-                {!loading && catIndicators && (
-                  <p style={{ marginTop: 8, fontSize: 12, color: '#6b7280' }}>
-                    {catIndicators.factors?.filter(f => f.met).length ?? 0}/{catIndicators.factors?.length ?? 0} indicators met
-                  </p>
-                )}
-
-                {!loading && catIndicators && catGroups.length > 0 && (
-                  <button
-                    onClick={() => setSelectedBreakdownCategory(k)}
-                    style={{
-                      marginTop: 12, width: '100%', padding: '9px 14px',
-                      background: 'transparent', border: `1px solid ${c.border}`,
-                      borderRadius: 10, cursor: 'pointer',
-                      fontSize: 13, fontWeight: 700, color: c.color,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                      transition: 'all 0.18s', fontFamily: 'Figtree, sans-serif',
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.background = c.soft }}
-                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
-                  >
-                    See Score Breakdown ↗
-                  </button>
-                )}
-              </div>
-            )
-          })}
-        </div>
-
-        {/* Indicator breakdown moved inside each category card above ↑ */}
 
         <CensusContextSection data={censusData} loading={censusLoading} userProfile={profile} indicators={indicators} />
 
@@ -2829,9 +2787,10 @@ export default function InsightsPage() {
             replaceCompareArea(index, heroReplaceModal.pendingItem)
             setHeroReplaceModal(null)
             setHeroToastMsg('Compare area replaced.')
-            setHeroToastAction(null)
+            setHeroToastAction({ label: 'Go to Compare', onClick: () => navigate('/compare') })
           }}
           onClose={() => setHeroReplaceModal(null)}
+          onGoToCompare={() => navigate('/compare')}
         />
       )}
 
@@ -2910,12 +2869,6 @@ export default function InsightsPage() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         {catScore != null && (
                           <span style={{ fontSize: 22, fontWeight: 900, color: c.color }}>{Math.round(catScore)}</span>
-                        )}
-                        {band && (
-                          <span style={{
-                            fontSize: 11, fontWeight: 700, padding: '3px 10px',
-                            borderRadius: 20, background: c.soft, color: c.color,
-                          }}>{band.label}</span>
                         )}
                       </div>
                     </div>
