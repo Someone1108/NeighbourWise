@@ -1,0 +1,67 @@
+NeighbourWise
+System Architecture Report , Iteration 3
+FIT5120 TE07  |  Chaos Lab  
+1.  Overview
+NeighbourWise is a liveability decision-support website designed to help people make better housing decisions in Melbourne. The platform is built for house-hunters, renters, and first-time movers who want to understand what a suburb is actually like to live in before committing to a location. Rather than showing just property listings or basic maps, NeighbourWise brings together neighbourhood data from multiple sources and presents it in a clear, visual, and practical way.
+By Iteration 3, the platform has grown from a basic suburb search and map tool into a full liveability comparison and recommendation system. Users can search a suburb, explore its liveability scores across three categories , Accessibility, Safety, and Environment , view detailed factor-level insights, compare two suburbs side by side, and receive personalised suburb recommendations based on their living situation. The architecture that supports all of this is structured to be reliable, maintainable, and ready to be extended in future iterations.
+2.  System Architecture Diagram
+The diagram below gives a high-level view of the main components of the NeighbourWise platform and how they connect. It shows the user-facing website, the backend application logic, the database, the data preparation process, and the external data sources and APIs the platform relies on.
+
+
+3.  System Components
+3.1  Frontend , User Interface
+The frontend is the part of the platform that users interact with directly in their browser. It is built with React 19 and Vite and deployed on Vercel, so it is always accessible online without any installation required. The frontend is responsible for displaying the interactive Leaflet map, showing liveability scores, presenting suburb insights, and rendering the comparison and recommendation features added in Iteration 3.
+The frontend communicates with the backend by sending requests whenever a user searches for a suburb, selects a profile, or navigates between pages. It stores the user's selected suburb and profile preferences in the browser locally so the experience stays consistent throughout the session. All pages , Home, Map, Insights, Compare, and About , are part of the same single-page application, which makes the experience feel fast and fluid.
+3.2  Backend API , Application Logic
+The backend is built with Node.js and Express and acts as the engine behind the platform. It handles all coordination between the frontend, the database, and the external APIs. When a user searches for a suburb, the backend receives that request, queries the database for the location and neighbourhood data, calls external services like Mapbox for geocoding and points of interest, and returns the results to the frontend in a usable format.
+In Iteration 3 we extended the backend to support the comparison and recommendation features. This includes endpoints that fetch and return liveability scores for two suburbs simultaneously for the compare page, logic that identifies similar suburbs based on the user's selected living situation for the recommendation section, and a census data lookup that provides demographic context on the insights and compare pages.
+3.3  Database , Data Storage
+The database is where all the processed neighbourhood data is stored. We use Supabase, which is a hosted PostgreSQL database with PostGIS spatial extensions. PostGIS is important because it allows geographic data like suburb polygons, heat maps, and vegetation layers to be stored and queried spatially and accurately.
+By Iteration 3 the database holds locality points and polygon boundaries, environmental layers including urban heat and vegetation, planning and zoning data, safety and crime datasets, pre-computed liveability scores for all 497 supported Melbourne suburbs across multiple profiles and travel ranges, and ABS Census 2021 demographic profiles matched to suburb boundaries. Keeping everything in one organised place means the platform responds quickly and reliably to user requests.
+3.4  Data Preparation Pipeline
+Before neighbourhood data can be used by the platform it needs to be cleaned, transformed, and loaded into the database in a consistent format. This is handled by a data preparation pipeline that the team runs separately from the main application. Raw public datasets come in different formats with various inconsistencies that need to be resolved before they can support accurate liveability analysis.
+For example, crime data from Crime Stats Victoria is processed into suburb-level summaries, Census profiles are matched to suburb boundaries using geographic crosswalks, and liveability scores for all supported suburbs are batch-computed and stored so they can be retrieved instantly when a user searches. This step is what allows the platform to work with real data rather than placeholder or made-up content.
+4.  Data Sources and APIs
+The table below summarises the key data sources and external APIs that NeighbourWise uses, what each one provides, and how it is used in the platform.
+
+Data Source / API
+What it provides
+How it is used in NeighbourWise
+Mapbox
+Geocoding, address search, points of interest (POIs)
+Converts suburb names and addresses into coordinates; fetches nearby amenities like bus stops, schools, hospitals, and parks for the accessibility score
+EPA AirWatch Victoria
+Real-time air quality index (AQI) data
+Used as an input to the Environment liveability score to give users a sense of air quality conditions in a suburb
+Supabase (locality search)
+Suburb prefix search across supported Melbourne localities
+Powers the suburb search dropdown on the home page so users can quickly find supported suburbs
+ABS Census 2021
+Demographic data , population, median age, tenure, income, transport use
+Shown as a census context section on the Insights and Compare pages to help users understand who lives in a suburb
+Crime Stats Victoria
+Recorded crime offences by suburb
+Processed into suburb-level safety indicators that contribute to the Safety liveability score
+GTFS , Public Transport Victoria
+Public transport stop locations and routes across Melbourne
+Used to calculate proximity to bus stops and train stations as part of the Accessibility score
+PSMA / Geoscape
+Locality boundary polygon shapes for Melbourne suburbs
+Displayed as suburb polygon boundaries on the interactive map when a user searches
+DELWP Planning Zones
+Victorian planning and zoning classifications
+Shown as the zoning layer on the map and contributes to the safety and environment zoning comfort scores
+Urban Heat / Vegetation (AURA)
+Urban heat index and vegetation coverage across Melbourne
+Shown as the heat and vegetation overlay layers on the map and contribute to the Environment liveability score
+
+5.  How the System Supports the User Journey
+From a user perspective, the system works as one connected flow. A user arrives at the NeighbourWise homepage, searches for a Melbourne suburb or address, and optionally selects a living situation profile such as Family, Elderly, or Pet Owner. The system takes that input, gathers the relevant neighbourhood data from the database and external APIs, computes the liveability scores, and presents the results on the map and insights pages.
+From the insights page, the user can add a suburb to the compare list and navigate to the Compare page, where the system fetches and displays scores, census data, and detailed indicator breakdowns for both suburbs side by side. The Similar Suburbs section on the Insights page uses the user's selected profile to surface suburb recommendations, which the user can then add to compare or explore further. This connected flow , from search to map to insights to comparison to recommendation , is what the layered architecture in this report is designed to support.
+6.  Why This Architecture Works for the Project
+One of the strengths of the NeighbourWise architecture is that each part of the system has a clear and separate role. The frontend handles the user experience. The backend handles the data coordination and logic. The database handles organised and reliable data storage. The data pipeline handles transforming raw public datasets into clean inputs for the platform.
+This separation makes the system easier to work on as a team because different people can work on different parts without affecting each other's work. It also makes the platform easier to extend. Adding a new liveability indicator, for example, only requires updating the backend scoring logic and the database , the frontend picks up the new score without needing to be restructured from scratch.
+Overall, this architecture supports the project's main goal of helping people make better housing decisions by turning scattered neighbourhood data into a clear, trustworthy, and practical experience for Melbourne house-hunters.
+
+NeighbourWise  |  FIT5120 TE07 , Chaos Lab  | 
+
