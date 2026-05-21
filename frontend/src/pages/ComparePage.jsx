@@ -16,6 +16,7 @@ import {
   addToCompareList,
   replaceCompareArea,
   clearCompareList,
+  isSameCompareArea,
   loadCompareList,
   removeFromCompareList,
   saveCompareList,
@@ -536,6 +537,22 @@ function getSearchResultKey(item) {
     .trim()
 }
 
+function getCompactSearchText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '')
+}
+
+function matchesSearchQuery(label, query, words) {
+  const compactLabel = getCompactSearchText(label)
+  const compactQuery = getCompactSearchText(query)
+
+  return (
+    words.every((word) => label.includes(word)) ||
+    (compactQuery.length >= 3 && compactLabel.includes(compactQuery))
+  )
+}
+
 function miniProgress(score, outOf = 100, ready = true, side = 'left') {
   const s = Number.isFinite(score) ? score : 0
   const o = Number.isFinite(outOf) && outOf > 0 ? outOf : 100
@@ -922,7 +939,7 @@ export default function ComparePage() {
         const key = label
         if (seen.has(key)) return false
         seen.add(key)
-        return words.every((w) => label.includes(w))
+        return matchesSearchQuery(label, query, words)
       })
     }
 
@@ -1143,6 +1160,18 @@ export default function ComparePage() {
     }
 
     const updated = [...compareList]
+    const duplicateOtherArea = updated.some((existing, existingIndex) => {
+      return existingIndex !== addingIndex && isSameCompareArea(existing, newArea)
+    })
+
+    if (duplicateOtherArea) {
+      setHint('That area is already selected. Choose a different suburb, postcode, or address to compare.')
+      setSearchTerm('')
+      setSuburbResults([])
+      setAddressResults([])
+      return
+    }
+
     updated[addingIndex] = newArea
 
     const compacted = updated.filter(Boolean)

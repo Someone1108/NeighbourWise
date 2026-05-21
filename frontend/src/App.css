@@ -2081,6 +2081,29 @@ body {
   line-height: 1;
 }
 
+.search-icon-button {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  width: 40px;
+  height: 40px;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted-dark);
+  cursor: pointer;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.search-icon-button:hover,
+.search-icon-button:focus-visible {
+  background: #ecfeff;
+  color: var(--accent-2);
+  outline: none;
+}
+
 /* Wrap input + dropdown so the dropdown can absolute-position relative to it */
 .search-field {
   position: relative;

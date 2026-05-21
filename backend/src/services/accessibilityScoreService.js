@@ -164,6 +164,7 @@ function calculateAccessibilityFromPois({ allPois, time, persona }) {
     accessibilityScore: Math.round(totalScore),
     time,
     persona,
+    pois: allPois,
     breakdown
   };
 }

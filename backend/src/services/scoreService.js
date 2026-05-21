@@ -4,6 +4,7 @@
 const { getAccessibilityScore } = require('./accessibilityScoreService');
 const { getSafetyScore } = require('./safetyScoreService');
 const { getEnvironmentScore } = require('./environmentScoreService');
+const { createTtlCache } = require('../utils/cache');
 
 const PERSONA_WEIGHTS = {
   default: { A: 0.4, S: 0.35, E: 0.25 },
@@ -12,41 +13,55 @@ const PERSONA_WEIGHTS = {
   pet: { A: 0.3, S: 0.25, E: 0.45 }
 };
 
+const liveabilityCache = createTtlCache({
+  ttlMs: Number(process.env.LIVEABILITY_CACHE_TTL_MS) || 10 * 60 * 1000,
+  maxEntries: 500
+});
+
 const getLiveabilityScore = async ({
   lat,
   lng,
   time = 20,
   persona = 'default'
 }) => {
-  const [A, S, E] = await Promise.all([
-    getAccessibilityScore({ lat, lng, time, persona }),
-    getSafetyScore({ lat, lng, time, persona }),
-    getEnvironmentScore({ lat, lng, time, persona })
-  ]);
+  const cacheKey = [
+    Number(lat).toFixed(5),
+    Number(lng).toFixed(5),
+    Number(time) || 20,
+    persona || 'default'
+  ].join(':');
 
-  const weights = PERSONA_WEIGHTS[persona] || PERSONA_WEIGHTS.default;
+  return liveabilityCache.getOrSet(cacheKey, async () => {
+    const [A, S, E] = await Promise.all([
+      getAccessibilityScore({ lat, lng, time, persona }),
+      getSafetyScore({ lat, lng, time, persona }),
+      getEnvironmentScore({ lat, lng, time, persona })
+    ]);
 
-  const liveability =
-    A.accessibilityScore * weights.A +
-    S.safetyScore * weights.S +
-    E.environmentScore * weights.E;
+    const weights = PERSONA_WEIGHTS[persona] || PERSONA_WEIGHTS.default;
 
-  return {
-    liveabilityScore: Math.round(liveability),
-    time,
-    persona,
-    scores: {
-      accessibility: A.accessibilityScore,
-      safety: S.safetyScore,
-      environment: E.environmentScore
-    },
-    weights,
-    breakdown: {
-      accessibility: A,
-      safety: S,
-      environment: E
-    }
-  };
+    const liveability =
+      A.accessibilityScore * weights.A +
+      S.safetyScore * weights.S +
+      E.environmentScore * weights.E;
+
+    return {
+      liveabilityScore: Math.round(liveability),
+      time,
+      persona,
+      scores: {
+        accessibility: A.accessibilityScore,
+        safety: S.safetyScore,
+        environment: E.environmentScore
+      },
+      weights,
+      breakdown: {
+        accessibility: A,
+        safety: S,
+        environment: E
+      }
+    };
+  });
 };
 
 module.exports = {

@@ -133,15 +133,6 @@ const getEnvironmentScore = async ({
       ON ST_Intersects(v.geom, b.geom);
   `;
 
-  const greenResult = await pool.query(greenQuery, [
-    safeLng,
-    safeLat,
-    radiusMeters
-  ]);
-
-  const avgGreen = greenResult.rows[0]?.avg_green;
-  const greenScore = calculateGreenScore(avgGreen);
-
   // 2. Heat score
   const heatQuery = `
     WITH buffer_area AS (
@@ -166,15 +157,6 @@ const getEnvironmentScore = async ({
       ON ST_Intersects(h.geom, b.geom);
   `;
 
-  const heatResult = await pool.query(heatQuery, [
-    safeLng,
-    safeLat,
-    radiusMeters
-  ]);
-
-  const avgHeat = heatResult.rows[0]?.avg_heat;
-  const heatScore = calculateHeatScore(avgHeat);
-
   // 3. Zoning score
   const zoningQuery = `
     WITH buffer_area AS (
@@ -195,11 +177,31 @@ const getEnvironmentScore = async ({
       ON ST_Intersects(z.geom, b.geom);
   `;
 
-  const zoningResult = await pool.query(zoningQuery, [
-    safeLng,
-    safeLat,
-    radiusMeters
-  ]);
+  let airQualityResult = null;
+
+  const airQualityPromise = getAqiForLocation({
+    lat: safeLat,
+    lng: safeLng
+  }).catch((err) => {
+    console.error('Air quality API error:', err.message);
+    return null;
+  });
+
+  const [greenResult, heatResult, zoningResult, fetchedAirQualityResult] =
+    await Promise.all([
+      pool.query(greenQuery, [safeLng, safeLat, radiusMeters]),
+      pool.query(heatQuery, [safeLng, safeLat, radiusMeters]),
+      pool.query(zoningQuery, [safeLng, safeLat, radiusMeters]),
+      airQualityPromise
+    ]);
+
+  airQualityResult = fetchedAirQualityResult;
+
+  const avgGreen = greenResult.rows[0]?.avg_green;
+  const greenScore = calculateGreenScore(avgGreen);
+
+  const avgHeat = heatResult.rows[0]?.avg_heat;
+  const heatScore = calculateHeatScore(avgHeat);
 
   const zoningScores = zoningResult.rows.map((row) =>
     getZoningComfortScore(row.zone_code, row.zone_desc)
@@ -219,22 +221,9 @@ const getEnvironmentScore = async ({
     .slice(0, 3);
 
   // 4. Air quality score
-  let airQualityResult = null;
-  let airQualityScore = null;
-
-  try {
-    airQualityResult = await getAqiForLocation({
-      lat: safeLat,
-      lng: safeLng
-    });
-
-    airQualityScore = airQualityResult.available
-      ? airQualityResult.score
-      : null;
-  } catch (err) {
-    console.error('Air quality API error:', err.message);
-    airQualityScore = null;
-  }
+  const airQualityScore = airQualityResult?.available
+    ? airQualityResult.score
+    : null;
 
   // 5. Missing data fallback
   const missingData = {

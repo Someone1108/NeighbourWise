@@ -1,7 +1,23 @@
 const pool = require('../utils/db');
+const { createTtlCache } = require('../utils/cache');
 
 const INSIGHT_SEARCH_RADII_KM = [5, 8, 15, 25];
+const COMPARE_SEARCH_RADII_KM = [15, 25, 40, 60, 100];
+const COMPARE_MATCH_TIERS = [
+  { tolerance: 5, label: 'balanced' },
+  { tolerance: 10, label: 'flexible' },
+  { tolerance: 15, label: 'wide' },
+  { tolerance: null, label: 'category-first' }
+];
 const MAX_INSIGHT_SCORE_GAP = 10;
+const recommendationCache = createTtlCache({
+  ttlMs: Number(process.env.RECOMMENDATION_CACHE_TTL_MS) || 10 * 60 * 1000,
+  maxEntries: 300,
+});
+const suburbScoreRowsCache = createTtlCache({
+  ttlMs: Number(process.env.SUBURB_SCORE_ROWS_CACHE_TTL_MS) || 10 * 60 * 1000,
+  maxEntries: 1,
+});
 
 /**
  * Calculate distance between two coordinates in km
@@ -49,47 +65,46 @@ function calculateDistanceCloseness(distanceKm, maxDistanceKm) {
   return Math.max(0, 100 - (distanceKm / maxDistanceKm) * 100);
 }
 
+function normalizeSuburbName(value) {
+  return String(value || '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, ' ');
+}
+
+function getAreaSuburbName(area) {
+  return normalizeSuburbName(
+    area?.suburb ||
+      area?.suburbName ||
+      area?.suburbLabel ||
+      area?.displayName ||
+      area?.name
+  );
+}
+
 /**
  * Find current suburb based on coordinates
  */
-async function findCurrentSuburbByCoordinates(lat, lng) {
-  const query = `
-    SELECT
-      suburb_name,
-      suburb_label,
-      postcode,
-      latitude,
-      longitude,
-      accessibility_score,
-      safety_score,
-      environment_score,
-      liveability_score,
-      status
-    FROM latest_suburb_scores
-    WHERE status = 'completed'
-      AND latitude IS NOT NULL
-      AND longitude IS NOT NULL
-    ORDER BY (
-      6371 * acos(
-        cos(radians($1)) *
-        cos(radians(latitude)) *
-        cos(radians(longitude) - radians($2)) +
-        sin(radians($1)) *
-        sin(radians(latitude))
+async function findCurrentSuburbByCoordinates(lat, lng, persona = 'default') {
+  const rows = await getCompletedSuburbScoreRows(persona);
+
+  return rows
+    .map((row) => ({
+      ...row,
+      distanceKm: calculateDistanceKm(
+        lat,
+        lng,
+        Number(row.latitude),
+        Number(row.longitude)
       )
-    ) ASC
-    LIMIT 1;
-  `;
-
-  const result = await pool.query(query, [lat, lng]);
-
-  return result.rows[0] || null;
+    }))
+    .sort((a, b) => a.distanceKm - b.distanceKm)[0] || null;
 }
 
 /**
  * Find nearby candidate suburbs
  */
-async function findNearbyCandidateSuburbs(lat, lng, radiusKm) {
+async function getCompletedSuburbScoreRows(persona = 'default') {
   const query = `
     SELECT
       suburb_name,
@@ -101,17 +116,26 @@ async function findNearbyCandidateSuburbs(lat, lng, radiusKm) {
       safety_score,
       environment_score,
       liveability_score,
-      status
+      status,
+      persona
     FROM latest_suburb_scores
     WHERE status = 'completed'
+      AND persona = $1
       AND latitude IS NOT NULL
       AND longitude IS NOT NULL
       AND liveability_score IS NOT NULL;
   `;
 
-  const result = await pool.query(query);
+  return suburbScoreRowsCache.getOrSet(`completed-suburb-scores:${persona}`, async () => {
+    const result = await pool.query(query, [persona]);
+    return result.rows;
+  });
+}
 
-  return result.rows
+async function findNearbyCandidateSuburbs(lat, lng, radiusKm, persona = 'default') {
+  const rows = await getCompletedSuburbScoreRows(persona);
+
+  return rows
     .map((row) => {
       const distanceKm = calculateDistanceKm(
         lat,
@@ -135,14 +159,18 @@ async function findNearbyCandidateSuburbs(lat, lng, radiusKm) {
 async function findInsightRecommendations(input) {
   const lat = toNumber(input.lat);
   const lng = toNumber(input.lng);
+  const persona = input.profile || input.persona || 'default';
 
   if (lat === null || lng === null) {
     throw new Error('lat and lng are required');
   }
 
+  const cacheKey = `insight:${persona}:${lat.toFixed(5)}:${lng.toFixed(5)}`;
+  return recommendationCache.getOrSet(cacheKey, async () => {
+
   // Step 1
   // Find current suburb
-  const currentSuburb = await findCurrentSuburbByCoordinates(lat, lng);
+  const currentSuburb = await findCurrentSuburbByCoordinates(lat, lng, persona);
 
   if (!currentSuburb) {
     return {
@@ -165,7 +193,8 @@ async function findInsightRecommendations(input) {
     const nearbyCandidates = await findNearbyCandidateSuburbs(
       lat,
       lng,
-      nextRadiusKm
+      nextRadiusKm,
+      persona
     );
 
     const similarCandidates = nearbyCandidates
@@ -252,9 +281,10 @@ async function findInsightRecommendations(input) {
           ),
           liveability: candidateScore
         },
+        persona: candidate.persona || persona,
 
         reason:
-          `Similar liveability score and ` +
+          `Similar ${persona} liveability score and ` +
           `${candidate.distanceKm.toFixed(1)} km away`
       };
     })
@@ -280,11 +310,13 @@ async function findInsightRecommendations(input) {
 
       liveabilityScore: currentScore
     },
+    persona,
 
     searchRadiusKm: radiusKm,
 
     recommendations
   };
+  });
 }
 
 /**
@@ -298,6 +330,7 @@ async function findCompareRecommendations(input) {
     benchmarkArea,
     category
   } = input;
+  const persona = input.persona || input.profile || 'default';
 
   // Step 1
   // Determine benchmark area
@@ -317,12 +350,26 @@ async function findCompareRecommendations(input) {
     throw new Error('Benchmark lat/lng required');
   }
 
+  const cacheKey = [
+    'compare',
+    benchmarkArea,
+    category,
+    persona,
+    getAreaSuburbName(area1),
+    getAreaSuburbName(area2),
+    lat.toFixed(5),
+    lng.toFixed(5)
+  ].join(':');
+
+  return recommendationCache.getOrSet(cacheKey, async () => {
+
   // Step 2
   // Find benchmark suburb from coordinates
   const benchmarkSuburb =
     await findCurrentSuburbByCoordinates(
       lat,
-      lng
+      lng,
+      persona
     );
 
   if (!benchmarkSuburb) {
@@ -334,23 +381,12 @@ async function findCompareRecommendations(input) {
     };
   }
 
-  // Step 3
-  // Search candidate suburbs within 15km
-  const radiusKm = 15;
-
-  let candidates =
-    await findNearbyCandidateSuburbs(
-      lat,
-      lng,
-      radiusKm
-    );
-
-  // Remove benchmark suburb itself
-  candidates = candidates.filter(
-    (candidate) =>
-      candidate.suburb_name !==
-      benchmarkSuburb.suburb_name
-  );
+  const selectedSuburbs = new Set([
+    getAreaSuburbName(area1),
+    getAreaSuburbName(area2),
+    normalizeSuburbName(benchmarkSuburb.suburb_name),
+    normalizeSuburbName(benchmarkSuburb.suburb_label)
+  ].filter(Boolean));
 
   // Benchmark scores
   const benchmarkScores = {
@@ -365,53 +401,74 @@ async function findCompareRecommendations(input) {
     )
   };
 
-  const tolerance = 5;
+  let radiusKm = COMPARE_SEARCH_RADII_KM[0];
+  let candidates = [];
+  let matchTier = COMPARE_MATCH_TIERS[0];
 
-  // Step 4
-  // Filter candidates
-  candidates = candidates.filter(
-    (candidate) => {
-      const candidateScores = {
-        accessibility: Number(
-          candidate.accessibility_score
-        ),
-        safety: Number(
-          candidate.safety_score
-        ),
-        environment: Number(
-          candidate.environment_score
-        )
-      };
+  for (const tier of COMPARE_MATCH_TIERS) {
+    for (const nextRadiusKm of COMPARE_SEARCH_RADII_KM) {
+      const nearbyCandidates = await findNearbyCandidateSuburbs(
+        lat,
+        lng,
+        nextRadiusKm,
+        persona
+      );
 
-      // (A)
-      // Selected category must improve
-      if (
-        candidateScores[category] <=
-        benchmarkScores[category]
-      ) {
-        return false;
+      const filteredCandidates = nearbyCandidates
+        .filter((candidate) => {
+          const candidateNames = [
+            normalizeSuburbName(candidate.suburb_name),
+            normalizeSuburbName(candidate.suburb_label)
+          ].filter(Boolean);
+
+          return !candidateNames.some((name) => selectedSuburbs.has(name));
+        })
+        .filter((candidate) => {
+          const candidateScores = {
+            accessibility: Number(candidate.accessibility_score),
+            safety: Number(candidate.safety_score),
+            environment: Number(candidate.environment_score)
+          };
+
+          if (candidateScores[category] <= benchmarkScores[category]) {
+            return false;
+          }
+
+          if (tier.tolerance === null) {
+            return true;
+          }
+
+          const otherCategories = [
+            'accessibility',
+            'safety',
+            'environment'
+          ].filter((categoryKey) => categoryKey !== category);
+
+          for (const otherCategory of otherCategories) {
+            if (
+              candidateScores[otherCategory] <
+              benchmarkScores[otherCategory] - tier.tolerance
+            ) {
+              return false;
+            }
+          }
+
+          return true;
+        });
+
+      radiusKm = nextRadiusKm;
+      candidates = filteredCandidates;
+      matchTier = tier;
+
+      if (candidates.length > 0) {
+        break;
       }
-
-      // (B)
-      // Other categories cannot drop too much
-      const otherCategories = [
-        'accessibility',
-        'safety',
-        'environment'
-      ].filter((categoryKey) => categoryKey !== category);
-
-      for (const otherCategory of otherCategories) {
-        if (
-          candidateScores[otherCategory] <
-          benchmarkScores[otherCategory] - tolerance
-        ) {
-          return false;
-        }
-      }
-
-      return true;
     }
-  );
+
+    if (candidates.length > 0) {
+      break;
+    }
+  }
 
   // Step 5
   // Calculate recommendation score
@@ -506,11 +563,17 @@ async function findCompareRecommendations(input) {
             candidate.liveability_score
           )
         },
+        persona: candidate.persona || persona,
 
         reason:
-          `${category} score improved by ` +
-          `${improvement.toFixed(1)} points ` +
-          `while keeping other scores stable`
+          matchTier.tolerance === null
+            ? `${category} score improved by ` +
+              `${improvement.toFixed(1)} points ` +
+              `outside the selected areas`
+            : `${category} score improved by ` +
+              `${improvement.toFixed(1)} points ` +
+              `while keeping other scores within ` +
+              `${matchTier.tolerance} points`
       };
     })
     .sort(
@@ -526,18 +589,23 @@ async function findCompareRecommendations(input) {
     benchmarkArea,
 
     category,
+    persona,
 
     benchmarkSuburb: {
       suburbName:
         benchmarkSuburb.suburb_name,
 
-      scores: benchmarkScores
+      scores: benchmarkScores,
+      persona
     },
 
     searchRadiusKm: radiusKm,
+    matchTier: matchTier.label,
+    comparisonTolerance: matchTier.tolerance,
 
     recommendations
   };
+  });
 }
 
 module.exports = {

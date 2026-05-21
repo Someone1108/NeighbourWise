@@ -511,12 +511,19 @@ async function getSafetyScore({ lat, lng, time = 20, persona = 'default' }) {
     throw new Error('Invalid time');
   }
 
-  const crimeResult = await getCrimeScoreWithinRadius({ lat, lng, radiusMeters });
-  const activityResult = await getActivityScoreWithinRadius({ lat, lng, radiusMeters });
-  const noiseResult = await getNoiseComfortScoreWithinRadius({ lat, lng, radiusMeters });
-  const transportComfortResult =
-    await getTransportComfortScoreWithinRadius({ lat, lng, radiusMeters });
-  const zoningResult = await getZoningScoreWithinRadius({ lat, lng, radiusMeters });
+  const [
+    crimeResult,
+    activityResult,
+    noiseResult,
+    transportComfortResult,
+    zoningResult
+  ] = await Promise.all([
+    getCrimeScoreWithinRadius({ lat, lng, radiusMeters }),
+    getActivityScoreWithinRadius({ lat, lng, radiusMeters }),
+    getNoiseComfortScoreWithinRadius({ lat, lng, radiusMeters }),
+    getTransportComfortScoreWithinRadius({ lat, lng, radiusMeters }),
+    getZoningScoreWithinRadius({ lat, lng, radiusMeters })
+  ]);
 
   const calibratedActivityScore = activityResult.available
     ? calibrateSparseSupportScore(activityResult.activityScore, 40, 0.6)

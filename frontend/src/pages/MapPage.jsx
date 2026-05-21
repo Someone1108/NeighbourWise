@@ -9,7 +9,6 @@ import CompareReplaceModal from "../components/CompareReplaceModal.jsx";
 import {
   getMapContext,
   getLocalityPolygon,
-  getPoiInsights,
   getLayerDataForSuburb,
   getLayerDataForAddress,
   getLiveabilityScore,
@@ -27,6 +26,7 @@ import {
 } from "../utils/storage.js";
 
 const CATEGORY_KEYS = ["accessibility", "safety", "environment"];
+const MAP_LAYER_KEYS = ["heat", "vegetation", "zoning"];
 const SHOW_VIEW_DETAILS = true;
 
 function asSafeNumber(n, fallback) {
@@ -61,6 +61,22 @@ function getSearchResultKey(item) {
     .replace(/[.,]/g, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function getCompactSearchText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
+function matchesSearchQuery(label, query, words) {
+  const compactLabel = getCompactSearchText(label);
+  const compactQuery = getCompactSearchText(query);
+
+  return (
+    words.every((word) => label.includes(word)) ||
+    (compactQuery.length >= 3 && compactLabel.includes(compactQuery))
+  );
 }
 
 function getSearchResultLabel(item) {
@@ -162,7 +178,7 @@ export default function MapPage() {
             const key = getSearchResultKey(item);
             if (!key || seen.has(key)) return false;
             seen.add(key);
-            return words.every((word) => key.includes(word));
+            return matchesSearchQuery(key, query, words);
           });
           setSearchResults(combined);
         })
@@ -254,27 +270,6 @@ export default function MapPage() {
         })
       : Promise.resolve(null);
 
-    const poiPromise = getPoiInsights({
-      lat: Number(selectedLocation.lat),
-      lng: Number(selectedLocation.lng),
-      time: Number(rangeMinutes)
-    });
-
-    const addressLayerPromise = () => getLayerDataForAddress(
-      Number(selectedLocation.lat),
-      Number(selectedLocation.lng),
-      rangeMinutes
-    );
-
-    const layerPromise = isSuburb
-      ? getLayerDataForSuburb(selectedLocation.name).catch((err) => {
-          console.warn("Suburb layers unavailable; using point radius layers instead:", err);
-          return addressLayerPromise();
-        })
-      : isAddress
-        ? addressLayerPromise()
-        : Promise.resolve(null);
-
     const scorePromise = getLiveabilityScore({
       lat: Number(selectedLocation.lat),
       lng: Number(selectedLocation.lng),
@@ -285,18 +280,15 @@ export default function MapPage() {
     Promise.all([
       mapContextPromise,
       polygonPromise,
-      poiPromise,
-      layerPromise,
       scorePromise
     ])
-      .then(([data, polygon, poiResponse, layers, scores]) => {
+      .then(([data, polygon, scores]) => {
         if (cancelled) return;
 
         setMapData(data);
         setSuburbPolygon(polygon);
-        setUseSuburbBoundary(Boolean(polygon && isSuburb && layers?.suburb));
-        setPoiData(poiResponse?.results || []);
-        setLayerData(layers);
+        setUseSuburbBoundary(Boolean(polygon && isSuburb));
+        setPoiData(scores?.breakdown?.accessibility?.pois || []);
         setScoreData(scores);
       })
       .catch((err) => {
@@ -317,6 +309,63 @@ export default function MapPage() {
       cancelled = true;
     };
   }, [context, selectedLocation, profile, rangeMinutes, isSuburb, isAddress]);
+
+  useEffect(() => {
+    if (loading || error || !selectedLocation) return;
+
+    let cancelled = false;
+    const lat = Number(selectedLocation.lat);
+    const lng = Number(selectedLocation.lng);
+
+    async function loadLayerInBackground(layerKey) {
+      const layers = isSuburb
+        ? await getLayerDataForSuburb(selectedLocation.name, layerKey).catch((err) => {
+            console.warn("Suburb layer unavailable; using point radius layer instead:", err);
+            return getLayerDataForAddress(lat, lng, rangeMinutes, layerKey);
+          })
+        : isAddress
+          ? await getLayerDataForAddress(lat, lng, rangeMinutes, layerKey)
+          : null;
+
+      if (cancelled || !layers) return;
+
+      setLayerData((current) => ({
+        ...(current || {}),
+        suburb: layers.suburb ?? current?.suburb,
+        address: layers.address ?? current?.address,
+        analysisArea: layers.analysisArea ?? current?.analysisArea,
+        boundary: layers.boundary ?? current?.boundary,
+        [layerKey]: layers[layerKey]
+      }));
+    }
+
+    async function loadLayersInBackground() {
+      for (const layerKey of MAP_LAYER_KEYS) {
+        if (cancelled) return;
+        try {
+          await loadLayerInBackground(layerKey);
+        } catch (err) {
+          if (!cancelled) {
+            console.error(`${layerKey} layer background load error:`, err);
+          }
+        }
+      }
+    }
+
+    const idleId =
+      typeof window.requestIdleCallback === "function"
+        ? window.requestIdleCallback(loadLayersInBackground, { timeout: 1000 })
+        : window.setTimeout(loadLayersInBackground, 300);
+
+    return () => {
+      cancelled = true;
+      if (typeof window.cancelIdleCallback === "function") {
+        window.cancelIdleCallback(idleId);
+      } else {
+        window.clearTimeout(idleId);
+      }
+    };
+  }, [loading, error, selectedLocation, rangeMinutes, isSuburb, isAddress]);
 
   useEffect(() => {
     if (loading || error || !selectedLocation || !profile) return;

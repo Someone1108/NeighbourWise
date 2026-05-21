@@ -1,9 +1,15 @@
 const { MAX_DISTANCE_MAP } = require('../utils/distanceConfig');
+const { createTtlCache } = require('../utils/cache');
 
 const axios = require('axios');
 const pool = require('../utils/db');
 
 const MAPBOX_TOKEN = process.env.MAPBOX_TOKEN;
+const MAPBOX_TIMEOUT_MS = Number(process.env.MAPBOX_TIMEOUT_MS) || 3500;
+const poiCache = createTtlCache({
+  ttlMs: Number(process.env.POI_CACHE_TTL_MS) || 10 * 60 * 1000,
+  maxEntries: 500
+});
 
 const categoryMap = {
   park: 'park',
@@ -102,7 +108,8 @@ const fetchSingleCategory = async ({ lat, lng, type }) => {
       access_token: MAPBOX_TOKEN,
       limit: 20,
       language: 'en'
-    }
+    },
+    timeout: MAPBOX_TIMEOUT_MS
   });
 
   const features = response.data.features || [];
@@ -187,6 +194,15 @@ const fetchPoiInsights = async ({
   sequential = false,
   requestDelayMs = 0
 }) => {
+  const cacheKey = [
+    Number(lat).toFixed(5),
+    Number(lng).toFixed(5),
+    Number(time) || 'all',
+    sequential ? 'seq' : 'parallel',
+    Number(requestDelayMs) || 0
+  ].join(':');
+
+  return poiCache.getOrSet(cacheKey, async () => {
   const allTypes = Object.keys(categoryMap);
 
   let allResults;
@@ -195,13 +211,21 @@ const fetchPoiInsights = async ({
     allResults = [];
 
     for (const poiType of allTypes) {
-      allResults.push(await fetchCategoryByType({ lat, lng, type: poiType }));
+      try {
+        allResults.push(await fetchCategoryByType({ lat, lng, type: poiType }));
+      } catch (error) {
+        console.warn(`POI category ${poiType} unavailable:`, error.message);
+        allResults.push([]);
+      }
       await delay(requestDelayMs);
     }
   } else {
     allResults = await Promise.all(
       allTypes.map((poiType) =>
-        fetchCategoryByType({ lat, lng, type: poiType })
+        fetchCategoryByType({ lat, lng, type: poiType }).catch((error) => {
+          console.warn(`POI category ${poiType} unavailable:`, error.message);
+          return [];
+        })
       )
     );
   }
@@ -233,6 +257,7 @@ const fetchPoiInsights = async ({
     time: time || null,
     results: uniqueResults
   };
+  });
 };
 
 module.exports = {

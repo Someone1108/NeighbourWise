@@ -9,6 +9,7 @@
     "export:situation-scores": "node scripts/precomputeSuburbScores.js --output-csv=exports/suburb_scores_situations.csv --personas=default,family,elderly,pet --delay-ms=3000 --poi-delay-ms=750 --max-retries=2 --retry-delay-ms=30000",
     "precompute:suburb-scores": "node scripts/precomputeSuburbScores.js",
     "refresh:safety-scores": "node scripts/refreshSafetyScores.js",
+    "upload:situation-scores": "node scripts/uploadSituationScores.js",
     "start": "node src/server.js"
   },
   "keywords": [],

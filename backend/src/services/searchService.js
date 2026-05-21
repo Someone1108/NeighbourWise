@@ -1,6 +1,13 @@
 const axios = require('axios');
 const pool = require('../utils/db');
 
+function compactSearchText(value) {
+  return String(value || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+}
+
 /**
  * Search suburb/locality results from Supabase.
  */
@@ -18,11 +25,13 @@ const searchLocalities = async (query) => {
       st_x(geom) as lng
     from public.locality_point
     where upper("PLACE_NAME") like upper($1)
+       or regexp_replace(upper("PLACE_NAME"), '[^A-Z0-9]', '', 'g') like $2
     order by "PLACE_NAME" asc
     limit 10;
   `;
 
-  const values = [`${query.trim()}%`];
+  const trimmed = query.trim();
+  const values = [`${trimmed}%`, `${compactSearchText(trimmed)}%`];
   const result = await pool.query(sql, values);
 
   return result.rows.map((row) => ({
