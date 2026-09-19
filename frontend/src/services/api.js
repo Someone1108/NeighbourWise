@@ -587,8 +587,11 @@ export async function getCompareRecommendation({
   area2,
   time,
   persona,
+  preferences,
 }) {
   const safePersona = normalizePersona(persona)
+  const safePreferences =
+    preferences && typeof preferences === 'object' ? preferences : undefined
 
   return fetchJson(`${API_BASE_URL}/api/recommendations/compare`, {
     method: 'POST',
@@ -602,6 +605,7 @@ export async function getCompareRecommendation({
       area2,
       time,
       persona: safePersona,
+      preferences: safePreferences,
     }),
   })
 }
@@ -619,6 +623,7 @@ export async function getInsightRecommendations({
   lng,
   time,
   persona,
+  preferences,
 }) {
   const params = new URLSearchParams({
     lat: String(lat),
@@ -628,6 +633,10 @@ export async function getInsightRecommendations({
 
   if (persona) {
     params.set('profile', normalizePersona(persona))
+  }
+
+  if (preferences && typeof preferences === 'object') {
+    params.set('preferences', JSON.stringify(preferences))
   }
 
   return fetchJson(`${API_BASE_URL}/api/recommendations/insight?${params.toString()}`)

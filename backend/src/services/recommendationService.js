@@ -10,6 +10,45 @@ const COMPARE_MATCH_TIERS = [
   { tolerance: null, label: 'category-first' }
 ];
 const MAX_INSIGHT_SCORE_GAP = 10;
+const RECOMMENDATION_VERSION = 'recommendation-v2';
+const CATEGORY_LABELS = {
+  accessibility: 'accessibility',
+  safety: 'safety',
+  environment: 'environment',
+  liveability: 'liveability'
+};
+const BASE_PROFILE_WEIGHTS = {
+  default: {
+    accessibility: 0.35,
+    safety: 0.35,
+    environment: 0.25,
+    liveability: 0.05
+  },
+  family: {
+    accessibility: 0.28,
+    safety: 0.42,
+    environment: 0.22,
+    liveability: 0.08
+  },
+  elderly: {
+    accessibility: 0.42,
+    safety: 0.38,
+    environment: 0.15,
+    liveability: 0.05
+  },
+  pet: {
+    accessibility: 0.28,
+    safety: 0.24,
+    environment: 0.40,
+    liveability: 0.08
+  }
+};
+const INSIGHT_SCORE_FLOORS = {
+  accessibility: 35,
+  safety: 45,
+  environment: 40,
+  liveability: 45
+};
 const recommendationCache = createTtlCache({
   ttlMs: Number(process.env.RECOMMENDATION_CACHE_TTL_MS) || 10 * 60 * 1000,
   maxEntries: 300,
@@ -63,6 +102,121 @@ function calculateScoreSimilarity(currentScore, candidateScore) {
  */
 function calculateDistanceCloseness(distanceKm, maxDistanceKm) {
   return Math.max(0, 100 - (distanceKm / maxDistanceKm) * 100);
+}
+
+function clamp(value, min = 0, max = 100) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function normalizeWeights(weights) {
+  const entries = Object.entries(weights)
+    .filter(([, value]) => Number.isFinite(value) && value > 0);
+  const total = entries.reduce((sum, [, value]) => sum + value, 0);
+
+  if (!total) {
+    return { ...BASE_PROFILE_WEIGHTS.default };
+  }
+
+  return entries.reduce((normalized, [key, value]) => {
+    normalized[key] = value / total;
+    return normalized;
+  }, {});
+}
+
+function buildPreferenceSignature(preferences = {}) {
+  return Object.keys(preferences)
+    .sort()
+    .map((key) => `${key}:${Number(preferences[key]).toFixed(2)}`)
+    .join('|') || 'none';
+}
+
+function buildRecommendationWeights(persona = 'default', preferences = {}) {
+  const baseWeights =
+    BASE_PROFILE_WEIGHTS[persona] ||
+    BASE_PROFILE_WEIGHTS.default;
+  const blendedWeights = { ...baseWeights };
+
+  for (const [key, rawValue] of Object.entries(preferences || {})) {
+    if (!Object.prototype.hasOwnProperty.call(blendedWeights, key)) {
+      continue;
+    }
+
+    const value = clamp(Number(rawValue), 0, 5);
+    blendedWeights[key] += value * 0.08;
+  }
+
+  return normalizeWeights(blendedWeights);
+}
+
+function getCandidateScores(candidate) {
+  return {
+    accessibility: Number(candidate.accessibility_score),
+    safety: Number(candidate.safety_score),
+    environment: Number(candidate.environment_score),
+    liveability: Number(candidate.liveability_score)
+  };
+}
+
+function calculateWeightedProfileScore(scores, weights) {
+  let total = 0;
+  let weightTotal = 0;
+
+  for (const [key, weight] of Object.entries(weights)) {
+    const score = scores[key];
+
+    if (Number.isFinite(score)) {
+      total += score * weight;
+      weightTotal += weight;
+    }
+  }
+
+  if (!weightTotal) {
+    return 0;
+  }
+
+  return total / weightTotal;
+}
+
+function calculatePreferenceFit(scores, weights) {
+  const misses = [];
+  let floorPenalty = 0;
+
+  for (const [key, floor] of Object.entries(INSIGHT_SCORE_FLOORS)) {
+    const score = scores[key];
+
+    if (Number.isFinite(score) && score < floor) {
+      const weight = weights[key] || 0.1;
+      floorPenalty += (floor - score) * weight;
+      misses.push(key);
+    }
+  }
+
+  return {
+    score: clamp(100 - floorPenalty * 1.4),
+    misses
+  };
+}
+
+function getTopWeightedCategories(weights, limit = 2) {
+  return Object.entries(weights)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([key]) => key);
+}
+
+function buildInsightReason(candidate, weights, preferenceFit, persona) {
+  const topCategories = getTopWeightedCategories(weights);
+  const categoryText = topCategories
+    .map((category) => CATEGORY_LABELS[category] || category)
+    .join(' and ');
+
+  const distanceText = `${candidate.distanceKm.toFixed(1)} km away`;
+
+  if (preferenceFit.misses.length) {
+    return `Good ${persona} match on ${categoryText}, with some trade-offs, ${distanceText}`;
+  }
+
+  return `Strong ${persona} match on ${categoryText}, ${distanceText}`;
 }
 
 function normalizeSuburbName(value) {
@@ -160,12 +314,22 @@ async function findInsightRecommendations(input) {
   const lat = toNumber(input.lat);
   const lng = toNumber(input.lng);
   const persona = input.profile || input.persona || 'default';
+  const preferences = input.preferences || {};
+  const recommendationWeights = buildRecommendationWeights(persona, preferences);
 
   if (lat === null || lng === null) {
     throw new Error('lat and lng are required');
   }
 
-  const cacheKey = `insight:${persona}:${lat.toFixed(5)}:${lng.toFixed(5)}`;
+  const preferenceSignature = buildPreferenceSignature(preferences);
+  const cacheKey = [
+    'insight',
+    RECOMMENDATION_VERSION,
+    persona,
+    preferenceSignature,
+    lat.toFixed(5),
+    lng.toFixed(5)
+  ].join(':');
   return recommendationCache.getOrSet(cacheKey, async () => {
 
   // Step 1
@@ -177,6 +341,8 @@ async function findInsightRecommendations(input) {
       type: 'insight',
       input,
       currentSuburb: null,
+      recommendationVersion: RECOMMENDATION_VERSION,
+      recommendationWeights,
       recommendations: []
     };
   }
@@ -223,9 +389,8 @@ async function findInsightRecommendations(input) {
   // Calculate recommendation score
   const recommendations = candidates
     .map((candidate) => {
-      const candidateScore = Number(
-        candidate.liveability_score
-      );
+      const candidateScores = getCandidateScores(candidate);
+      const candidateScore = candidateScores.liveability;
 
       const scoreDifference = Math.abs(
         currentScore - candidateScore
@@ -243,11 +408,22 @@ async function findInsightRecommendations(input) {
           radiusKm
         );
 
-      // 70% score similarity
-      // 30% distance closeness
+      const profileScore = calculateWeightedProfileScore(
+        candidateScores,
+        recommendationWeights
+      );
+      const preferenceFit = calculatePreferenceFit(
+        candidateScores,
+        recommendationWeights
+      );
+
+      // v2 is a hybrid recommender: profile fit drives ranking, while
+      // liveability similarity and distance keep suggestions familiar.
       const recommendationScore =
-        scoreSimilarity * 0.7 +
-        distanceCloseness * 0.3;
+        profileScore * 0.45 +
+        preferenceFit.score * 0.20 +
+        scoreSimilarity * 0.20 +
+        distanceCloseness * 0.15;
 
       return {
         suburbName: candidate.suburb_name,
@@ -264,28 +440,30 @@ async function findInsightRecommendations(input) {
         recommendationScore: Number(
           recommendationScore.toFixed(2)
         ),
+        profileScore: Number(profileScore.toFixed(2)),
+        preferenceFitScore: Number(preferenceFit.score.toFixed(2)),
 
         scoreDifference: Number(
           scoreDifference.toFixed(2)
         ),
 
         scores: {
-          accessibility: Number(
-            candidate.accessibility_score
-          ),
-          safety: Number(
-            candidate.safety_score
-          ),
-          environment: Number(
-            candidate.environment_score
-          ),
+          accessibility: candidateScores.accessibility,
+          safety: candidateScores.safety,
+          environment: candidateScores.environment,
           liveability: candidateScore
         },
         persona: candidate.persona || persona,
+        recommendationVersion: RECOMMENDATION_VERSION,
+        recommendationWeights,
+        tradeOffs: preferenceFit.misses,
 
-        reason:
-          `Similar ${persona} liveability score and ` +
-          `${candidate.distanceKm.toFixed(1)} km away`
+        reason: buildInsightReason(
+          candidate,
+          recommendationWeights,
+          preferenceFit,
+          persona
+        )
       };
     })
     .sort(
@@ -311,6 +489,9 @@ async function findInsightRecommendations(input) {
       liveabilityScore: currentScore
     },
     persona,
+    recommendationVersion: RECOMMENDATION_VERSION,
+    recommendationWeights,
+    preferences,
 
     searchRadiusKm: radiusKm,
 
@@ -331,6 +512,11 @@ async function findCompareRecommendations(input) {
     category
   } = input;
   const persona = input.persona || input.profile || 'default';
+  const preferences = input.preferences || {};
+  const recommendationWeights = buildRecommendationWeights(persona, {
+    ...preferences,
+    [category]: Math.max(Number(preferences[category]) || 0, 3)
+  });
 
   // Step 1
   // Determine benchmark area
@@ -354,6 +540,8 @@ async function findCompareRecommendations(input) {
     'compare',
     benchmarkArea,
     category,
+    RECOMMENDATION_VERSION,
+    buildPreferenceSignature(preferences),
     persona,
     getAreaSuburbName(area1),
     getAreaSuburbName(area2),
@@ -373,12 +561,14 @@ async function findCompareRecommendations(input) {
     );
 
   if (!benchmarkSuburb) {
-    return {
-      type: 'compare',
-      benchmarkArea,
-      category,
-      recommendations: []
-    };
+      return {
+        type: 'compare',
+        benchmarkArea,
+        category,
+        recommendationVersion: RECOMMENDATION_VERSION,
+        recommendationWeights,
+        recommendations: []
+      };
   }
 
   const selectedSuburbs = new Set([
@@ -429,6 +619,15 @@ async function findCompareRecommendations(input) {
             safety: Number(candidate.safety_score),
             environment: Number(candidate.environment_score)
           };
+
+          if (
+            !Number.isFinite(candidateScores.accessibility) ||
+            !Number.isFinite(candidateScores.safety) ||
+            !Number.isFinite(candidateScores.environment) ||
+            !Number.isFinite(benchmarkScores[category])
+          ) {
+            return false;
+          }
 
           if (candidateScores[category] <= benchmarkScores[category]) {
             return false;
@@ -521,12 +720,20 @@ async function findCompareRecommendations(input) {
           candidate.distanceKm,
           radiusKm
         );
+      const profileScore = calculateWeightedProfileScore(
+        {
+          ...candidateScores,
+          liveability: Number(candidate.liveability_score)
+        },
+        recommendationWeights
+      );
 
       // Final recommendation score
       const recommendationScore =
         improvement * 0.45 +
-        stabilityScore * 0.25 +
-        distanceCloseness * 0.30;
+        stabilityScore * 0.20 +
+        distanceCloseness * 0.20 +
+        profileScore * 0.15;
 
       return {
         suburbName: candidate.suburb_name,
@@ -551,6 +758,7 @@ async function findCompareRecommendations(input) {
         recommendationScore: Number(
           recommendationScore.toFixed(2)
         ),
+        profileScore: Number(profileScore.toFixed(2)),
 
         scores: {
           accessibility:
@@ -564,6 +772,8 @@ async function findCompareRecommendations(input) {
           )
         },
         persona: candidate.persona || persona,
+        recommendationVersion: RECOMMENDATION_VERSION,
+        recommendationWeights,
 
         reason:
           matchTier.tolerance === null
@@ -590,6 +800,9 @@ async function findCompareRecommendations(input) {
 
     category,
     persona,
+    recommendationVersion: RECOMMENDATION_VERSION,
+    recommendationWeights,
+    preferences,
 
     benchmarkSuburb: {
       suburbName:
