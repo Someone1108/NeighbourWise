@@ -6,6 +6,12 @@ const ALLOWED_RECOMMENDATION_CATEGORIES = [
   'safety',
   'environment',
 ];
+const ALLOWED_RECOMMENDATION_PREFERENCES = [
+  'accessibility',
+  'safety',
+  'environment',
+  'liveability',
+];
 
 class ValidationError extends Error {
   constructor(message, details = {}) {
@@ -156,6 +162,45 @@ function validatePersona(value) {
   return normalized;
 }
 
+function parsePreferenceWeights(value, field = 'preferences') {
+  const raw = firstValue(value);
+
+  if (raw === undefined || raw === null || raw === '') {
+    return undefined;
+  }
+
+  let parsed = raw;
+
+  if (typeof raw === 'string') {
+    try {
+      parsed = JSON.parse(raw);
+    } catch (error) {
+      reject(`${field} must be a valid JSON object`, { field });
+    }
+  }
+
+  const preferences = requirePlainObject(parsed, field);
+  const normalized = {};
+
+  for (const [key, value] of Object.entries(preferences)) {
+    const preferenceKey = String(key).trim().toLowerCase();
+
+    if (!ALLOWED_RECOMMENDATION_PREFERENCES.includes(preferenceKey)) {
+      reject(`${field}.${key} is not supported`, {
+        field: `${field}.${key}`,
+        allowedValues: ALLOWED_RECOMMENDATION_PREFERENCES,
+      });
+    }
+
+    normalized[preferenceKey] = parseNumber(value, `${field}.${key}`, {
+      min: 0,
+      max: 5,
+    });
+  }
+
+  return normalized;
+}
+
 function validateScoreQuery(query) {
   return {
     ...validateCoordinates(query),
@@ -258,6 +303,7 @@ function validateInsightRecommendationQuery(query) {
     postcode: optionalCleanString(query.postcode, 'postcode', { maxLength: 4 }),
     address: optionalCleanString(query.address, 'address', { maxLength: 200 }),
     profile: validatePersona(query.profile),
+    preferences: parsePreferenceWeights(query.preferences),
     rangeMinutes: parseIntegerChoice(
       query.rangeMinutes,
       'rangeMinutes',
@@ -288,6 +334,7 @@ function validateCompareRecommendationBody(body) {
     benchmarkArea,
     category,
     persona: validatePersona(input.persona),
+    preferences: parsePreferenceWeights(input.preferences),
   };
 }
 
@@ -309,6 +356,7 @@ module.exports = {
   ALLOWED_PERSONAS,
   ALLOWED_RECOMMENDATION_AREAS,
   ALLOWED_RECOMMENDATION_CATEGORIES,
+  ALLOWED_RECOMMENDATION_PREFERENCES,
   ALLOWED_TRAVEL_TIMES,
   ValidationError,
   sendValidationError,
